@@ -313,9 +313,12 @@ record FormRange(ExactRatio least, ExactRatio greatest) {
             return this;
         }
         NumericDomain.Bounds runs = read.quantities().runsBetween(form);
-        if (runs == null) {
-            return this;
-        }
+        return runs == null ? this : heldTo(runs);
+    }
+
+    /** This, held to where {@code runs} says its numbers lie: each end the tighter of this one's
+     *  and the run's. */
+    FormRange heldTo(NumericDomain.Bounds runs) {
         ExactRatio from = tighter(least, runs.min(), true);
         ExactRatio to = tighter(greatest, runs.max(), false);
         return new FormRange(from, to);

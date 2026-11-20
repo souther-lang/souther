@@ -704,7 +704,8 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "inputs/ElementValue$Reader", "recordOperationsOf", "(" + core + ")V",
                 Reading.STRUCTURE, EVALUATION);
         row(out, c + "partition/WorkedOutToReachIt", "numbersNotYetAsked", "(L" + c
-                        + "inputs/Denotation;Ljava/util/Map;)L" + c + "partition/FormRange;",
+                        + "inputs/Denotation;L" + c + "partition/WorkedOutToReachIt$ArmsTaken;)L"
+                        + c + "partition/FormRange;",
                 Reading.NAMES, READS_THE_NAMES);
         row(out, c + "partition/WorkedOutToReachIt", "valuesItMayBe", "(L" + c
                         + "inputs/Denotation;)Ljava/util/List;",

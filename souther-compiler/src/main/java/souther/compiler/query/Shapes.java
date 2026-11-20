@@ -4,6 +4,8 @@ import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.ARecursion;
 import souther.compiler.check.BehaviorAnswers;
+import souther.compiler.check.ConstructionsShownToHold;
+import souther.compiler.core.Core;
 import souther.compiler.check.CalledBody;
 import souther.compiler.check.BehaviorBodies;
 import souther.compiler.check.Boundary;
@@ -2162,6 +2164,12 @@ public final class Shapes {
             public boolean builtWhereItsModuleIsBuilt(String module, SourcePos construction) {
                 Answer<Set<SourcePos>> built = db.ask(new Output.BuiltValues(module));
                 return built.present() && built.value().contains(construction);
+            }
+
+            @Override
+            public boolean shownToHold(String module, Core.Construct made) {
+                Answer<ConstructionsShownToHold> shown = db.ask(new Bodies.ShownToHold(module));
+                return shown.present() && shown.value().holds(made);
             }
         };
     }

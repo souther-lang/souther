@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.ValueName;
 
@@ -35,6 +36,11 @@ public interface BehaviorAnswers {
         public boolean builtWhereItsModuleIsBuilt(String module, SourcePos construction) {
             return false;
         }
+
+        @Override
+        public boolean shownToHold(String module, Core.Construct made) {
+            return false;
+        }
     };
 
     /** The body of {@code behavior} as a call of it is read, where it has one. */
@@ -54,4 +60,13 @@ public interface BehaviorAnswers {
      * hold is not that it was shown not to.
      */
     boolean builtWhereItsModuleIsBuilt(String module, SourcePos construction);
+
+    /**
+     * Whether the discharge check, reading the bodies of {@code module}, proved every clause of
+     * {@code made} on every reading it made of it ({@link ConstructionsShownToHold}): what holds
+     * where it is made keeps every clause, so no run that makes it is refused there. False where
+     * the check made no such reading: that a construction was not shown to hold is not that it was
+     * shown not to.
+     */
+    boolean shownToHold(String module, Core.Construct made);
 }

@@ -91,10 +91,9 @@ class EveryChildANodeHandsOverStandsInANamedSlotTest {
      * a slot nothing here reaches is not a fault, and a slot that stops being reached is something
      * to look at. Either way the list moves and somebody reads it.
      *
-     * <p>Five are not reached. {@code PreservedArgument} stands in no body that runs — a preserved
+     * <p>Three are not reached. {@code PreservedArgument} stands in no body that runs — a preserved
      * call is what an analysis keeps and coverage numbering refuses one outright — so nothing that
-     * compiles will ever put one here. {@code TupleElement} and {@code TupleSource} are of a shape
-     * the models below do not write. {@code AppliedFunction} and {@code ApplyArgument} are for a
+     * compiles will ever put one here. {@code AppliedFunction} and {@code ApplyArgument} are for a
      * function value that is applied through a binding rather than spliced, which is what the
      * expansion these bodies go through leaves none of.
      */
@@ -110,7 +109,7 @@ class EveryChildANodeHandsOverStandsInANamedSlotTest {
                         "ConstructedAttempt", "ConstructedElse", "ConstructedThen", "FieldTarget",
                         "FieldValue", "IfCondition", "IfElse", "IfThen", "LetBody", "LetValue",
                         "ListElement", "MatchCase", "MatchScrutinee", "NegOperand", "SomeValue",
-                        "WidenedValue"),
+                        "TupleElement", "TupleSource", "WidenedValue"),
                 List.copyOf(met),
                 "which slots the models put something in, and so which slots the checks above are"
                         + " about");

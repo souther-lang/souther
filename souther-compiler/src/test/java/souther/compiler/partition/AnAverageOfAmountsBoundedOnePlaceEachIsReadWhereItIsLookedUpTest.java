@@ -14,6 +14,7 @@ import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The average of the amounts of several months, looked up in a table of lower bounds, is read when
@@ -22,8 +23,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * <p>The average is a division of a total, rounded to a whole number and made an amount. It is an
  * amount the table can be asked of only if the total is shown to fit an {@code Int}, which turns on
  * the runs the declarations leave the amounts: bounded one place at a time, the total of fifteen of
- * them is far from the ends. Left unbounded the total can pass them, a run stops there, and the
- * lookup is not read.
+ * them is far from the ends. Left unbounded the total can pass them, a run stops there, and that
+ * stop is told with the amounts it turns on.
  */
 class AnAverageOfAmountsBoundedOnePlaceEachIsReadWhereItIsLookedUpTest {
 
@@ -204,10 +205,17 @@ class AnAverageOfAmountsBoundedOnePlaceEachIsReadWhereItIsLookedUpTest {
                 "averageOf(monthsOf(w))"));
     }
 
-    /** Control: without a bound on each amount the total of six can pass the greatest {@code Int},
-     *  a run stops there, and which amounts settle the lookup is not worked out. */
+    /** Control: without a bound on each amount the total of two can pass the greatest
+     *  {@code Int}, and a run stops there; bounded, none does. */
     @Test
-    void theSameAverageOfAmountsWithNoBoundIsNotRead() {
-        assertFalse(unread("", "", AVERAGE_WRITTEN_AT_THE_CALL).isEmpty());
+    void theSameAverageOfAmountsWithNoBoundIsToldToStopWhereATotalPassesAnInt() {
+        assertTrue(stopsWhereATotalPassesAnInt(report("", "", AVERAGE_WRITTEN_AT_THE_CALL)));
+        assertFalse(stopsWhereATotalPassesAnInt(report(BOUNDS, "", AVERAGE_WRITTEN_AT_THE_CALL)));
+    }
+
+    /** Whether {@code report} says a run stops where the total of a month passes an {@code Int}. */
+    private static boolean stopsWhereATotalPassesAnInt(List<String> report) {
+        return report.stream().anyMatch(line -> line.contains("may stop a run")
+                && line.contains("w.first.base + w.first.extra is at least 9223372036854775808"));
     }
 }
