@@ -261,6 +261,15 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
                 "List.fold((w, l) -> if l < 0 then l else w, 0, ds) + 1 <= 10");
         FORMS.put("walkPlusOneGuarded",
                 "List.all(x -> x < 9223372036854775807, ds) && " + walk + " + 1 <= 10");
+        // a test some element meets, which leaves the others anything, and one over a number the
+        // walk does not read
+        NOT_TOLD.put("walkPlusOneSomeElementGuarded", "the same as walkPlusOne: what some element "
+                + "meets narrows none of the others");
+        FORMS.put("walkPlusOneSomeElementGuarded",
+                "List.any(x -> x < 9223372036854775807, ds) && " + walk + " + 1 <= 10");
+        NOT_TOLD.put("walkPlusOneGuardedByQ", "the same as walkPlusOne: what the way states of q "
+                + "says nothing of the elements");
+        FORMS.put("walkPlusOneGuardedByQ", "q > 0 && " + walk + " + 1 <= 10");
         FORMS.put("walkOverAWrittenListPlusOneWithinTheType",
                 "List.fold((w, l) -> if l > w then l else w, 0, [1, 2]) + 1 >= 3");
         NOT_TOLD.put("walkAgainstAnOption", "the operation over what the option holds, against "
