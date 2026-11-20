@@ -5634,7 +5634,7 @@ public final class InvariantChecker {
                         Judgment judgment) {
         Verdict verdict = judgment.verdict();
         verdicts.put(at, verdict);
-        if (at instanceof Core.Construct made) {
+        if (Core.withoutStanding(at) instanceof Core.Construct made) {
             proved.merge(ConstructionsShownToHold.Copy.of(made), verdict == Verdict.PROVED,
                     Boolean::logicalAnd);
         }

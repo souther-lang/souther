@@ -1153,9 +1153,24 @@ final class WorkedOutToReachIt {
                 if (value.at().pathOf(written, newtypes) instanceof ValuesAt.At(var at)) {
                     yield rangeOfAPlace(at, arms);
                 }
-                FormRange made = numbersOfWhatWasMade(access, value.at(), arms);
+                // What each construction the value may be gives the field, held to what the rules
+                // of its type leave it.
                 FormRange left = numbersTheRulesLeave(access);
-                yield made == null ? left : left == null ? made : made.meet(left);
+                List<Denotation> made = valuesItMayBe(new Denotation(access.target(), value.at()));
+                if (made == null) {
+                    yield left;
+                }
+                FormRange hull = null;
+                for (Denotation each : made) {
+                    Core field = fieldOf(each, access.field());
+                    FormRange one = field == null ? null
+                            : numbersOf(new Denotation(field, each.at()), arms);
+                    if (one == null) {
+                        yield left;
+                    }
+                    hull = hull == null ? one : hull.hull(one);
+                }
+                yield hull == null ? left : left == null ? hull : hull.meet(left);
             }
             case Core.Binary _, Core.Neg _ -> written.type() == Type.INT
                     ? heldToAnInt(whatItComesTo(value, arms)) : null;
@@ -1181,27 +1196,6 @@ final class WorkedOutToReachIt {
             }
             default -> null;
         };
-    }
-
-    /** The numbers the field {@code access} reads comes to off each construction its value may be
-     *  ({@link #valuesItMayBe}), or null where that is not known. */
-    private FormRange numbersOfWhatWasMade(Core.FieldAccess access, InputReads at,
-                                           ArmsTaken arms) {
-        List<Denotation> made = valuesItMayBe(new Denotation(access.target(), at));
-        if (made == null) {
-            return null;
-        }
-        FormRange hull = null;
-        for (Denotation each : made) {
-            Core field = fieldOf(each, access.field());
-            FormRange one = field == null ? null
-                    : numbersOf(new Denotation(field, each.at()), arms);
-            if (one == null) {
-                return null;
-            }
-            hull = hull == null ? one : hull.hull(one);
-        }
-        return hull;
     }
 
     /** The numbers the rules of the type {@code access} reads a field of leave that field
