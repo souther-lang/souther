@@ -75,7 +75,7 @@ public record WhatKeepsEveryRunGoing(List<ABoundThatKeepsEveryRunGoing> bounds,
         for (ABoundThatKeepsEveryRunGoing each : bounds) {
             ABoundThatKeepsEveryRunGoing theirs = other.bounds.stream()
                     .filter(each::onTheSameSideAs).findFirst().orElse(null);
-            out.add(theirs != null && theirs.within(each) ? theirs : each);
+            out.add((theirs != null && theirs.within(each)) ? theirs : each);
         }
         for (ABoundThatKeepsEveryRunGoing theirs : other.bounds) {
             if (out.stream().noneMatch(theirs::onTheSameSideAs)) {
