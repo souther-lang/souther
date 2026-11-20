@@ -46,10 +46,12 @@ import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.RepresentationBounds;
 import souther.compiler.inputs.Requirements;
+import souther.compiler.inputs.RowsOfTheWay;
 import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.inputs.TwoIntegerConstraints;
 import souther.compiler.inputs.ValuesAt;
 import souther.compiler.inputs.WhatARelationLeavesUndivided;
 import souther.compiler.meaning.DecisionAtom;
@@ -4223,13 +4225,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                             overlapping, independent,
                             granularityOf(carriers.get(at)), greatestOf(carriers.get(at)),
                             supports, operations);
-            // Where the way ties the two sides no side runs apart from the other, and what the
-            // relation leaves it is asked of the rows of the way.
-            if (each == null && !offItsLine && sides.size() == 2 && !standApart(0, 1, independent)) {
-                each = WhatARelationLeavesUndivided.leavesAlongATie(beside.along(),
-                        sides.stream().map(Side::number).toList(), terms, at, constant, relation,
-                        greatestOf(carriers.get(at)), operations);
-            }
             leaves.add(each);
             if (settledAtEveryValue(each)) {
                 return comesOutOneWay(out, settled, countsRead);
@@ -4267,6 +4262,25 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 } else {
                     leaves.set(at, apart.get(at));
                 }
+            }
+        }
+        // A side nothing above showed anything of, where the way ties the two sides, is asked of
+        // the rows of the way: no side runs apart from the other there.
+        RowsOfTheWay rowsOfTheWay = !offItsLine && sides.size() == 2
+                && !standApart(0, 1, independent)
+                ? rowsOfTheWay(way, terms, sources, read, roomy) : null;
+        for (int at = 0; rowsOfTheWay != null && at < sides.size(); at++) {
+            if (leaves.get(at) != null || out.containsAll(sides.get(at).madeOf())) {
+                continue;
+            }
+            WhatARelationLeavesUndivided.Leaves tied =
+                    WhatARelationLeavesUndivided.leavesAlongATie(rowsOfTheWay,
+                            rowsOfTheWay.numbers(), terms, at, constant, relation,
+                            greatestOf(carriers.get(at)), operations);
+            if (tied instanceof WhatARelationLeavesUndivided.Leaves.Undivided) {
+                out.addAll(sides.get(at).madeOf());
+            } else {
+                leaves.set(at, tied);
             }
         }
         for (int at = 0; at < sides.size(); at++) {
@@ -10974,6 +10988,41 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 : count.exactly().minus(ExactRatio.ONE);
         return next instanceof ExactAnswer.Held<ExactRatio>(ExactRatio beside)
                 && above.admits(beside);
+    }
+
+    /**
+     * The rows of {@code way} over the two numbers this relation is between, or null where they
+     * are not shown to be everything the way and the declarations hold of them
+     * ({@link RowsOfTheWay}).
+     *
+     * <p>Shown where each side is one number, the value at its place, with every value its
+     * declarations hold taken ({@code realizes}) and no rule of the declarations relating the
+     * two; where the way declined nothing and every statement of it is a form of those two
+     * numbers alone, so that what it states is all it states of them.
+     */
+    private RowsOfTheWay rowsOfTheWay(StatedWay way,
+                                      List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms,
+                                      List<Source> sources, InputReading read,
+                                      Set<Object> ignoring) {
+        List<NumericTerm> numbers = sides.stream().map(Side::number).toList();
+        if (terms.size() != 2 || numbers.contains(null) || numbers.get(0).equals(numbers.get(1))
+                || !way.heldWhole() || !way.declined().map(Set::isEmpty).orElse(false)
+                || terms.stream().anyMatch(each -> each.spacing() != Granularity.DISCRETE
+                        || !each.itsPlace() || !each.holds().equals(each.realizes()))
+                || !apartByTheDeclarations(0, 1, sources, read, ignoring)) {
+            return null;
+        }
+        List<TwoIntegerConstraints.Constraint<NumericTerm>> stated = new ArrayList<>();
+        for (OnAWay each : way.written()) {
+            TakenConstraint.Affine affine = each.affine();
+            if (affine == null || each.elementsOf() != null || each.bySome() != null
+                    || each.byEvery() != null) {
+                return null;
+            }
+            stated.add(new TwoIntegerConstraints.Constraint<>(affine.form(), affine.rel()));
+        }
+        return RowsOfTheWay.of(numbers, stated,
+                terms.stream().map(WhatARelationLeavesUndivided.Term::holds).toList());
     }
 
     /**

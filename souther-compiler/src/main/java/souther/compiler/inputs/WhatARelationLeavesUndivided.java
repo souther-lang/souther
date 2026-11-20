@@ -1224,36 +1224,37 @@ public final class WhatARelationLeavesUndivided {
      * the two terms to one another, asked of the rows of the way and not of runs the terms take
      * apart — or null where neither is shown.
      *
-     * <p>A value settles the relation where no row of the way at it comes out the other way. That
-     * is an absence, and the way with the relation's denial taken in says it: a value outside what
-     * that region projects the term to has no such row. A projection that holds more values than
-     * there are rows is enough.
+     * <p>The values of the term that have a whole number of the other beside them, with the
+     * relation holding and again with it failing, are the whole numbers of the way's rows with
+     * that taken in ({@link RowsOfTheWay}), and each is exactly a run
+     * ({@link TwoIntegerConstraints.Shadow}). A value outside the one that fails has no row that
+     * fails the relation, so it settles it; a value in both has a row each way, so it leaves it
+     * either way. Both are facts of the rows, and not a bound or a sample.
      *
-     * <p>Every other value leaves it either way only where a row is shown each way, which is an
-     * existence and which a projection says nothing of. A row at a value is the one the way
-     * leaves the other term at its least, or at its greatest. Each is a convex or a concave
-     * function of the value, so where the three ends asked of a run of values lie on one line
-     * with whole steps they lie on it at every value of the run, and the relation, a form of the
-     * two, comes out at every value as it does at the run's two ends. Every row shown that way is
-     * computed ({@link RowsComputed}). Where one thing here is not shown the whole is not: a run
-     * of values left either way is no part of a {@link Leaves.Settled} that was not shown to be.
+     * <p>Where the program stops a row ({@link RowsComputed#computesEveryRowWithin}) a row is a row
+     * of no run to its end, and nothing is said. Where the answer is no run, or the relation is
+     * one this holds apart ({@code ==}, {@code !=}), null.
      */
-    public static <P> Leaves leavesAlongATie(SearchRegion way, List<NumericTerm> numbers,
+    public static <P> Leaves leavesAlongATie(RowsOfTheWay rows, List<NumericTerm> numbers,
                                              List<Term<P>> terms, int at, ExactRatio constant,
                                              Rel relation, BigInteger greatest,
                                              Operations operations) {
-        if (terms.size() != 2 || constant == null || numbers.stream().anyMatch(Objects::isNull)
-                || numbers.get(0).equals(numbers.get(1)) || relation == Rel.EQ
-                || relation == Rel.NE || terms.stream().anyMatch(each ->
-                        each.spacing() != Granularity.DISCRETE || each.weight().isZero())) {
+        if (terms.size() != 2 || constant == null || !rows.numbers().equals(numbers)
+                || relation == Rel.EQ || relation == Rel.NE
+                || terms.stream().anyMatch(each -> each.weight().isZero())
+                || !RowsComputed.upTo(greatest).withOperations(operations)
+                        .computesEveryRowWithin(terms, constant)) {
             return null;
         }
         LinearForm<NumericTerm> form = new LinearForm<>(constant, Map.of(
                 numbers.get(0), terms.get(0).weight(), numbers.get(1), terms.get(1).weight()));
-        RowsComputed arithmetic = RowsComputed.upTo(greatest).withOperations(operations);
+        TwoIntegerConstraints<NumericTerm> holding = rows.constraints().with(form, relation);
+        TwoIntegerConstraints<NumericTerm> failing = rows.constraints().with(form,
+                relation.denied());
+        NumericTerm number = numbers.get(at);
         WholeRun held = WholeRun.ofTheValues(terms.get(at).holds());
-        WholeRun holds = projectedOnto(way.assuming(form, relation), numbers.get(at));
-        WholeRun fails = projectedOnto(way.assuming(form, relation.denied()), numbers.get(at));
+        WholeRun holds = holding == null ? null : runOf(holding.shadowOn(number));
+        WholeRun fails = failing == null ? null : runOf(failing.shadowOn(number));
         if (held == null || holds == null || fails == null) {
             return null;
         }
@@ -1264,23 +1265,19 @@ public final class WhatARelationLeavesUndivided {
         for (WholeRun run : outside(held.meet(fails), holds)) {
             runs.add(SettledRun.whole(run.low(), run.high(), false));
         }
-        WholeRun either = held.meet(holds).meet(fails);
-        boolean eachWay = !either.holdsAWholeNumber() || aRowEachWay(way, numbers, terms, at,
-                constant, relation, arithmetic, either);
-        if (!eachWay) {
-            return null;
-        }
         return runs.isEmpty() ? new Leaves.Undivided()
                 : Leaves.Settled.ofWhole(inOrder(runs, true), held.low(), held.high());
     }
 
-    /** The whole numbers {@code number} takes in a region the assumption was taken in, or null
-     *  where it was refused or the region is empty or no run of numbers. */
-    private static WholeRun projectedOnto(SearchRegion.Assumption assumption, NumericTerm number) {
-        return assumption instanceof SearchRegion.Assumption.Taken(SearchRegion region)
-                && region.projectionOf(number)
-                        instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds bounds)
-                ? WholeRun.ofTheValues(bounds) : null;
+    /** The whole numbers a shadow holds, none for one that holds none, and null for no answer. */
+    private static WholeRun runOf(TwoIntegerConstraints.Shadow shadow) {
+        return switch (shadow) {
+            case TwoIntegerConstraints.Shadow.Nothing _ ->
+                    new WholeRun(BigInteger.ONE, BigInteger.ZERO);
+            case TwoIntegerConstraints.Shadow.Run(BigInteger least, BigInteger greatest) ->
+                    new WholeRun(least, greatest);
+            case TwoIntegerConstraints.Shadow.Unknown _ -> null;
+        };
     }
 
     /** The whole numbers of {@code within} that {@code taken} leaves out, as the runs below and
@@ -1297,169 +1294,6 @@ public final class WhatARelationLeavesUndivided {
             out.add(within.meet(new WholeRun(taken.high().add(BigInteger.ONE), null)));
         }
         return out.stream().filter(WholeRun::holdsAWholeNumber).toList();
-    }
-
-    /** The most values of one term a way's rows are looked at to show a row each way. */
-    private static final int MOST_VALUES_ASKED = 64;
-
-    /** A run this many values or more apart, first to last, may be shown along a line; a shorter
-     *  one is asked value by value, which a denominator of up to this many steps cannot fool. */
-    private static final BigInteger ALONE = BigInteger.valueOf(8);
-
-    /**
-     * Whether every value of {@code values} has a computed row of the way at which {@code relation}
-     * holds, and one at which it fails.
-     *
-     * <p>Shown over the values that one line carries the other term's end across, and where the
-     * ends bend, over each half of them in turn. A run whose ends bend at every value is shown
-     * nothing, which the number of values asked bounds.
-     */
-    private static <P> boolean aRowEachWay(SearchRegion way, List<NumericTerm> numbers,
-                                           List<Term<P>> terms, int at, ExactRatio constant,
-                                           Rel relation, RowsComputed arithmetic,
-                                           WholeRun values) {
-        return values.low() != null && values.high() != null
-                && new Tie<>(way, numbers, terms, at, constant, relation, arithmetic,
-                        new LinkedHashMap<>()).aRowEachWay(values.low(), values.high());
-    }
-
-    /**
-     * The rows of a way that ties two terms, asked of the values of the term at {@code at}:
-     * {@code slices} keeps what the way leaves the other term at each value asked.
-     */
-    private record Tie<P>(SearchRegion way, List<NumericTerm> numbers, List<Term<P>> terms,
-                          int at, ExactRatio constant, Rel relation, RowsComputed arithmetic,
-                          Map<BigInteger, NumericDomain.Bounds> slices) {
-
-        /**
-         * Whether each value from {@code first} to {@code last} has a computed row each way. A
-         * short run ({@link #ALONE}) is asked value by value. Of a longer one, where the ends of
-         * the other term at the first value, the one after it and the last lie on one line, they
-         * lie on it at every value between, and the rows at the line's two ends show the whole
-         * run. Where they do not, each half is asked in turn.
-         */
-        boolean aRowEachWay(BigInteger first, BigInteger last) {
-            boolean alone = last.subtract(first).compareTo(ALONE) < 0;
-            List<BigInteger> asked = new ArrayList<>();
-            if (alone) {
-                for (BigInteger value = first; value.compareTo(last) <= 0;
-                        value = value.add(BigInteger.ONE)) {
-                    asked.add(value);
-                }
-            } else {
-                asked.addAll(List.of(first, first.add(BigInteger.ONE), last));
-            }
-            List<NumericDomain.Bounds> there = new ArrayList<>();
-            for (BigInteger value : asked) {
-                NumericDomain.Bounds slice = sliceAt(value);
-                if (slice == null) {
-                    return false;
-                }
-                there.add(slice);
-            }
-            if (alone) {
-                return IntStream.range(0, asked.size())
-                        .allMatch(i -> aRowEachWayAt(asked.get(i), there.get(i)));
-            }
-            if (aLineCarriesARowEachWay(asked, there)) {
-                return true;
-            }
-            BigInteger middle = first.add(last).shiftRight(1);
-            return aRowEachWay(first, middle) && aRowEachWay(middle.add(BigInteger.ONE), last);
-        }
-
-        /** What the way leaves the other term where the term at {@code at} stands at
-         *  {@code value}, or null where it leaves it nothing or a number of values asked is past
-         *  what is looked at. */
-        private NumericDomain.Bounds sliceAt(BigInteger value) {
-            if (!slices.containsKey(value) && slices.size() >= MOST_VALUES_ASKED) {
-                return null;
-            }
-            return slices.computeIfAbsent(value, each -> way.assuming(
-                    LinearForm.atomMinusConstant(numbers.get(at), ExactRatio.of(each)), Rel.EQ)
-                            instanceof SearchRegion.Assumption.Taken(SearchRegion slice)
-                    && slice.projectionOf(numbers.get(1 - at))
-                            instanceof NumericDomain.FormProjection.Within(
-                                    NumericDomain.Bounds bounds) ? bounds : null);
-        }
-
-        /** Whether the rows at the whole ends the other term has at {@code value} are computed
-         *  and the relation holds at one of them and fails at one: it is monotone in the other. */
-        private boolean aRowEachWayAt(BigInteger value, NumericDomain.Bounds slice) {
-            WholeRun ends = WholeRun.ofTheValues(slice);
-            return ends != null && ends.low() != null && ends.high() != null
-                    && (aComputedRowComesOut(relation, value, ends.low())
-                            || aComputedRowComesOut(relation, value, ends.high()))
-                    && (aComputedRowComesOut(relation.denied(), value, ends.low())
-                            || aComputedRowComesOut(relation.denied(), value, ends.high()));
-        }
-
-        /**
-         * Whether one end of the other term, at the three values asked, lies on one line, and
-         * the relation comes out at the computed rows at that end at both ends of the run, each
-         * way. The end is a whole number, rounded in from what the way says, and the line is
-         * taken for the end at every value between: a function that rounds in by a denominator
-         * {@code c} stands off a line by a fraction of a step, so three values {@code c} or more
-         * steps apart do not lie on one unless the end is a line. A run of fewer values than that
-         * is asked value by value ({@link #ALONE}).
-         */
-        private boolean aLineCarriesARowEachWay(List<BigInteger> asked,
-                                                List<NumericDomain.Bounds> there) {
-            boolean holding = false;
-            boolean failing = false;
-            for (boolean low : List.of(true, false)) {
-                List<BigInteger> ends = there.stream().map(each -> endOf(each, low)).toList();
-                if (ends.contains(null) || !onOneLine(asked, ends)) {
-                    continue;
-                }
-                holding |= aComputedRowComesOut(relation, asked.getFirst(), ends.getFirst())
-                        && aComputedRowComesOut(relation, asked.getLast(), ends.getLast());
-                failing |= aComputedRowComesOut(relation.denied(), asked.getFirst(),
-                        ends.getFirst())
-                        && aComputedRowComesOut(relation.denied(), asked.getLast(),
-                                ends.getLast());
-            }
-            return holding && failing;
-        }
-
-        /** The sign of the form at the term standing at {@code value} and the other at
-         *  {@code other}, where it is worked out. */
-        private int signOf(ExactRatio value, ExactRatio other) {
-            ExactRatio sum = constant;
-            for (int i = 0; i < terms.size() && sum != null; i++) {
-                ExactRatio weighed = weighedAt(i == at ? value : other, terms.get(i).weight());
-                sum = weighed == null ? null : sum.plus(weighed).orNull();
-            }
-            return sum == null ? 2 : sum.signum();
-        }
-
-        /** Whether {@code rel} holds at the row where the term at {@code at} stands at
-         *  {@code value} and the other at {@code other}, and the program computes that row. */
-        private boolean aComputedRowComesOut(Rel rel, BigInteger value, BigInteger other) {
-            ExactRatio[] row = new ExactRatio[terms.size() + 1];
-            row[terms.size()] = constant;
-            for (int i = 0; i < terms.size(); i++) {
-                row[i] = weighedAt(ExactRatio.of(i == at ? value : other), terms.get(i).weight());
-            }
-            return rel.holds(signOf(ExactRatio.of(value), ExactRatio.of(other)))
-                    && arithmetic.rowIsComputed(() -> row, () -> valuesByKey(terms,
-                            i -> ExactRatio.of(i == at ? value : other)));
-        }
-
-        /** The least or the greatest whole number {@code slice} holds, or null where it holds
-         *  none or has no end. */
-        private static BigInteger endOf(NumericDomain.Bounds slice, boolean low) {
-            WholeRun whole = WholeRun.ofTheValues(slice);
-            return (whole == null || !whole.holdsAWholeNumber()) ? null
-                    : low ? whole.low() : whole.high();
-        }
-
-        /** Whether {@code ends}, at the values {@code asked}, lie on one line: the last as far
-         *  from the first as the second is, over the steps the values are apart. */
-        private static boolean onOneLine(List<BigInteger> asked, List<BigInteger> ends) {
-            return ends.get(2).subtract(ends.getFirst()).equals(ends.get(1)
-                    .subtract(ends.getFirst()).multiply(asked.get(2).subtract(asked.getFirst())));
-        }
     }
 
     /**

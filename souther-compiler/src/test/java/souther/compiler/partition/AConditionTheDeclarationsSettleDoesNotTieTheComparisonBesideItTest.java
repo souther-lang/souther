@@ -111,6 +111,43 @@ class AConditionTheDeclarationsSettleDoesNotTieTheComparisonBesideItTest {
         assertFalse(reasonsNotRead(report).equals(List.of(READ)), report::toString);
     }
 
+    /**
+     * Rows of the way are only what its statements leave where no rule of the declarations relates
+     * the two numbers as well: {@code eaches >= pack} held by the record they are fields of is a
+     * rule the statements do not state, and the comparison is not read over their rows.
+     */
+    @Test
+    void aRuleOfTheDeclarationsBetweenTheTwoNumbersKeepsTheComparisonNotRead() {
+        Compilation compilation = Compilation.ofSource("""
+                module m1
+
+                data Eaches = Int
+                    invariant value >= 0 && value <= 1000
+                data PackSize = Int
+                    invariant value >= 1 && value <= 1000
+                data Both = { eaches: Eaches, pack: PackSize }
+                    invariant coversAPack = eaches.value >= pack.value
+                data Whole = { n: Int }
+                data Part = { left: Int }
+
+                behavior split : (both: Both) -> Whole | Part
+
+                let split (both) = {
+                    guard both.eaches.value < 2 * both.pack.value else Part { left = 1 }
+                    Whole { n = 1 }
+                }
+
+                example split
+                    | "a" : (Both { eaches = Eaches(12), pack = PackSize(12) }) -> Whole { n = 1 }
+                    | "b" : (Both { eaches = Eaches(30), pack = PackSize(12) }) -> Part { left = 1 }
+                """, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        ACompiledModel.compiles(compilation);
+        JsonNode report = JSON.readTree(AdequacyReport.of(compilation)
+                .json(SourceRendering.namedByIdentity(compilation.texts())));
+        assertFalse(List.of(READ).containsAll(reasonsNotRead(report)), report::toString);
+    }
+
     /** The reasons of the places not read, each as many times as it is said. */
     private static List<String> reasonsNotRead(JsonNode report) {
         List<String> out = new ArrayList<>();
