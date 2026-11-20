@@ -3,8 +3,6 @@ package souther.compiler.inputs;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.RuleReportAnchor;
-import souther.compiler.publish.CanonicalSelection;
-import souther.compiler.publish.PublicationOrders;
 import souther.compiler.types.ModelOccurrences;
 
 import java.util.ArrayList;
@@ -30,9 +28,8 @@ import java.util.Set;
  * @param rule      which rule
  * @param reachedBy every question a reader was offered for the rule, as for a rule with no line
  * @param readAt    every copy of the model's code the rule was read at here
- * @param notShown  why neither is shown of what it works out, each once and in the order they are
- *                  published in ({@link PublicationOrders#WHY_A_STOP_IS_NOT_SHOWN}); empty where
- *                  all of that is shown one way or the other
+ * @param notShown  why neither is shown of what it works out, each once; none where all of that
+ *                  is shown one way or the other
  * @param asks      what each construction on the way asks of a run, each once and as written;
  *                  empty where none asks anything
  * @param everyRunStops the values at which every run getting to the rule stops, each once, where
@@ -41,8 +38,7 @@ import java.util.Set;
  *                  no run gets to is no stop left unresolved
  */
 public record RuleWhereAStopIsNotShown(RuleRef rule, Set<RuleReportAnchor> reachedBy,
-                                       ModelOccurrences readAt,
-                                       CanonicalSelection<WhyAStopIsNotShown> notShown,
+                                       ModelOccurrences readAt, ReasonsAStopIsNotShown notShown,
                                        List<WhatAConstructionAsks> asks,
                                        List<EveryRunStops> everyRunStops)
         implements WhatIsShownOfAStop {
@@ -63,11 +59,11 @@ public record RuleWhereAStopIsNotShown(RuleRef rule, Set<RuleReportAnchor> reach
 
     /** One reader's finding about a rule. */
     public static RuleWhereAStopIsNotShown of(RuleCitation cited, ModelOccurrences readAt,
-                                              Set<WhyAStopIsNotShown> notShown,
+                                              ReasonsAStopIsNotShown notShown,
                                               List<WhatAConstructionAsks> asks,
                                               List<EveryRunStops> everyRunStops) {
         return new RuleWhereAStopIsNotShown(cited.rule(), RuleCitation.anchorOf(cited), readAt,
-                PublicationOrders.WHY_A_STOP_IS_NOT_SHOWN.keep(notShown), asks, everyRunStops);
+                notShown, asks, everyRunStops);
     }
 
     /** How a reader finds the rule, as for a rule with no line ({@link RuleWithoutALine#cited}). */
@@ -85,15 +81,11 @@ public record RuleWhereAStopIsNotShown(RuleRef rule, Set<RuleReportAnchor> reach
         }
         Set<RuleReportAnchor> both = new HashSet<>(reachedBy);
         both.addAll(that.reachedBy);
-        List<WhyAStopIsNotShown> reasons = new ArrayList<>(notShown.written());
-        reasons.addAll(that.notShown.written());
-        CanonicalSelection<WhyAStopIsNotShown> why =
-                PublicationOrders.WHY_A_STOP_IS_NOT_SHOWN.keep(reasons);
         List<WhatAConstructionAsks> asked = new ArrayList<>(asks);
         asked.addAll(that.asks);
         List<EveryRunStops> stops = new ArrayList<>(everyRunStops);
         stops.addAll(that.everyRunStops);
-        return new RuleWhereAStopIsNotShown(rule, both, readAt.and(that.readAt), why, asked,
-                stops);
+        return new RuleWhereAStopIsNotShown(rule, both, readAt.and(that.readAt),
+                notShown.and(that.notShown), asked, stops);
     }
 }

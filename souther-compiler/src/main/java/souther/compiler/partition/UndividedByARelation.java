@@ -2816,7 +2816,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 List<Bounded> rows = new ArrayList<>(before);
                 rows.add(past);
                 List<EveryRunStops.Within> where = rowsWhere(rows, read, regions);
-                if (where != null) {
+                if (where != null && !where.isEmpty()) {
                     out.add(new EveryRunStops(written(it.form()), where,
                             it.ofTheRepresentation() ? keepingEveryRunGoing(where, read) : null));
                 }
@@ -2937,8 +2937,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     /**
      * The rows meeting every one of {@code bounds}, as each form of numbers they hold between two
      * ends: the forms alike but for the constant met into one, a form of one number said as that
-     * number's run within its type, and an end that is the type's own left unsaid. Null where no
-     * row meets them, or no region leaves one that does.
+     * number's run within its type, and an end that is the type's own left unsaid. Where every end
+     * is the type's own, so that the rows are every value the numbers can hold, those ends are
+     * said: rows there are are said. Null where no row meets them, or no region leaves one that
+     * does, and only there.
      */
     private static List<EveryRunStops.Within> rowsWhere(List<Bounded> bounds, InputReading read,
                                                         List<SearchRegion> regions) {
@@ -2976,6 +2978,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         List<EveryRunStops.Within> out = new ArrayList<>();
+        // The same with the type's own ends said, for rows that are every value there is.
+        List<EveryRunStops.Within> everyValue = new ArrayList<>();
         List<Bounded> asked = new ArrayList<>();
         for (Map.Entry<Map<NumericTerm, ExactRatio>, BigInteger[]> each : met.entrySet()) {
             LinearForm<NumericTerm> form = new LinearForm<>(ExactRatio.ZERO, each.getKey());
@@ -2992,14 +2996,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 return null;
             }
             asked.add(new Bounded(form, least, greatest));
+            NumericTerm.FromOnePosition alone = form.coefs().size() == 1
+                    ? (NumericTerm.FromOnePosition) form.coefs().keySet().iterator().next() : null;
             BigInteger shownLeast = least != null && least.equals(typeLeast) ? null : least;
             BigInteger shownGreatest = greatest != null && greatest.equals(typeGreatest) ? null
                     : greatest;
             if (shownLeast != null || shownGreatest != null) {
-                out.add(new EveryRunStops.Within(written(form), shownLeast, shownGreatest,
-                        form.coefs().size() == 1
-                                ? (NumericTerm.FromOnePosition) form.coefs().keySet().iterator()
-                                        .next() : null));
+                out.add(new EveryRunStops.Within(written(form), shownLeast, shownGreatest, alone));
+            }
+            if (least != null || greatest != null) {
+                everyValue.add(new EveryRunStops.Within(written(form), least, greatest, alone));
             }
         }
         // And every number of them within its type, which every row is, for the regions: a
@@ -3009,10 +3015,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             asked.add(new Bounded(alone, typeEndOf(alone, true, read),
                     typeEndOf(alone, false, read)));
         }
+        if (regions.stream().noneMatch(region -> holdsARow(region, asked))) {
+            return null;
+        }
+        List<EveryRunStops.Within> said = out.isEmpty() ? everyValue : out;
         // In the order of what they are written as, which is what a report is compared by.
-        out.sort(Comparator.comparing(EveryRunStops.Within::form));
-        return out.isEmpty() || regions.stream().noneMatch(region -> holdsARow(region, asked))
-                ? null : out;
+        return said.stream().sorted(Comparator.comparing(EveryRunStops.Within::form)).toList();
     }
 
     /** Whether {@code region}, narrowed to {@code bounds}, is not shown to hold no row. A bound

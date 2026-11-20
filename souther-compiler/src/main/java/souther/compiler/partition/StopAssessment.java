@@ -1,6 +1,8 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.AStopShown;
 import souther.compiler.inputs.InputReading;
+import souther.compiler.inputs.ReasonsAStopIsNotShown;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.WhyAStopIsNotShown;
@@ -151,26 +153,35 @@ final class StopAssessment {
         return out;
     }
 
-    /** Whether some run is shown to stop in what {@code judged} are of. */
-    static boolean aRunStops(List<Judgement> judged) {
-        return judged.stream().anyMatch(Judgement.Stops.class::isInstance);
+    /**
+     * What shows a run stops in what {@code judged} are of, as a finding says it: each stop shown,
+     * its operation as written and the number the value of the input holds at each place. Made
+     * from what was shown here and from nothing else, so a finding that a run stops is said only
+     * where this compiler has shown one does.
+     */
+    static List<AStopShown> stopsShown(List<Judgement> judged) {
+        List<AStopShown> out = new ArrayList<>();
+        for (Judgement each : judged) {
+            if (each instanceof Judgement.Stops(Shown shown)) {
+                Map<TermPath, BigInteger> at = new LinkedHashMap<>();
+                shown.at().forEach((term, value) -> at.put(
+                        ((NumericTerm.ValueOf) term).position(), value.floor().orNull()));
+                out.add(new AStopShown(
+                        UndividedByARelation.written(shown.operation().form()), at));
+            }
+        }
+        return out;
     }
 
-    /** Whether neither is shown of something {@code judged} are of. */
-    static boolean somethingUnresolved(List<Judgement> judged) {
-        return judged.stream().anyMatch(Judgement.Unresolved.class::isInstance);
-    }
-
-    /** Why neither is shown of what {@code judged} leave unresolved, each once; none where they
-     *  leave nothing so. */
-    static Set<WhyAStopIsNotShown> whyNotShown(List<Judgement> judged) {
+    /** Why neither is shown of what {@code judged} leave unresolved, each once. */
+    static ReasonsAStopIsNotShown whyNotShown(List<Judgement> judged) {
         Set<WhyAStopIsNotShown> out = new LinkedHashSet<>();
         for (Judgement each : judged) {
             if (each instanceof Judgement.Unresolved(var _, WhyAStopIsNotShown why)) {
                 out.add(why);
             }
         }
-        return out;
+        return ReasonsAStopIsNotShown.of(out);
     }
 
     /**

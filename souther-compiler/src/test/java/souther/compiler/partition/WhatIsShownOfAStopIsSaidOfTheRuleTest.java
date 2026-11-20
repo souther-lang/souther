@@ -3,7 +3,10 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ACompiledModel;
+import souther.compiler.inputs.AStopShown;
 import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.ReasonsAStopIsNotShown;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.RuleWhereARunMayStop;
 import souther.compiler.inputs.RuleWhereAStopIsNotShown;
 import souther.compiler.inputs.RuleWithoutALine;
@@ -13,8 +16,10 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
 
+import java.math.BigInteger;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -52,8 +57,8 @@ class WhatIsShownOfAStopIsSaidOfTheRuleTest {
                 "if (if q > 5 then q + 1 else 3) >= q then 1 else 2");
         List<WhatIsShownOfAStop> shown = stopsShown(compilation);
         assertEquals(List.of(RuleWhereAStopIsNotShown.class), kinds(shown));
-        assertEquals(List.of(WhyAStopIsNotShown.ON_AN_ARM),
-                ((RuleWhereAStopIsNotShown) shown.getFirst()).notShown().written());
+        assertEquals(ReasonsAStopIsNotShown.of(List.of(WhyAStopIsNotShown.ON_AN_ARM)),
+                ((RuleWhereAStopIsNotShown) shown.getFirst()).notShown());
         assertFalse(holdsABorderOpen(compilation));
     }
 
@@ -110,6 +115,38 @@ class WhatIsShownOfAStopIsSaidOfTheRuleTest {
         assertFalse(((RuleWhereAStopIsNotShown) shown.getFirst()).everyRunStops().isEmpty());
     }
 
+    /** A comparison every run getting to which stops in its sides is one runs get to: where the
+     *  declarations hold the number at the greatest Int, what is worked out of it is no
+     *  operation shown to stop no run, and is said at least as not resolved, never as
+     *  nothing. */
+    @Test
+    void anOperationTheDeclarationsTakePastItsTypeIsNeverSafe() {
+        Compilation compilation = ACompiledModel.answered("""
+                module w1
+                data MaxInt = Int invariant value == 9223372036854775807
+                behavior m : (q: MaxInt) -> Int
+                let m (q) = if q.value + 1 > 3 then 1 else 2
+                """);
+        assertFalse(stopsShown(compilation).isEmpty(), () -> divided(compilation)
+                .rulesWithoutALine().toString());
+    }
+
+    /** An operation every value of what it is over takes past its type, over a number whose
+     *  least is above the least Int: every length of a string, nought included, takes the second
+     *  addition past it. The rows past its ends are every row there is, which is rows. */
+    @Test
+    void anOperationEveryLengthTakesPastItsTypeIsNeverSafe() {
+        assertFalse(kinds(compiled("s: String",
+                "if (String.length(s) + 1) + 9223372036854775807 > 3 then 1 else 2")).isEmpty());
+    }
+
+    /** The same, where every length but nought takes it past. */
+    @Test
+    void anOperationSomeLengthsTakePastItsTypeIsNeverSafe() {
+        assertFalse(kinds(compiled("s: String",
+                "if String.length(s) + 9223372036854775807 > 3 then 1 else 2")).isEmpty());
+    }
+
     /** A stop the way rules out is no stop, said neither as one nor as one not resolved. */
     @Test
     void aStopTheWayRulesOutIsNothingSaid() {
@@ -134,7 +171,7 @@ class WhatIsShownOfAStopIsSaidOfTheRuleTest {
         assertEquals(List.of(RuleWhereAStopIsNotShown.class), kinds(shown));
         RuleWhereAStopIsNotShown open = (RuleWhereAStopIsNotShown) shown.getFirst();
         assertFalse(open.asks().isEmpty());
-        assertEquals(List.of(), open.notShown().written());
+        assertTrue(open.notShown().isEmpty());
     }
 
     /** A rule read at two calls of the helper it is written in: at the first, nothing comes
@@ -162,8 +199,13 @@ class WhatIsShownOfAStopIsSaidOfTheRuleTest {
      *  a stop and nothing else. */
     @Test
     void anOperationPastItsTypeOnTheWayIsAStop() {
-        assertEquals(List.of(RuleWhereARunMayStop.class),
-                kinds(compiled("q: Int", "if q > 0 && q + 1 > 3 then 1 else 2")));
+        List<WhatIsShownOfAStop> shown = stopsShown(compiled("q: Int",
+                "if q > 0 && q + 1 > 3 then 1 else 2"));
+        assertEquals(List.of(RuleWhereARunMayStop.class), kinds(shown));
+        // And it carries what shows it: the operation, and the value of q it stops at.
+        assertEquals(List.of(new AStopShown("q + 1",
+                        Map.of(TermPath.of("q"), BigInteger.valueOf(Long.MAX_VALUE)))),
+                ((RuleWhereARunMayStop) shown.getFirst()).shown());
     }
 
     /** One rule read at three calls, two of which leave its stop unresolved, is one finding of
@@ -181,8 +223,8 @@ class WhatIsShownOfAStopIsSaidOfTheRuleTest {
         RuleWhereAStopIsNotShown open = shown.stream()
                 .filter(RuleWhereAStopIsNotShown.class::isInstance)
                 .map(RuleWhereAStopIsNotShown.class::cast).findFirst().orElseThrow();
-        assertEquals(List.of(WhyAStopIsNotShown.SOMETHING_BEFORE_IT_MAY_STOP),
-                open.notShown().written());
+        assertEquals(ReasonsAStopIsNotShown.of(
+                List.of(WhyAStopIsNotShown.SOMETHING_BEFORE_IT_MAY_STOP)), open.notShown());
     }
 
     /** Whether what a run works out to evaluate a rule holds the border of a place it is filed

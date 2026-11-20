@@ -9,7 +9,6 @@ import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * What the readers found about the rules that came to no line here, and the rules among them
@@ -207,22 +206,18 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
             costly.merge(one.key(), one, CasesAtARule::mergedWith);
         }
 
-        /** A rule some run reaching it is shown to stop in, which is what a report says of it. */
-        public void mayStopARun(RuleCitation cited, ModelOccurrences readAt) {
-            mayStopARun(cited, readAt, List.of());
-        }
-
-        /** The same, with the values at which every run getting to the rule stops. */
+        /** A rule some run reaching it is shown to stop in, as {@code shown} shows it, with the
+         *  values at which every run getting to the rule stops ({@link RuleWhereARunMayStop}). */
         public void mayStopARun(RuleCitation cited, ModelOccurrences readAt,
-                                List<EveryRunStops> everyRunStops) {
-            stopped(RuleWhereARunMayStop.of(cited, readAt, everyRunStops));
+                                List<AStopShown> shown, List<EveryRunStops> everyRunStops) {
+            stopped(RuleWhereARunMayStop.of(cited, readAt, shown, everyRunStops));
         }
 
         /** A rule where whether a run stops is not resolved, why, what each construction on the
          *  way to it asks of a run, and the values at which every run getting there stops
          *  ({@link RuleWhereAStopIsNotShown}). */
         public void stopNotShown(RuleCitation cited, ModelOccurrences readAt,
-                                 Set<WhyAStopIsNotShown> notShown,
+                                 ReasonsAStopIsNotShown notShown,
                                  List<WhatAConstructionAsks> asks,
                                  List<EveryRunStops> everyRunStops) {
             stopped(RuleWhereAStopIsNotShown.of(cited, readAt, notShown, asks, everyRunStops));

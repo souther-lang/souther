@@ -23,8 +23,9 @@ import souther.compiler.check.ScopeStep;
 import souther.compiler.check.ValueOrigin;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.EveryRunStops;
+import souther.compiler.inputs.AStopShown;
+import souther.compiler.inputs.ReasonsAStopIsNotShown;
 import souther.compiler.inputs.WhatAConstructionAsks;
-import souther.compiler.inputs.WhyAStopIsNotShown;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.InputReading;
@@ -368,64 +369,66 @@ public final class GuardThresholds {
                             // statement of several is asked again with where it decides taken in.
                             List<ComparisonArrival> arrivals = at.observations().stream()
                                     .map(one -> one.arrival()).toList();
-                            WaysToACase wayToACase = new WaysToACase(each.assumed(),
-                                    decides -> aCase.apply(decides).entries(), put ->
+                            // Two ways to it, for two questions. A line is asked of the rows that
+                            // get past what the comparison works out to a value of it; whether a
+                            // run stops in it is asked of the rows that get to it, since a run
+                            // that stops there has not got past it.
+                            AskedOver toItsValue = new AskedOver(
                                     Reachability.gettingPast(Reachability.of(
-                                            new WayToTheBorder(each.wayToACase(put)),
-                                            read.quantities().region()), each.getsPast()));
-                            Reachability toIt = Reachability.gettingPast(Reachability.of(
-                                    new WayToTheBorder(each.assumed()),
-                                    read.quantities().region()), each.getsPast());
-                            // A stop is dropped on the way to the comparison and not on the way
-                            // past it: a run that stops in it has not got past it.
-                            Reachability beforeIt = Reachability.of(
-                                    new WayToTheBorder(each.assumed()),
-                                    read.quantities().region());
+                                            new WayToTheBorder(each.assumed()),
+                                            read.quantities().region()), each.getsPast()),
+                                    new WaysToACase(each.assumed(),
+                                            decides -> aCase.apply(decides).entries(), put ->
+                                            Reachability.gettingPast(Reachability.of(
+                                                    new WayToTheBorder(each.wayToACase(put)),
+                                                    read.quantities().region()), each.getsPast())),
+                                    arrivals, false);
+                            AskedOver toItself = new AskedOver(
+                                    Reachability.of(new WayToTheBorder(each.assumed()),
+                                            read.quantities().region()),
+                                    new WaysToACase(each.assumed(),
+                                            decides -> aCase.apply(decides).entries(), put ->
+                                            Reachability.of(
+                                                    new WayToTheBorder(each.wayToACase(put)),
+                                                    read.quantities().region())),
+                                    arrivals, true);
                             ComparisonAssessment arrived =
                                     ComparisonAssessment.whereItsStopIsReached(
                                             ComparisonAssessment.narrowedByWhatArrives(
-                                                    admitted.read(), toIt, wayToACase, arrivals,
-                                                    false, read, each.witnesses()),
-                                            () -> ComparisonAssessment.someRowArrives(beforeIt,
-                                                    arrivals));
+                                                    admitted.read(), toItsValue.toIt(),
+                                                    toItsValue.toACase(), arrivals, false, read,
+                                                    each.witnesses()),
+                                            toItself::aRowArrives);
                             // And what is shown of a run that some row takes stopping in it, which
                             // the line it draws does not say: of each operation a run works out
                             // to evaluate it, that no run stops in it, that one does, or neither.
                             // Whatever a run works out on the way to the comparison it works out
-                            // only if it gets there: where no row arrives, nothing below is a
+                            // only if it gets there: where no row gets there, nothing below is a
                             // run's, whichever of the ways to it says what.
-                            boolean aRowArrives = ComparisonAssessment.someRowArrives(beforeIt,
-                                    arrivals);
-                            List<StopAssessment.Judgement> judged = aRowArrives
-                                    && !(arrived instanceof ComparisonAssessment.AnswersNowhere)
+                            boolean aRowGetsThere = toItself.aRowArrives();
+                            boolean stopsAsked = aRowGetsThere
+                                    && !(arrived instanceof ComparisonAssessment.AnswersNowhere);
+                            List<StopAssessment.Judgement> judged = stopsAsked
                                     ? StopAssessment.of(each,
-                                            placesWorkedOut(each, arrived, toIt, arrivals,
-                                                    wayToACase),
+                                            placesWorkedOut(each, arrived, toItself),
                                             each.stopsWhere().isPresent()
-                                                    && ComparisonAssessment.someRowArrives(
-                                                            wayToACase.apply(
-                                                                    each.stopsWhere().get()),
-                                                            arrivals),
+                                                    && toItself.aRowArrives(toItself.toACase()
+                                                            .apply(each.stopsWhere().get())),
                                             read)
                                     : List.of();
-                            boolean aRunStops = StopAssessment.aRunStops(judged);
+                            List<AStopShown> shown = StopAssessment.stopsShown(judged);
                             // And the values at which every run getting to it stops in what it
-                            // works out, asked of the way before a row is narrowed to getting
-                            // past that: a row that got past holds none of them.
-                            List<SearchRegion> before = regionsOf(beforeIt);
-                            List<EveryRunStops> stops = !aRowArrives
-                                    || arrived instanceof ComparisonAssessment.AnswersNowhere
-                                            ? List.<EveryRunStops>of()
-                                            : everyRunStops(arrived, each.worksOutOnEach(),
-                                                    each.stopsIn(), read,
-                                                    before, each.statedAsACondition().isPresent(),
-                                                    decides -> regionsOf(Reachability.of(
-                                                            new WayToTheBorder(each.wayToACase(
-                                                                    aCase.apply(decides))),
-                                                            read.quantities().region())));
+                            // works out.
+                            List<SearchRegion> before = regionsOf(toItself.toIt());
+                            List<EveryRunStops> stops = !stopsAsked ? List.<EveryRunStops>of()
+                                    : everyRunStops(arrived, each.worksOutOnEach(),
+                                            each.stopsIn(), read,
+                                            before, each.statedAsACondition().isPresent(),
+                                            decides -> regionsOf(toItself.toACase()
+                                                    .apply(decides)));
                             // And whether a run that gets to it works out something of which
                             // neither is shown, beside a stop shown in something else.
-                            Set<WhyAStopIsNotShown> stopsNotShown =
+                            ReasonsAStopIsNotShown stopsNotShown =
                                     StopAssessment.whyNotShown(judged);
                             // And, apart from that, whether what a run works out to get past it
                             // is read far enough to say where a line of it lies: a stop no
@@ -433,17 +436,16 @@ public final class GuardThresholds {
                             // one over a value worked out that the way does not keep within its
                             // type. Not resolving whether a run stops in an operation that is
                             // read leaves that standing.
-                            boolean stopsNotFullyRead = aRowArrives
+                            boolean stopsNotFullyRead = toItsValue.aRowArrives(toItself.toIt())
                                     && !(arrived instanceof ComparisonAssessment.AnswersNowhere)
-                                    && somethingWorkedOutIsNotAllTold(each, toIt, arrivals,
-                                            wayToACase, read);
+                                    && somethingWorkedOutIsNotAllTold(each, toItsValue, read);
                             reached(cuts, stated, each, readingsOf(arrived), aCase, aPart);
                             lineAt(behavior, stated, at, each.occurrence().origin(), each.at(),
                                     whereMet(each, helper -> runsOnce.computeIfAbsent(helper,
                                             called -> plan.runsOnce(called, emitted))),
-                                    reaches, arrived, each.readOn(), aRunStops,
+                                    reaches, arrived, each.readOn(), shown,
                                     stopsNotShown, stopsNotFullyRead, stops,
-                                    aRowArrives ? asksOfARunReaching(each.asks(), before, read,
+                                    aRowGetsThere ? asksOfARunReaching(each.asks(), before, read,
                                             arrived) : List.of(), found,
                                     between, throughADerivedValue, partnered, withoutALine,
                                     readOn);
@@ -1209,6 +1211,7 @@ public final class GuardThresholds {
      * here, by {@link BoundaryPolicy}, and what the comparison comes to was read where that was
      * settled ({@code read}). Nothing here reads the comparison again.
      *
+     * @param shown what shows a run stops in it, none where no stop is shown
      * @param stops the values at which every run getting to the comparison stops in what it works
      *              out
      */
@@ -1218,8 +1221,8 @@ public final class GuardThresholds {
                                Function<ApplicationsReadOn, ElementsMetOn> metOn,
                                RuleReachNumbering reaches,
                                ComparisonAssessment read, LinesReadOn linesReadOn,
-                               boolean aRunStops,
-                               Set<WhyAStopIsNotShown> stopsNotShown,
+                               List<AStopShown> shown,
+                               ReasonsAStopIsNotShown stopsNotShown,
                                boolean stopsNotFullyRead,
                                List<EveryRunStops> stops,
                                List<WhatAConstructionAsks> asks,
@@ -1238,10 +1241,10 @@ public final class GuardThresholds {
         // And where some run getting to it is shown to stop in it, with the values at which every
         // run there stops where those are known: those say where a run stops if one gets there,
         // and not that one does.
-        if (aRunStops) {
+        if (!shown.isEmpty()) {
             withoutALine.mayStopARun(
                     new RuleCitation.Written(new RuleRef.Comparison(behavior, wrote), anchor),
-                    ModelOccurrences.of(stated), stops);
+                    ModelOccurrences.of(stated), shown, stops);
         }
         // And, apart from that, where whether a run stops is not resolved: something it works
         // out of which neither is shown, or what a construction on the way asks of a run, which
@@ -1252,7 +1255,7 @@ public final class GuardThresholds {
             withoutALine.stopNotShown(
                     new RuleCitation.Written(new RuleRef.Comparison(behavior, wrote), anchor),
                     ModelOccurrences.of(stated), stopsNotShown, asks,
-                    aRunStops ? List.of() : stops);
+                    shown.isEmpty() ? stops : List.of());
         }
         // Where what a run works out to evaluate it is not read far enough to say which rows get
         // past it, the border of each place it is filed at waits on it: the line stands where it
@@ -1349,13 +1352,12 @@ public final class GuardThresholds {
      * read and not shown either way still says which rows get past it.
      */
     private static boolean somethingWorkedOutIsNotAllTold(
-            ComparisonReadings.Reading each, Reachability toIt, List<ComparisonArrival> arrivals,
-            WaysToACase wayToACase, InputReading read) {
+            ComparisonReadings.Reading each, AskedOver over, InputReading read) {
         for (ComparisonReadings.Reading.WorkedOutAt worked : each.whatARunWorksOut()) {
             if ((worked.stops().operations().aStopUntold()
                     || aStopToldThereIsAskedOfNoRow(each, worked)
-                    || aValueWorkedOutIsNotKeptWithin(each, worked, wayToACase, read))
-                    && aRowArrivesWhereItIsWorkedOut(each, worked, toIt, arrivals, wayToACase)) {
+                    || aValueWorkedOutIsNotKeptWithin(each, worked, over.toACase(), read))
+                    && aRowArrivesWhereItIsWorkedOut(each, worked, over)) {
                 return true;
             }
         }
@@ -1415,11 +1417,10 @@ public final class GuardThresholds {
      * to the comparison works out there.
      */
     private static List<StopAssessment.Place> placesWorkedOut(
-            ComparisonReadings.Reading each, ComparisonAssessment arrived, Reachability toIt,
-            List<ComparisonArrival> arrivals, WaysToACase wayToACase) {
+            ComparisonReadings.Reading each, ComparisonAssessment arrived, AskedOver over) {
         List<StopAssessment.Place> out = new ArrayList<>();
         if (each.stopsIn().isEmpty() && each.worksOutOnEach().isEmpty()) {
-            boolean arrives = ComparisonAssessment.someRowArrives(toIt, arrivals);
+            boolean arrives = over.aRowArrives();
             for (UndividedByARelation relation : arrived.relationsRead()) {
                 if (relation.working().operations().isEmpty()
                         && !relation.working().aStopUntold()) {
@@ -1438,23 +1439,50 @@ public final class GuardThresholds {
                 continue;
             }
             Proposition reached = reachedWhere(worked);
-            boolean arrives = aRowArrivesWhereItIsWorkedOut(each, worked, toIt, arrivals,
-                    wayToACase);
+            boolean arrives = aRowArrivesWhereItIsWorkedOut(each, worked, over);
             List<OnTheWay> way = (reached == null || each.statedAsACondition().isEmpty())
                     ? each.assumed()
-                    : arrives ? each.wayToACase(wayToACase.putOn(reached)) : List.of();
+                    : arrives ? each.wayToACase(over.toACase().putOn(reached)) : List.of();
             out.add(new StopAssessment.Place(worked, arrives, way));
         }
         return out;
+    }
+
+    /**
+     * The ways a question about a comparison is asked over, and how what arrives at the places it
+     * is watched at answers it: up to a value of the comparison, which is where a line of it is
+     * asked, of the rows that get past what it works out
+     * ({@link ComparisonAssessment#someRowArrives}); or up to the comparison itself, which is
+     * where whether a run stops in it is asked, of the rows that get to it
+     * ({@link ComparisonAssessment#someRowGetsTo}).
+     *
+     * @param toIt     the way to the comparison
+     * @param toACase  the same, with what a case states put on it
+     * @param arrivals what arrives at each place the comparison is watched at
+     * @param itself   whether it is asked up to the comparison itself
+     */
+    private record AskedOver(Reachability toIt, WaysToACase toACase,
+                             List<ComparisonArrival> arrivals, boolean itself) {
+
+        /** Whether {@code way} is not shown to leave no row where this asks. */
+        boolean aRowArrives(Reachability way) {
+            return itself ? ComparisonAssessment.someRowGetsTo(way, arrivals)
+                    : ComparisonAssessment.someRowArrives(way, arrivals);
+        }
+
+        /** The same, of the way to the comparison. */
+        boolean aRowArrives() {
+            return aRowArrives(toIt);
+        }
     }
 
     /** Whether a row may arrive where {@code worked} is worked out: at the comparison itself, or
      *  past what its arm or application states ({@link #aRowMayArrivePast}). */
     private static boolean aRowArrivesWhereItIsWorkedOut(
             ComparisonReadings.Reading each, ComparisonReadings.Reading.WorkedOutAt worked,
-            Reachability toIt, List<ComparisonArrival> arrivals, WaysToACase wayToACase) {
+            AskedOver over) {
         Proposition reached = reachedWhere(worked);
-        return reached == null || aRowMayArrivePast(each, reached, toIt, arrivals, wayToACase);
+        return reached == null || aRowMayArrivePast(each, reached, over);
     }
 
     /** What a run states to get past the arm or make the application {@code worked} is worked
@@ -1468,20 +1496,18 @@ public final class GuardThresholds {
 
     /**
      * Whether a row arriving at the comparison {@code each} may get past {@code reached}, what a
-     * run states to take an arm or make an application on the way there ({@code toIt}). A
-     * statement every run holds is passed by every row that arrives, and one none holds by none,
-     * whether or not the comparison is stated as a condition. Any other is put on the way through
-     * that condition, and where the comparison is stated as none, nothing says which rows get past
-     * it, and one may.
+     * run states to take an arm or make an application on the way there. A statement every run
+     * holds is passed by every row that arrives, and one none holds by none, whether or not the
+     * comparison is stated as a condition. Any other is put on the way through that condition, and
+     * where the comparison is stated as none, nothing says which rows get past it, and one may.
      */
     private static boolean aRowMayArrivePast(
-            ComparisonReadings.Reading each, Proposition reached, Reachability toIt,
-            List<ComparisonArrival> arrivals, WaysToACase wayToACase) {
+            ComparisonReadings.Reading each, Proposition reached, AskedOver over) {
         if (reached instanceof Proposition.Always(boolean holds)) {
-            return holds && ComparisonAssessment.someRowArrives(toIt, arrivals);
+            return holds && over.aRowArrives();
         }
         return each.statedAsACondition().isEmpty()
-                || ComparisonAssessment.someRowArrives(wayToACase.apply(reached), arrivals);
+                || over.aRowArrives(over.toACase().apply(reached));
     }
 
     /** The region {@code way} leaves, or none where nothing reaches along it. */
@@ -1608,7 +1634,7 @@ public final class GuardThresholds {
             List<EmittedComparisonState.Observation> watched) {
         Set<WhatMayStopARun> out = new LinkedHashSet<>();
         for (EmittedComparisonState.Observation one : watched) {
-            if (one.arrival() instanceof ComparisonArrival.NothingArrives) {
+            if (one.arrival().nothingGetsPast()) {
                 continue;
             }
             if (one.stopsBefore().isEmpty()) {

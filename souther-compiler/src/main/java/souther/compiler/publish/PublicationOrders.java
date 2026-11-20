@@ -17,7 +17,6 @@ import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.ObligationDisposition;
 import souther.compiler.query.ReplacementEvidence;
 import souther.compiler.query.Weakening;
-import souther.compiler.inputs.WhyAStopIsNotShown;
 import souther.compiler.reach.WhatMayStopARun;
 
 import tools.jackson.databind.node.ObjectNode;
@@ -475,25 +474,6 @@ public final class PublicationOrders {
             CanonicalSelection.Order.overFamilies(List.<Class<? extends EstablishmentGap>>of(
                     EstablishmentGap.Observation.class,
                     EstablishmentGap.Composition.class));
-
-    /**
-     * Why a stop is not shown, in the order a proof of one asks for what it rests on: something
-     * told to stop in, where it is worked out, what else is worked out beside it and before it,
-     * the way there, what it is over, and last a value of the input that gets there.
-     */
-    public static final CanonicalSelection.Order<WhyAStopIsNotShown> WHY_A_STOP_IS_NOT_SHOWN =
-            CanonicalSelection.Order.overValues(List.of(
-                    WhyAStopIsNotShown.NO_OPERATION_TOLD,
-                    WhyAStopIsNotShown.ON_ROWS_OF_THE_STATEMENT,
-                    WhyAStopIsNotShown.ON_AN_ARM,
-                    WhyAStopIsNotShown.ON_AN_APPLICATION,
-                    WhyAStopIsNotShown.NOT_EVERY_OPERATION_TOLD,
-                    WhyAStopIsNotShown.SOMETHING_BEFORE_IT_MAY_STOP,
-                    WhyAStopIsNotShown.A_CONDITION_NOT_READ,
-                    WhyAStopIsNotShown.NOT_OVER_THE_INPUT,
-                    WhyAStopIsNotShown.NO_VALUE_SHOWN,
-                    WhyAStopIsNotShown.NO_VALUE_FOUND,
-                    WhyAStopIsNotShown.NO_VALUE_FOUND_WITHIN_WHAT_IS_TRIED));
 
     /**
      * What may stop a run on the way to a point, in the order a reader looking up the body for it

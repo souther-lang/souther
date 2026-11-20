@@ -36,11 +36,14 @@ import java.util.Set;
  * @param rule      which rule
  * @param reachedBy every question a reader was offered for the rule, as for a rule with no line
  * @param readAt    every copy of the model's code the rule was read at here
+ * @param shown     what shows a run stops in it, each once: never none, since a stop no value of
+ *                  the input is shown to come to is not this
  * @param everyRunStops the runs of the values at the rule's places at which every run getting to
  *                  it stops, each once; empty where none is known
  */
 public record RuleWhereARunMayStop(RuleRef rule, Set<RuleReportAnchor> reachedBy,
-                                   ModelOccurrences readAt, List<EveryRunStops> everyRunStops)
+                                   ModelOccurrences readAt, List<AStopShown> shown,
+                                   List<EveryRunStops> everyRunStops)
         implements WhatIsShownOfAStop {
 
     public RuleWhereARunMayStop {
@@ -49,19 +52,21 @@ public record RuleWhereARunMayStop(RuleRef rule, Set<RuleReportAnchor> reachedBy
         }
         reachedBy = reachedBy == null ? Set.of() : Set.copyOf(reachedBy);
         RuleCitation.requireReached(rule, reachedBy);
+        shown = List.copyOf(new LinkedHashSet<>(shown));
+        if (shown.isEmpty()) {
+            throw new IllegalArgumentException("a stop said of " + rule
+                    + " is shown by some value of the input");
+        }
         everyRunStops = List.copyOf(new LinkedHashSet<>(everyRunStops));
     }
 
-    /** One reader's finding about a rule a run may stop in. */
-    public static RuleWhereARunMayStop of(RuleCitation cited, ModelOccurrences readAt) {
-        return of(cited, readAt, List.of());
-    }
-
-    /** The same, with the values at which every run getting to the rule stops. */
+    /** One reader's finding about a rule a run is shown to stop in, as {@code shown} shows it,
+     *  with the values at which every run getting to the rule stops. */
     public static RuleWhereARunMayStop of(RuleCitation cited, ModelOccurrences readAt,
+                                          List<AStopShown> shown,
                                           List<EveryRunStops> everyRunStops) {
         return new RuleWhereARunMayStop(cited.rule(), RuleCitation.anchorOf(cited), readAt,
-                everyRunStops);
+                shown, everyRunStops);
     }
 
     /** How a reader finds the rule, as for a rule with no line ({@link RuleWithoutALine#cited}). */
@@ -78,8 +83,10 @@ public record RuleWhereARunMayStop(RuleRef rule, Set<RuleReportAnchor> reachedBy
         }
         Set<RuleReportAnchor> both = new HashSet<>(reachedBy);
         both.addAll(that.reachedBy);
+        List<AStopShown> shownBoth = new ArrayList<>(shown);
+        shownBoth.addAll(that.shown);
         List<EveryRunStops> stops = new ArrayList<>(everyRunStops);
         stops.addAll(that.everyRunStops);
-        return new RuleWhereARunMayStop(rule, both, readAt.and(that.readAt), stops);
+        return new RuleWhereARunMayStop(rule, both, readAt.and(that.readAt), shownBoth, stops);
     }
 }
