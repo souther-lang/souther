@@ -849,6 +849,16 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/meaning/Derivation$WaysWrittenWhenAsked;)"
                             + "Lsouther/compiler/meaning/Proposition;",
                     "past the figure carries the statement out as a part nothing read, naming it"),
+            Map.entry("souther.compiler.meaning.Conclusion#waysWrittenOut("
+                            + "Lsouther/compiler/meaning/KeptWays;)J",
+                    "hands the count of ways, one past the figure where there are more, to"
+                            + " overTheWays and everyWayIsWrittenOut"),
+            Map.entry("souther.compiler.meaning.Conclusion#everyWayIsWrittenOut("
+                            + "Lsouther/compiler/meaning/KeptWays;)Z",
+                    "past the figure answers that the ways are not written out, and what a run"
+                            + " reaching them works out making the total over them is a stop"
+                            + " left untold: the statement is a part nothing read, naming it,"
+                            + " where overTheWays concludes it"),
             // Where one line of a statement of several decides: the statement read, its cases
             // taken apart, and each asked whether rows stand on both sides of the line. Past any
             // of the figures the line is one where it decides was not worked out, naming the

@@ -326,7 +326,7 @@ public final class Conclusion {
      */
     Proposition overTheWays(Derivation.WaysWrittenWhenAsked ways) {
         KeptWays kept = ways.kept();
-        long cases = kept.work(kept.undecided(), WAYS.maximum() + 1, false);
+        long cases = waysWrittenOut(kept);
         if (cases > WAYS.maximum()) {
             return unread(new Derivation.Stopped(new WhyUnread.MoreWaysThanAreWrittenOut(),
                     ways.fixed()));
@@ -350,6 +350,18 @@ public final class Conclusion {
         return new Proposition.OfTheWays(new Proposition.WaysToWrite(kept, conditions, reading,
                 ways.forms(), ways.sum(), ways.count(), ways.counted(), ways.fixed(), shared.where,
                 first, owed), true);
+    }
+
+    /** How many ways a statement over {@code kept} is written out over, or one past the most it
+     *  is written out over where there are more. */
+    private static long waysWrittenOut(KeptWays kept) {
+        return kept.work(kept.undecided(), WAYS.maximum() + 1, false);
+    }
+
+    /** Whether a statement over {@code kept} is written out way by way, and not given up as a
+     *  part nothing read for having more ways than are written out. */
+    public static boolean everyWayIsWrittenOut(KeptWays kept) {
+        return waysWrittenOut(kept) <= WAYS.maximum();
     }
 
     /**
