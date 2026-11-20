@@ -54,6 +54,7 @@ import souther.compiler.types.ValueName;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
@@ -124,7 +125,7 @@ final class WorkedOutToReachIt {
          *  on once the numbers are asked, and by the arms the runs it is asked of entered. Kept
          *  with the questions this one asks past an arm, which differ from it in those arms
          *  alone. */
-        private final Map<Core, List<Answered>> answered;
+        private final Map<Core, Map<ReadAt, Boolean>> answered;
         private final FoldedValue.Kept folds;
         private final boolean byTheNumbers;
         /** The bodies of the closures shown to end no run where the call being asked applies them
@@ -166,7 +167,7 @@ final class WorkedOutToReachIt {
         private Question(boolean byTheNumbers, Set<Core> heldWhereApplied,
                          Predicate<Denotation> tellsWhereItStops,
                          Predicate<Denotation> ownStopsSaid, ArmsTaken arms,
-                         Map<Core, List<Answered>> answered, FoldedValue.Kept folds,
+                         Map<Core, Map<ReadAt, Boolean>> answered, FoldedValue.Kept folds,
                          Map<Core, List<ArmsTaken>> bound) {
             this.byTheNumbers = byTheNumbers;
             this.heldWhereApplied = heldWhereApplied;
@@ -260,24 +261,18 @@ final class WorkedOutToReachIt {
         }
 
         Boolean answerOf(Core written, InputReads at) {
-            for (Answered each : answered.getOrDefault(written, List.of())) {
-                if (each.at().equals(at) && each.arms().equals(arms)) {
-                    return each.endsNone();
-                }
-            }
-            return null;
+            return answered.getOrDefault(written, Map.of()).get(new ReadAt(at, arms));
         }
 
         void answer(Core written, InputReads at, boolean endsNone) {
-            List<Answered> where = answered.computeIfAbsent(written, _ -> new ArrayList<>());
-            where.removeIf(each -> each.at().equals(at) && each.arms().equals(arms));
-            where.add(new Answered(at, arms, endsNone));
+            answered.computeIfAbsent(written, _ -> new HashMap<>()).put(new ReadAt(at, arms),
+                    endsNone);
         }
     }
 
-    /** What {@link #endsNoRun} answered of an expression read where it is ({@code at}), on the
-     *  runs that entered {@code arms}. */
-    private record Answered(InputReads at, ArmsTaken arms, boolean endsNone) {}
+    /** Where an expression was read ({@code at}), on the runs that entered {@code arms}: what an
+     *  answer of it is kept by. */
+    private record ReadAt(InputReads at, ArmsTaken arms) {}
 
     /** One arm a run entered: arm {@code part} of {@code fork}, as {@link Choice} numbers them,
      *  read where it is ({@code at}). The fork is the node written, told apart from another
@@ -473,7 +468,8 @@ final class WorkedOutToReachIt {
     private WorkedOutToReachIt(InputReading read, Predicate<Denotation> beyond,
                                boolean closuresApart, Predicate<Denotation> toldElsewhere,
                                Predicate<Denotation> ownStopsSaidOnTheirWays,
-                               ArmsTaken onTheWay, Map<Core, List<NumbersAt>> numbersAsked) {
+                               ArmsTaken onTheWay,
+                               Map<Core, Map<ReadAt, Optional<FormRange>>> numbersAsked) {
         this.read = Objects.requireNonNull(read);
         this.beyond = Objects.requireNonNull(beyond);
         this.closuresApart = closuresApart;
@@ -1340,29 +1336,25 @@ final class WorkedOutToReachIt {
         return numbersOf(value, onTheWay);
     }
 
-    /** What {@link #numbersOf} answered of an expression read where it is ({@code at}) on the runs
-     *  that entered {@code arms}: the numbers, or none where they are not known or are still being
-     *  asked. */
-    private record NumbersAt(InputReads at, ArmsTaken arms, Optional<FormRange> numbers) {}
-
     /** What {@link #numbersOf} answered of each expression, wherever it was read, for as long as
      *  this is asked: a chain of names is followed once however many expressions read it. The
      *  expression is the node written, and where it was read is told apart by what each name in
-     *  it stands for and by the arms the runs it is asked of entered. */
-    private final Map<Core, List<NumbersAt>> numbersAsked;
+     *  it stands for and by the arms the runs it is asked of entered. None where the numbers are
+     *  not known or are still being asked. */
+    private final Map<Core, Map<ReadAt, Optional<FormRange>>> numbersAsked;
 
     private FormRange numbersOf(Denotation value, ArmsTaken arms) {
         Core written = Core.withoutStanding(value.value());
-        List<NumbersAt> where = numbersAsked.computeIfAbsent(written, _ -> new ArrayList<>());
-        for (NumbersAt each : where) {
-            if (each.at().equals(value.at()) && each.arms().equals(arms)) {
-                return each.numbers().orElse(null);
-            }
+        Map<ReadAt, Optional<FormRange>> where =
+                numbersAsked.computeIfAbsent(written, _ -> new HashMap<>());
+        ReadAt at = new ReadAt(value.at(), arms);
+        Optional<FormRange> known = where.get(at);
+        if (known != null) {
+            return known.orElse(null);
         }
-        int index = where.size();
-        where.add(new NumbersAt(value.at(), arms, Optional.empty()));
+        where.put(at, Optional.empty());
         FormRange numbers = numbersNotYetAsked(value, arms);
-        where.set(index, new NumbersAt(value.at(), arms, Optional.ofNullable(numbers)));
+        where.put(at, Optional.ofNullable(numbers));
         return numbers;
     }
 
@@ -1486,7 +1478,7 @@ final class WorkedOutToReachIt {
      * out stands at no place.
      */
     private FormRange numbersOfAPathOfTheElements(Core path, InputReads where, ArmsTaken arms) {
-        Core root = path;
+        Core root = Core.withoutStanding(path);
         while (true) {
             switch (root) {
                 case Core.FieldAccess access -> root = Core.withoutStanding(access.target());

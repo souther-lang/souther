@@ -103,6 +103,15 @@ final class BindingEnvironment {
      * hash out again would walk every tree the body holds once per name followed.
      */
     private final HeldHash heldHash;
+    /** The environments made from this one by a step a walk takes again. No part of what this
+     *  environment is. */
+    private final StepsFrom<BindingEnvironment> steps = new StepsFrom<>();
+
+    /** The steps from one environment to another a walk takes again ({@link StepsFrom}). */
+    private enum Step {
+        /** Inside what a binder binds ({@link #inside}). */
+        INSIDE
+    }
 
     /** The hash of what a body holds, worked out the first time an environment holding it is
      *  asked for one, and not before: most environments are never asked. */
@@ -817,19 +826,21 @@ final class BindingEnvironment {
         if (binder == null || binder.binding() == null || value == null) {
             return this;
         }
-        // The nearest binding wins, which is what being inside it means. What the name is given is
-        // held as it was written: a build of a value is read as its definition, in the reading a
-        // definition is read in, by the one place that says what a name stands for
-        // (InputReads#meaningOf) — and not swapped for the definition here, where the reading it
-        // would be read in is this one.
-        int depth = newest == null ? 1 : newest.depth() + 1;
-        Layer inner = new Layer(binder.binding(), Core.withoutStanding(value), newest, depth);
-        if (depth <= KEPT_APART) {
-            return new BindingEnvironment(roots, handed, table, inner, elements, values, heldHash,
-                    callsStand, selected, opened, answered);
-        }
-        return new BindingEnvironment(roots, handed, written(table, inner), null, elements, values,
-                heldHash, callsStand, selected, opened, answered);
+        return steps.madeBy(Step.INSIDE, binder, value, () -> {
+            // The nearest binding wins, which is what being inside it means. What the name is
+            // given is held as it was written: a build of a value is read as its definition, in
+            // the reading a definition is read in, by the one place that says what a name stands
+            // for (InputReads#meaningOf) — and not swapped for the definition here, where the
+            // reading it would be read in is this one.
+            int depth = newest == null ? 1 : newest.depth() + 1;
+            Layer inner = new Layer(binder.binding(), Core.withoutStanding(value), newest, depth);
+            if (depth <= KEPT_APART) {
+                return new BindingEnvironment(roots, handed, table, inner, elements, values,
+                        heldHash, callsStand, selected, opened, answered);
+            }
+            return new BindingEnvironment(roots, handed, written(table, inner), null, elements,
+                    values, heldHash, callsStand, selected, opened, answered);
+        });
     }
 
     /** The same, over a tree that keeps the language's operations standing as calls, which the

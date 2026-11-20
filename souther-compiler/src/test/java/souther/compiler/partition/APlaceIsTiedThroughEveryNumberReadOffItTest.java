@@ -39,8 +39,8 @@ class APlaceIsTiedThroughEveryNumberReadOffItTest {
                 LinearForm.atom(new NumericTerm.ValueOf(B)));
         UndividedByARelation.OnAWay statement =
                 new UndividedByARelation.OnAWay(Set.of(), false, isOne(product), null);
-        DatesHeldApartAlongAWay way = DatesHeldApartAlongAWay.of(List.of(statement), List.of(),
-                List.of(A, B, C), _ -> null);
+        PlacesTiedAlongAWay way = PlacesTiedAlongAWay.of(List.of(statement), List.of(),
+                List.of(A, B, C), _ -> null, _ -> false);
 
         assertEquals(Set.of(A, B), way.tiedTo(A));
         assertEquals(Set.of(C), way.tiedTo(C));
