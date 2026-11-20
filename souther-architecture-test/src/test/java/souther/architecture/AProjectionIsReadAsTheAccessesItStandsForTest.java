@@ -317,6 +317,17 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "asks which names an expression reads and what each stands for, which no name read"
                         + " off a value adds to: the base of a projection is the one child there is"
                         + " to go down to");
+        row(out, c + "partition/ComparisonReadings", "runsWholeWhenever",
+                "(" + core + ")Z", Reading.STRUCTURE,
+                "asks whether every part of an expression runs whenever it does, which is what is"
+                        + " evaluated: a projection's base is the one child there is to go down to");
+        row(out, c + "partition/ComparisonReadings", "workedOut",
+                "(" + core + reads + "Ljava/util/function/Function;L" + c
+                        + "partition/UndividedByARelation$Working;)L" + c
+                        + "partition/UndividedByARelation$Working;", Reading.STRUCTURE,
+                "goes down only through nodes that end no run of themselves, to hand the rest whole"
+                        + " to the reader of what evaluating them works out: a projection ends no"
+                        + " run and is never gone down");
         row(out, c + "partition/ComparisonReadings", "readsWhole",
                 "(L" + c + "types/BindingId;" + core + "Ljava/util/Set;)Z", Reading.STRUCTURE,
                 "asks which fields of a name an expression reads, and whether it reads the name"
