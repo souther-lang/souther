@@ -47,7 +47,7 @@ final class WhereConstructionsAreMet {
      */
     Optional<Met> at(Core.Construct made) {
         List<Met> found = met.get(made);
-        return found == null || found.size() != 1 ? Optional.empty()
+        return (found == null || found.size() != 1) ? Optional.empty()
                 : Optional.of(found.getFirst());
     }
 }
