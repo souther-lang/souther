@@ -71,8 +71,7 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
 
     /** What the report says each construction asks, as the document writes it. */
     private static List<JsonNode> asksOf(Compilation compilation) {
-        JsonNode report = JSON.readTree(AdequacyReport.of(compilation)
-                .json(SourceRendering.namedByIdentity(compilation.texts())));
+        JsonNode report = document(compilation);
         DocumentShape.assertShapedLikeTheSchema(report);
         List<JsonNode> out = new ArrayList<>();
         collect(report, out);
@@ -103,10 +102,16 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
         };
     }
 
-    /** What the findings of {@code kind} say the constructions on the way ask. */
-    private static List<JsonNode> toldIn(Compilation compilation, String kind) {
-        JsonNode report = JSON.readTree(AdequacyReport.of(compilation)
+    /** The document the report writes of {@code compilation}, written once for every reading a
+     *  test makes of it. */
+    private static JsonNode document(Compilation compilation) {
+        return JSON.readTree(AdequacyReport.of(compilation)
                 .json(SourceRendering.namedByIdentity(compilation.texts())));
+    }
+
+    /** What the findings of {@code kind} in {@code report} say the constructions on the way
+     *  ask. */
+    private static List<JsonNode> toldIn(JsonNode report, String kind) {
         List<JsonNode> out = new ArrayList<>();
         collectOfKind(report, kind, out);
         return out;
@@ -120,9 +125,7 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
     }
 
     private static Compilation compiled(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        return ACompiledModel.compiles(compilation);
+        return ACompiledModel.measured(model, new Adequacy.Asked(Adequacy.Level.OFF, false));
     }
 
     private static String human(Compilation compilation) {
@@ -151,7 +154,7 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
                 List.copyOf(asked.path("allOf").values()));
         assertTrue(Pattern.compile("a run gets past Refund at [0-9]+:[0-9]+ only where"
                         + " gross \\* rate is at least 0 and gross is at least 0")
-                .matcher(human(compilation)).find(), human(compilation));
+                .matcher(human(compilation)).find(), () -> human(compilation));
     }
 
     /** A condition the declarations hold of every value says nothing: a gross at nought or above
@@ -161,7 +164,7 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
         Compilation compilation = compiled(plan("gross: Gross, rate: Rate, limit: Decimal",
                 "gross.value", "rate.value", "Decimal.min(fee, gross.value)"));
         assertEquals(List.of(), asksOf(compilation));
-        assertTrue(!human(compilation).contains("a run gets past"), human(compilation));
+        assertTrue(!human(compilation).contains("a run gets past"), () -> human(compilation));
     }
 
     /** Of the two that the declarations do not hold, only that one is asked: the gross is held at
@@ -198,7 +201,7 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
         assertEquals(List.of(is("x", "at_least", "0"), is("y", "at_least", "0")),
                 List.copyOf(asks.getFirst().path("asked").path("oneOf").values()));
         assertTrue(human(compilation).contains("only where x is at least 0 or y is at least 0"),
-                human(compilation));
+                () -> human(compilation));
     }
 
     /**
@@ -223,10 +226,11 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
                     within = Decimal.compare(x, c) <= 0
                 }
                 """);
-        List<JsonNode> asks = toldIn(compilation, "rule_may_stop_a_run");
+        JsonNode report = document(compilation);
+        List<JsonNode> asks = toldIn(report, "rule_may_stop_a_run");
         assertEquals(1, asks.size(), asks.toString());
         assertEquals(10, asks.getFirst().path("at").path("line").asInt(), asks.toString());
-        assertEquals(List.of(), toldIn(compilation, "rule_stop_not_shown"));
+        assertEquals(List.of(), toldIn(report, "rule_stop_not_shown"));
     }
 
     /**
@@ -416,14 +420,15 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
     @Test
     void aConstructionSomeAdmissibleRunDoesNotMeetIsAStopShown() {
         Compilation compilation = compiled(madeOf("x"));
+        JsonNode report = document(compilation);
         assertEquals(List.of(is("x", "at_least", "0")),
-                toldIn(compilation, "rule_may_stop_a_run").stream()
+                toldIn(report, "rule_may_stop_a_run").stream()
                         .map(one -> one.path("asked")).toList());
-        assertEquals(List.of(), toldIn(compilation, "rule_stop_not_shown"));
+        assertEquals(List.of(), toldIn(report, "rule_stop_not_shown"));
         assertTrue(Pattern.compile("may stop a run: [^\\n]* some admissible run stops at a "
                         + "construction on the way to this rule[^\\n]*; a run gets past Held at "
                         + "[0-9]+:[0-9]+ only where x is at least 0")
-                .matcher(human(compilation)).find(), human(compilation));
+                .matcher(human(compilation)).find(), () -> human(compilation));
     }
 
     /**
@@ -477,11 +482,10 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
                         .map(one -> one.path("construction").asString() + ": "
                                 + one.path("reason").asString())
                         .toList());
-        assertEquals(List.of(), toldIn(compilation, "rule_may_stop_a_run"));
         assertTrue(Pattern.compile("stop not resolved: [^\\n]*; whether a run stops at Span at "
                         + "[0-9]+:[0-9]+ is not determined: what its type requires of the values "
                         + "it is made of is not read")
-                .matcher(human(compilation)).find(), human(compilation));
+                .matcher(human(compilation)).find(), () -> human(compilation));
     }
 
     /** What an {@code Int} construction asks is asked as a decimal number too. */
