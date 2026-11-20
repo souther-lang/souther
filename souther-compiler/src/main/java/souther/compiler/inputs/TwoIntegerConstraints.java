@@ -374,7 +374,7 @@ public final class TwoIntegerConstraints<A> {
         ExactRatio.Terms terms = ratio.asTerms();
         BigInteger numerator = terms.comesTo().floor().orNull();
         BigInteger denominator = terms.per().floor().orNull();
-        return numerator == null || denominator == null ? null
+        return (numerator == null || denominator == null) ? null
                 : new BigInteger[] {numerator, denominator};
     }
 }
