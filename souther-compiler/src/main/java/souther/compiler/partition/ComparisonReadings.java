@@ -804,9 +804,15 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 in.conditions().comparison(comparison, reads, in.read()).evaluating();
         Optional<UndividedByARelation.Working> before = Optional.empty();
         if (parts != null) {
-            UndividedByARelation.Working[] worked = {UndividedByARelation.Working.NO_STOPS};
-            parts.forEach(part -> worked[0] = workedOut(part, reads, evaluating, worked[0]));
-            before = Optional.of(worked[0]).filter(ComparisonReadings::toldInFull);
+            // Once a part is not told in full, nothing after it is read.
+            UndividedByARelation.Working worked = UndividedByARelation.Working.NO_STOPS;
+            for (Core part : parts) {
+                worked = workedOut(part, reads, evaluating, worked);
+                if (!toldInFull(worked)) {
+                    break;
+                }
+            }
+            before = Optional.of(worked).filter(ComparisonReadings::toldInFull);
         }
         UndividedByARelation.Working first = firstIn(e, reads, evaluating,
                 UndividedByARelation.Working.NO_STOPS);
@@ -823,7 +829,9 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
     /**
      * What a run works out evaluating {@code part} after {@code earlier}: a node that of itself
      * ends no run is what its parts work out, and any other what {@code evaluating} tells of it —
-     * which reads numbers, and not what is made of them, such as a comparison of two.
+     * which reads numbers, and not what is made of them, such as a comparison of two. The arms of
+     * a choice are parts of it, each counted as worked out, which asks more of the value a stop is
+     * looked for at and never less.
      */
     private static UndividedByARelation.Working workedOut(Core part, InputReads reads,
                                                           Function<Denotation, StopEvidence>

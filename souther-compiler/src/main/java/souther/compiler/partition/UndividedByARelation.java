@@ -8,7 +8,6 @@ import souther.compiler.check.ClauseRead;
 import souther.compiler.check.ContainerSizesUnderAWitness;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.Extreme;
-import souther.compiler.check.FieldDomains;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.PartId;
 import souther.compiler.check.ProjectionEvidence;
@@ -18,7 +17,6 @@ import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.Shape;
-import souther.compiler.check.SumCases;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
 import souther.compiler.check.ValueUniverse;
@@ -3559,7 +3557,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
             @Override
             public boolean leaveAValueOf(TypeSymbol leaf) {
-                return aValueIsShownToExist(Type.ref(leaf), read);
+                return AValueOfTheInput.aValueIsShownToExist(Type.ref(leaf), read);
             }
         };
     }
@@ -13574,7 +13572,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         for (Refinement narrowing : cases.atoms()) {
             if (!(there.admissionOf(narrowing) instanceof Admits.Admitted)
                     || (narrowing instanceof Refinement.SumCase sum
-                            && !aValueIsShownToExist(Type.ref(sum.leaf()), read))) {
+                            && !AValueOfTheInput.aValueIsShownToExist(Type.ref(sum.leaf()),
+                                    read))) {
                 return false;
             }
         }
@@ -13686,7 +13685,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * many such a container may hold. A rule reading the container for how many it holds is a
      * rule on the count, which the region holds. And the rules of the element's own type may
      * leave it no value, so past nought the run is taken only where a value of the element is
-     * shown to exist ({@link #aValueIsShownToExist}). A map's entry is a key as well as a value, and both are
+     * shown to exist ({@link AValueOfTheInput#aValueIsShownToExist}). A map's entry is a key as well as a value, and both are
      * asked each of these. Then a list of so many copies of one such value is a row
      * at every count the region leaves. A set, or the keys of a map, holds a value once, and how
      * many different values the element has is not asked here, so past one nothing is shown of
@@ -13753,7 +13752,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         int most;
         if (!anElementShown && !entry.stream().allMatch(part ->
-                aValueIsShownToExist(read.domain().typeAt(part, rules), read))) {
+                AValueOfTheInput.aValueIsShownToExist(read.domain().typeAt(part, rules),
+                        read))) {
             most = 0;
         } else if (apart.found) {
             most = writtenApart(container, read, wanted);
@@ -14022,39 +14022,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return ends == null || ends.low() == null || ends.high() == null
                 || ends.high().subtract(ends.low()).add(BigInteger.ONE)
                         .compareTo(GetsPast.MOST_ELEMENTS) > 0;
-    }
-
-    /**
-     * Whether some value of {@code type} is shown to exist: one no rule of its own is written on —
-     * a number, a string, a time, a container, which may hold nothing, an option, which may be
-     * none — or a declaration whose rules are shown to leave it one
-     * ({@link FieldDomains#shownToHoldAValue}), the name it is written under and the record it
-     * names alike. A sum, a tuple, or anything else, is not asked and shows nothing.
-     */
-    private static boolean aValueIsShownToExist(Type type, InputReading read) {
-        if (type == null) {
-            return false;
-        }
-        RuleReadingSource rules = read.rules();
-        if (TypeOps.outermost(type, rules.inners()) instanceof TypeOps.Unwrapped worn
-                && worn.layer().named() instanceof TypeSymbol.AtModule name
-                && !FieldDomains.of(name, read.ruleReading()).shownToHoldAValue()) {
-            return false;
-        }
-        return switch (TypeView.shapeOf(type, rules.inners(), rules.symbols(), rules.kinds(),
-                rules.sums())) {
-            case Shape.Scalar _, Shape.Unit _, Shape.Sequence _, Shape.Mapping _,
-                 Shape.Optional _ -> true;
-            case Shape.Product(TypeSymbol.AtModule record, var _) ->
-                    FieldDomains.of(record, read.ruleReading()).shownToHoldAValue();
-            // A sum holds a value where a case of it does and nothing of its own rules the value
-            // out: the case is a value of the sum.
-            case Shape.Sum(var _, SumCases.Cases reaches, var _) ->
-                    reaches.cases().stream().anyMatch(each ->
-                            each instanceof TypeSymbol.AtModule member
-                            && aValueIsShownToExist(Type.ref(member), read));
-            case null, default -> false;
-        };
     }
 
     /**

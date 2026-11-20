@@ -155,6 +155,69 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
                 + " one the domain has"), report);
     }
 
+    /** What is worked out before the comparison on one arm of a choice is asked of the value as
+     *  though every run worked it out: the value keeps it within its ends, and the stop after it
+     *  is shown. */
+    @Test
+    void anOperationOnAnArmBeforeTheComparisonIsAskedAsThoughEveryRunTookIt() {
+        String report = report("""
+                module m
+
+                data P = { x: Int, y: Int }
+
+                behavior f : (p: P) -> Bool
+                let f (p) = {
+                    let z = if p.y > 0 then p.y + 1 else 0
+                    p.x + 1 > 0
+                }
+                """);
+
+        assertTrue(suggested(report).stream().anyMatch(line -> line.startsWith(
+                "· declaring `invariant x <= 9223372036854775806` on P keeps every run from stopping"
+                        + " there; a bound one step further out")), report);
+    }
+
+    /** A number wearing a name holds the numbers its rules leave it, every one a value: the value
+     *  a stop is shown at is one of them, and the bound is as far out as it can be. */
+    @Test
+    void aNumberWearingANameIsShownToStopWithinWhatItsRulesLeaveIt() {
+        String report = report("""
+                module m
+
+                data Amount = Int
+                    invariant value >= 0
+
+                data P = { a: Amount }
+
+                behavior f : (p: P) -> Bool
+                let f (p) = 2 * p.a.value >= 3
+                """);
+
+        assertEquals(List.of("· declaring `invariant value <= 4611686018427387903` on Amount keeps"
+                + " every run from stopping there; a bound one step further out lets in a run that"
+                + " stops there, and the value to declare is the one the domain has"),
+                suggested(report), report);
+    }
+
+    /** What stands beside the place holds whatever value of its type is shown to exist, its rules
+     *  met, and the stop is shown whatever it holds. */
+    @Test
+    void aFieldWhoseRulesAreMetStandsBesideTheStopShown() {
+        String report = report("""
+                module m
+
+                data Name = String
+                    invariant String.length(value) >= 1
+
+                data P = { x: Int, name: Name }
+
+                behavior f : (p: P) -> Bool
+                let f (p) = p.x + 1 > 0
+                """);
+
+        assertTrue(suggested(report).getFirst().contains("one step further out"), report);
+    }
+
     /** Where every value past the bound stops a run in what is worked out before the comparison,
      *  no run gets to the move past its ends: the bound keeps every run from it, and is not said
      *  to be as far out as it can be. */

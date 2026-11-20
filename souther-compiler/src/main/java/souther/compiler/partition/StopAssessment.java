@@ -305,9 +305,14 @@ final class StopAssessment {
                 places.add(position);
             }
         }
-        if (!AValueOfTheInput.holdsAnyWholeNumbersAt(read, places)) {
+        // A value of the input holding them exists where they meet what the input's declarations
+        // ask of the places, which the value looked for is asked to meet with the way.
+        Optional<List<TakenConstraint.Affine>> declared =
+                AValueOfTheInput.whatAValueAtThemMeets(read, places);
+        if (declared.isEmpty()) {
             return new Judgement.Unresolved(operation, WhyAStopIsNotShown.NO_VALUE_SHOWN);
         }
+        way.addAll(declared.get());
         int[] tries = {MOST_VALUES_TRIED};
         Shown shown = aValueItStopsAt(operation, others, way, List.copyOf(numbers), read, tries);
         if (shown != null) {
