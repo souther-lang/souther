@@ -201,7 +201,8 @@ public final class PathReachability {
         Set<ConstructOccurrence> shownWrongBy(Set<SeenConditionOutcome> seen) {
             Set<ConstructOccurrence> out = new LinkedHashSet<>();
             recordedAt.forEach((construct, site) -> {
-                if (arriving.get(construct) instanceof ComparisonArrival.NothingArrives
+                if (arriving.get(construct) instanceof ComparisonArrival arrival
+                        && arrival.nothingGetsPast()
                         && (seen.contains(new SeenConditionOutcome(site, true))
                                 || seen.contains(new SeenConditionOutcome(site, false)))) {
                     out.add(construct);
@@ -1099,7 +1100,7 @@ public final class PathReachability {
                 yield part;
             }
         };
-        return pastOperands(e, operands, at, reads);
+        return pastOperands(e, here.known(), operands, at, reads);
     }
 
     /**
@@ -1138,13 +1139,15 @@ public final class PathReachability {
     /**
      * What a run holds past {@code e}, given what it held once its operands were worked out.
      */
-    private Walked pastOperands(Core e, Walked operands, Denotations at, InputReads reads) {
+    private Walked pastOperands(Core e, Known entered, Walked operands, Denotations at,
+                                InputReads reads) {
         // Every comparison this plan numbers is answered for, and answered under what holds once
-        // its sides have answered: a run that stopped working a side out is no run arriving at it.
+        // its sides have answered: a run that stopped working a side out is no run arriving at
+        // its value. That it got there is said apart from that ({@code entered}).
         if (e instanceof Core.Binary comparison) {
-            outcomesAt(comparison, operands, at, reads);
+            outcomesAt(comparison, entered, operands, at, reads);
         }
-        answeredAt(e, operands.known());
+        answeredAt(e, entered, operands.known());
         mayStopBefore(e, operands);
         if (nothingReaches(operands.known())) {
             // No run worked the operands out, so none makes this evaluation either.
@@ -1365,7 +1368,7 @@ public final class PathReachability {
         if (operands == null) {
             return Exits.of(walk(e, here, at, reads));
         }
-        Walked past = pastOperands(e, operands.completed(), at, reads);
+        Walked past = pastOperands(e, here.known(), operands.completed(), at, reads);
         return past == operands.completed() ? operands : Exits.of(past);
     }
 
@@ -1673,9 +1676,9 @@ public final class PathReachability {
      */
     private void unreached(Core e, Walked here, Denotations at, InputReads reads) {
         if (e instanceof Core.Binary comparison) {
-            outcomesAt(comparison, here, at, reads);
+            outcomesAt(comparison, here.known(), here, at, reads);
         }
-        answeredAt(e, here.known());
+        answeredAt(e, here.known(), here.known());
         Walked below = here;
         ControlPlace.Arm[] arms = plan.armsOf(e);
         Optional<Proof> why = here.whyNothingArrives();
@@ -1705,11 +1708,19 @@ public final class PathReachability {
      * has arguments and no side, and what it states is about a number of what stands there rather
      * than the value itself — which is not what a reader applying a projection asks of it.
      */
-    private void answeredAt(Core node, Known k) {
+    private void answeredAt(Core node, Known entered, Known k) {
         plan.applicationAnsweringAt(node).ifPresent(application -> arriving.put(application,
-                nothingReaches(k)
-                        ? new ComparisonArrival.NothingArrives()
-                        : new ComparisonArrival.NoProjection()));
+                nothingReaches(k) ? noneLeft(entered) : new ComparisonArrival.NoProjection()));
+    }
+
+    /**
+     * What arrives where nothing is left once the sides are worked out, from what held when the
+     * node was entered ({@code entered}): nothing got there, or every run that did stopped in a
+     * side.
+     */
+    private ComparisonArrival noneLeft(Known entered) {
+        return nothingReaches(entered) ? new ComparisonArrival.NothingArrives()
+                : new ComparisonArrival.EveryOneStopsInIt();
     }
 
     /**
@@ -1723,7 +1734,7 @@ public final class PathReachability {
      * <p>Empty is an ordinary answer here: the node is not a comparison, or is one this plan
      * numbered nothing at, and either way there is no place a run through it would be recorded.
      */
-    private void outcomesAt(Core.Binary comparison, Walked here, Denotations at,
+    private void outcomesAt(Core.Binary comparison, Known entered, Walked here, Denotations at,
                             InputReads reads) {
         // What arrives is about the comparison and not about either way out of it, so it is filed
         // under the comparison the plan names and asked of the plan directly.
@@ -1732,7 +1743,7 @@ public final class PathReachability {
             return;
         }
         Known k = here.known();
-        arriving.put(which, arrivalAt(comparison, k, at, reads));
+        arriving.put(which, arrivalAt(comparison, entered, k, at, reads));
         for (boolean result : new boolean[] {true, false}) {
             Optional<ControlPlace.Outcome> where =
                     plan.outcomeOf(which, result);
@@ -1769,10 +1780,11 @@ public final class PathReachability {
      * where its own quantity is that path's value — so a comparison this cannot say that of answers
      * {@code NoProjection}, which restricts nothing.
      */
-    private souther.compiler.reach.ComparisonArrival arrivalAt(Core.Binary comparison, Known k,
+    private souther.compiler.reach.ComparisonArrival arrivalAt(Core.Binary comparison,
+                                                               Known entered, Known k,
                                                                Denotations at, InputReads reads) {
         if (nothingReaches(k)) {
-            return new souther.compiler.reach.ComparisonArrival.NothingArrives();
+            return noneLeft(entered);
         }
         Core side = comparedSideIn(comparison, reads);
         TermPath position = side == null ? null : pathUnder(side, reads);

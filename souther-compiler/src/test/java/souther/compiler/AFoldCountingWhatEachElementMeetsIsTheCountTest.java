@@ -77,7 +77,7 @@ class AFoldCountingWhatEachElementMeetsIsTheCountTest {
         String report = report(
                 "List.fold((n, x) -> if x == 0 then n + 1 else n, 0, xs) >= 3");
 
-        assertFalse(report.contains("not read"), report);
+        assertFalse(NotRead.in(report), report);
         assertTrue(report.contains("#xs [xs[*] == 0]"), report);
     }
 
@@ -97,7 +97,7 @@ class AFoldCountingWhatEachElementMeetsIsTheCountTest {
         String report = report(
                 "List.fold((n, x) -> if x /= 0 then n else n + 1, 0, xs) >= 3");
 
-        assertFalse(report.contains("not read"), report);
+        assertFalse(NotRead.in(report), report);
         assertTrue(report.contains("#xs ["), report);
     }
 

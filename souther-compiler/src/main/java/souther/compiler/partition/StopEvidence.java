@@ -94,32 +94,10 @@ record StopEvidence(UndividedByARelation.Working operations) {
         return operations.exact() && !operations.aStopUntold();
     }
 
-    /**
-     * Whether a run working this out may stop in an operation over a bound value
-     * ({@link UndividedByARelation.Working#aRunMayStopOverABoundValue}). That is said of an
-     * operation told, whether or not every one is: one told is one a run works out. Which rows it
-     * stops is a separate question, and not being able to say that every run on some rows stops
-     * ({@link #everyRunStopsIn}) leaves this standing.
-     */
-    boolean aRunMayStopOverABoundValue() {
-        return operations.aRunMayStopOverABoundValue();
-    }
-
-    /**
-     * Whether a run on a row {@code regions} leave may stop in what it works out here
-     * ({@link UndividedByARelation#aRunMayStopIn}): said where no region of the rows it stops on
-     * can be, as on an arm whose condition is no bound of what it works out. Of the operations
-     * told: a stop left untold is in no region.
-     */
-    boolean aRunMayStopIn(InputReading read, List<SearchRegion> regions) {
-        return UndividedByARelation.aRunMayStopIn(operations, read, regions);
-    }
-
-    /** Whether no operation is told, so that {@link #aRunMayStopIn} is false over every region
-     *  and no region need be worked out to ask it ({@link UndividedByARelation#tellsNoOperation}).
-     *  Nothing is said of whether a run stops: no reading made, one that met something it told
-     *  nothing for, and one that showed no operation stops all tell no operation. Not said where
-     *  a stop is left untold. */
+    /** Whether no operation is told ({@link UndividedByARelation#tellsNoOperation}). Nothing is
+     *  said of whether a run stops: no reading made, one that met something it told nothing for,
+     *  and one that showed no operation stops all tell no operation. Not said where a stop is
+     *  left untold. */
     boolean tellsNoOperation() {
         return !operations.aStopUntold() && UndividedByARelation.tellsNoOperation(operations);
     }

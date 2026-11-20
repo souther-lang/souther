@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.ACompiledModel;
 import souther.compiler.DocumentShape;
+import souther.compiler.NotRead;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
@@ -344,7 +345,7 @@ class AFoldThatFilesByTheCaseOfEachElementIsReadAsTheArmItTakesTest {
                 "Map.empty, List.sortBy(m -> 0, ms))"), ""));
         assertFalse(json(compilation).contains("total_from_the_last_put"),
                 () -> report(compilation));
-        assertTrue(report(compilation).contains("not read"), () -> report(compilation));
+        assertTrue(NotRead.in(report(compilation)), () -> report(compilation));
     }
 
     /** One movement of an offered row: which case it is, its sku and its quantity. */
@@ -471,7 +472,7 @@ class AFoldThatFilesByTheCaseOfEachElementIsReadAsTheArmItTakesTest {
             assertFalse(json(compilation).contains("total(")
                             || json(compilation).contains("multiplicity("),
                     () -> fold + ": " + report(compilation));
-            assertTrue(report(compilation).contains("not read"), () -> fold + ": "
+            assertTrue(NotRead.in(report(compilation)), () -> fold + ": "
                     + report(compilation));
         }
     }

@@ -568,7 +568,7 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
                         + "check/Denotations;L" + c + "inputs/InputReads;)L" + c
                         + "check/PathReachability$Walked;", 1, GOES_ON_INTO_IT);
         row(out, c + "check/PathReachability", "pastOperands",
-                "(" + core + "L" + c + "check/PathReachability$Walked;L" + c
+                "(" + core + "L" + c + "check/Known;L" + c + "check/PathReachability$Walked;L" + c
                         + "check/Denotations;L" + c + "inputs/InputReads;)L" + c
                         + "check/PathReachability$Walked;", 1,
                 "asked of the node PathReachability.walk stands at once its operands are walked,"

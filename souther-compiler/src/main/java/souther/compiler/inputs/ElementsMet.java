@@ -25,6 +25,12 @@ import java.util.Set;
  * element is not known ({@link ElementsNamed#unnamed}): which element that is, is no more said than
  * which of two it is.
  *
+ * <p>A number read at an element through no name at all, as what a lookup answers, is an element no
+ * other read is known to be: it is taken where nothing else of its container has been, and once it
+ * is, nothing else of that container is. Which elements a number is read at is the place its form
+ * holds it at, so this is asked of every element a form holds a number of, and not only of those a
+ * name was read for.
+ *
  * <p>An element is told from another by the container it is held in and the part of the entry it
  * is — the key or the value. The container is the one the element stands in where it stands at a
  * position, which is where what an operation hands on of a container's elements stands, and what a
@@ -57,8 +63,18 @@ public final class ElementsMet {
     }
 
     private final boolean holding;
-    /** For each element of a container, the name that stands for it in this comparison. */
-    private final Map<Slot, BindingId> standingFor = new LinkedHashMap<>();
+    /** For each element of a container, what stands for it in this comparison. */
+    private final Map<Slot, StandsFor> standingFor = new LinkedHashMap<>();
+
+    /** What an element of a container was read through: a name, or none. */
+    private sealed interface StandsFor {
+
+        /** The name, which every other read of the element is through. */
+        record AName(BindingId name) implements StandsFor {}
+
+        /** No name: no other read is known to be of the element. */
+        record NoName() implements StandsFor {}
+    }
     private boolean crowded;
     /** The elements asked of while a reading is being noted ({@link #noting}), shared by every
      *  copy made meanwhile; null when none is. */
@@ -77,11 +93,11 @@ public final class ElementsMet {
 
         private final boolean holding;
         private final Set<Slot> asked;
-        private final Map<Slot, BindingId> began;
-        private final Map<Slot, BindingId> ended;
+        private final Map<Slot, StandsFor> began;
+        private final Map<Slot, StandsFor> ended;
 
-        private Footprint(boolean holding, Set<Slot> asked, Map<Slot, BindingId> began,
-                          Map<Slot, BindingId> ended) {
+        private Footprint(boolean holding, Set<Slot> asked, Map<Slot, StandsFor> began,
+                          Map<Slot, StandsFor> ended) {
             this.holding = holding;
             this.asked = asked;
             this.began = began;
@@ -96,10 +112,10 @@ public final class ElementsMet {
      */
     public static final class Mark {
 
-        private final Map<Slot, BindingId> standingFor;
+        private final Map<Slot, StandsFor> standingFor;
         private final boolean crowded;
 
-        private Mark(Map<Slot, BindingId> standingFor, boolean crowded) {
+        private Mark(Map<Slot, StandsFor> standingFor, boolean crowded) {
             this.standingFor = standingFor;
             this.crowded = crowded;
         }
@@ -174,14 +190,14 @@ public final class ElementsMet {
             if (owner.crowded || began.crowded) {
                 return null;
             }
-            Map<Slot, BindingId> from = new LinkedHashMap<>();
-            Map<Slot, BindingId> to = new LinkedHashMap<>();
+            Map<Slot, StandsFor> from = new LinkedHashMap<>();
+            Map<Slot, StandsFor> to = new LinkedHashMap<>();
             for (Slot each : asked) {
-                BindingId was = began.standingFor.get(each);
+                StandsFor was = began.standingFor.get(each);
                 if (was != null) {
                     from.put(each, was);
                 }
-                BindingId is = owner.standingFor.get(each);
+                StandsFor is = owner.standingFor.get(each);
                 if (is != null) {
                     to.put(each, is);
                 }
@@ -238,34 +254,46 @@ public final class ElementsMet {
     }
 
     /**
-     * Whether the number {@code node} names can be read beside what this comparison has met
-     * ({@link #admits(ElementsNamed)}), by the elements it is read of here.
+     * Whether the number {@code node} names, which its form holds at the elements {@code heldAt},
+     * can be read beside what this comparison has met ({@link #admits(ElementsNamed, Set)}), by
+     * the elements it is read of here.
      */
-    public boolean admits(Core node, InputReads at, DeclarationNewtypes newtypes) {
-        return !holding || admits(at.elementsNamedIn(node, newtypes));
+    public boolean admits(Core node, Set<Slot> heldAt, InputReads at,
+                          DeclarationNewtypes newtypes) {
+        return !holding || admits(at.elementsNamedIn(node, newtypes), heldAt);
     }
 
     /**
-     * Whether a number read of the elements {@code named} can be read beside what this comparison
-     * has met: it can where each element it reads is read through one name, the one that stands
-     * for that element here or the first to, and none through a name whose element is not known.
+     * Whether a number read of the elements {@code named}, and held at the elements
+     * {@code heldAt}, can be read beside what this comparison has met: it can where each element
+     * it reads is read through one name, the one that stands for that element here or the first
+     * to, none through a name whose element is not known, and each it is held at through no name
+     * is one nothing else here was read of.
      */
-    public boolean admits(ElementsNamed named) {
+    public boolean admits(ElementsNamed named, Set<Slot> heldAt) {
         if (!holding) {
             return true;
         }
         if (asked != null) {
             asked.addAll(named.named().keySet());
             asked.addAll(named.unnamed());
+            asked.addAll(heldAt);
         }
         if (named.readsNoOneValue()) {
             crowded = true;
             return false;
         }
         for (Map.Entry<Slot, Set<BindingId>> each : named.named().entrySet()) {
-            BindingId name = each.getValue().iterator().next();
-            BindingId had = standingFor.putIfAbsent(each.getKey(), name);
+            StandsFor name = new StandsFor.AName(each.getValue().iterator().next());
+            StandsFor had = standingFor.putIfAbsent(each.getKey(), name);
             if (had != null && !had.equals(name)) {
+                crowded = true;
+                return false;
+            }
+        }
+        for (Slot each : heldAt) {
+            if (!named.named().containsKey(each)
+                    && standingFor.putIfAbsent(each, new StandsFor.NoName()) != null) {
                 crowded = true;
                 return false;
             }

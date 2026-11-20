@@ -208,9 +208,12 @@ class AComparisonReadPastAStoppingOperationIsReadOverTheInputsThatGetPastItTest 
         return report.contains("not read:");
     }
 
-    /** Whether the report says a run that reaches some comparison may stop in what it works out. */
+    /** Whether the report says of some comparison that a run reaching it stops in what it works
+     *  out, either as a stop shown to exist or as one not resolved. A stop past an operation that
+     *  may end a run before the comparison is one no existence is shown of, and is said as not
+     *  resolved. */
     private static boolean mayStop(String report) {
-        return report.contains("may stop a run:");
+        return report.contains("may stop a run:") || report.contains("stop not resolved:");
     }
 
     /** The rows of the grid a run of {@code behavior} gets to the end of. */

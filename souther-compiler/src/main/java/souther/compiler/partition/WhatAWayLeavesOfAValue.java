@@ -23,7 +23,8 @@ import java.util.Optional;
  * which the region does not take in: a container holding none meets it too, and a region narrowed
  * by it would say no such container is there. Here it narrows only the elements there are, which
  * is what a value read off one comes to. And a container the region leaves holding none holds no
- * element to come to.
+ * element to come to, and what it holds adds up to nought: alike for a number of the input that
+ * stands at an element and for a value a run works out off one.
  *
  * <p>This shows where no run stops, and never that one does: what a value may come to is an upper
  * bound on what a run makes it, so an operation the narrowed numbers take past its type is one a
@@ -66,13 +67,27 @@ final class WhatAWayLeavesOfAValue {
             if (each instanceof UndividedByARelation.IntOperand.OfAValueWorkedOut(var _,
                     WhereAValueComesFrom origin)) {
                 left = leftOf(origin);
+            } else if (each instanceof UndividedByARelation.IntOperand.OfTheInput(
+                    NumericTerm.FromOnePosition total) && FormRange.aTotal(total)
+                    && holdsNoneAt(total.position().element())) {
+                // What a container the way leaves holding none adds up to, whatever it is
+                // made of on the way.
+                left = Optional.of(new FormRange(ExactRatio.ZERO, ExactRatio.ZERO));
+            } else if (each instanceof UndividedByARelation.IntOperand.OfTheInput(NumericTerm term)) {
+                // As a run works it out, before any type holds it: a total is worked out exactly
+                // past the ends of its place, and is not known.
+                FormRange range = FormRange.asWorkedOut(term, read);
+                if (range == null) {
+                    return false;
+                }
+                left = term instanceof NumericTerm.ValueOf(TermPath place)
+                        ? atAPlace(place, range) : narrowed(LinearForm.atom(term), range);
             } else {
                 FormRange range = each.range(read);
                 if (range == null) {
                     return false;
                 }
-                left = each instanceof UndividedByARelation.IntOperand.OfTheInput(NumericTerm term)
-                        ? narrowed(LinearForm.atom(term), range) : Optional.of(range);
+                left = Optional.of(range);
             }
             if (left.isEmpty()) {
                 return true;
@@ -81,6 +96,16 @@ final class WhatAWayLeavesOfAValue {
         }
         FormRange range = FormRange.of(operation.form(), ranges::get);
         return range != null && range.liesWithin(operation.least(), operation.greatest());
+    }
+
+    /**
+     * Whether no row the way leaves takes {@code operation}, one over numbers of the input, past
+     * its ends as forms of those numbers together ({@link UndividedByARelation#noRowTakesItPastItsEnds}):
+     * what the numbers it is over hold one beside another, which {@link #keepsWithinItsType} asks of
+     * each alone.
+     */
+    boolean noRowTakesItPastItsEnds(UndividedByARelation.IntOperation operation) {
+        return UndividedByARelation.noRowTakesItPastItsEnds(operation, read, List.of(region));
     }
 
     /** What {@code origin} comes to along the way; none where no run along it works it out. */
@@ -115,11 +140,7 @@ final class WhatAWayLeavesOfAValue {
         if (holding.isEmpty()) {
             return narrowed(at, range);
         }
-        NumericTerm howMany = InputNumber.howManyStandAt(place, read.domain(), read.rules());
-        if (howMany != null && narrowed(LinearForm.atom(howMany),
-                new FormRange(ExactRatio.ZERO, null)).flatMap(counted ->
-                Optional.ofNullable(counted.greatest()))
-                .filter(most -> most.compareTo(ExactRatio.ONE) < 0).isPresent()) {
+        if (holdsNoneAt(place)) {
             return Optional.empty();
         }
         // Every element meets what the way states of each one, and the elements there are are
@@ -134,6 +155,16 @@ final class WhatAWayLeavesOfAValue {
             }
         }
         return narrowedIn(elements, at, range);
+    }
+
+    /** Whether the way leaves no value standing at {@code place}, a place inside the elements of
+     *  some container: how many stand there is shown below one. */
+    private boolean holdsNoneAt(TermPath place) {
+        NumericTerm howMany = InputNumber.howManyStandAt(place, read.domain(), read.rules());
+        return howMany != null && narrowed(LinearForm.atom(howMany),
+                new FormRange(ExactRatio.ZERO, null)).flatMap(counted ->
+                Optional.ofNullable(counted.greatest()))
+                .filter(most -> most.compareTo(ExactRatio.ONE) < 0).isPresent();
     }
 
     /** {@code range}, what {@code form} was read to come to, as the region of the way leaves it. */

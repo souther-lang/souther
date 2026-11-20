@@ -18,7 +18,7 @@ public final class UnreadBesideItsStops {
     /** Whether {@code report}, a report in English, leaves a comparison unread for anything but
      *  a stop nothing tells. */
     public static boolean in(String report) {
-        return report.lines().anyMatch(line -> line.contains("not read")
+        return report.lines().anyMatch(line -> NotRead.isOne(line)
                 && !line.contains(STOPS_NOT_ALL_TOLD));
     }
 }

@@ -6,6 +6,7 @@ import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -38,14 +39,14 @@ class AReadingThatStopsTellsTheReadingAroundWhatItAskedOfTest {
 
         assertThrows(IllegalStateException.class, () -> {
             try (ElementsMet.Noting _ = met.noting()) {
-                met.admits(through(A));
+                met.admits(through(A), Set.of());
                 throw new IllegalStateException("the reading stopped");
             }
         });
         ElementsMet.Footprint whole = around.ended();
 
         ElementsMet standingForB = new ElementsMet();
-        standingForB.admits(through(B));
+        standingForB.admits(through(B), Set.of());
         assertFalse(standingForB.agrees(whole),
                 "the element the stopped reading asked of is in the footprint of the one around");
     }

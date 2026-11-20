@@ -62,6 +62,7 @@ import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.TraversalDirection;
+import souther.compiler.inputs.WhyAStopIsNotShown;
 import souther.compiler.reading.PathAccess;
 import souther.compiler.reading.WhyNotJoined;
 import souther.compiler.report.AdequacyReport;
@@ -504,6 +505,11 @@ class EverySchemaWordIsAccountedForTest {
     private static final List<Vocabulary> VOCABULARIES = List.of(
             new Vocabulary("adequacy", List.of("properties", "adequacy"),
                     AdequacyReport.AdequacyStatus.class),
+            // Why whether a run stops in an operation of a rule is not resolved.
+            new Vocabulary("findings[].unresolved[].reason",
+                    List.of("$defs", "findings", "items", "properties", "unresolved", "items",
+                            "properties", "reason"),
+                    WhyAStopIsNotShown.class),
             // What a construct's copy was made by, and how a build's region is named: which of the
             // two a step is, which way its region is told, and which of a construct's regions it is.
             new Vocabulary("through[].kind",

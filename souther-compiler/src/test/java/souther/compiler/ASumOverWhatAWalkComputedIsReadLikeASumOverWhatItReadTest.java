@@ -65,7 +65,7 @@ class ASumOverWhatAWalkComputedIsReadLikeASumOverWhatItReadTest {
         read.forEach((spelled, report) -> {
             assertTrue(report.contains("List.sum({2·q + 0 | xs[*]})"),
                     () -> spelled + " is twice the field: " + report);
-            assertFalse(report.contains("not read"), () -> spelled + " is read: " + report);
+            assertFalse(NotRead.in(report), () -> spelled + " is read: " + report);
         });
         assertTrue(thrice.contains("List.sum({3·q + 0 | xs[*]})"), thrice);
         assertFalse(thrice.contains("{2·q"), thrice);
@@ -419,7 +419,7 @@ class ASumOverWhatAWalkComputedIsReadLikeASumOverWhatItReadTest {
         String model = model("a.q * a.p", 3);
         String report = report(model);
         assertTrue(report.contains("List.sum({1·p·q + 0 | xs[*]})"), report);
-        assertFalse(report.contains("not read"), report);
+        assertFalse(NotRead.in(report), report);
         List<Long> totals = totalsOf(rowsOf(model), (q, p) -> q * p);
         assertTrue(totals.contains(3L), () -> "the point on the line: " + totals);
         assertTrue(totals.contains(2L), () -> "the point just off it: " + totals);
@@ -431,7 +431,7 @@ class ASumOverWhatAWalkComputedIsReadLikeASumOverWhatItReadTest {
     @Test
     void aSquareOfAFieldStaysUnread() {
         String report = report(model("a.q * a.q", 3));
-        assertTrue(report.contains("not read"), report);
+        assertTrue(NotRead.in(report), report);
         assertFalse(report.contains("List.sum({"), report);
     }
 
@@ -505,7 +505,7 @@ class ASumOverWhatAWalkComputedIsReadLikeASumOverWhatItReadTest {
     @Test
     void aFormOfSeveralFieldsIsSolvedForWithTheOthersHeldStill() {
         String model = model("a.q + a.p", 3);
-        assertFalse(report(model).contains("not read"), model);
+        assertFalse(NotRead.in(report(model)), model);
         List<Long> totals = totalsOf(rowsOf(model), Long::sum);
         assertTrue(totals.contains(3L), () -> "the point on the line: " + totals);
         assertTrue(totals.contains(2L), () -> "the point just off it: " + totals);

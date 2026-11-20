@@ -57,10 +57,13 @@ class ATotalOverAListTheBodyWritesOutIsReadTest {
      * addition it works out, and is shown to stop where two of the pays together pass the type; a
      * total over a list written out is one operation, and is shown to stop where the whole total
      * passes it, as is a total over what a closure makes of each element of one, once each
-     * application is worked out. What else is read of them is the same.
+     * application is worked out. Whether a run that gets there is shown to exist turns on the form
+     * the operation is read in, so the stop is left out whether it is said as shown or as not
+     * resolved. What else is read of them is the same.
      */
     private static String besideWhereEveryRunStops(String report) {
-        return report.replaceAll("(?m)^.*may stop a run:.*every run stops.*\\R", "");
+        return report.replaceAll("(?m)^.*(may stop a run:.*every run stops|stop not resolved:.*a"
+                + " run that gets there stops).*\\R", "");
     }
 
     /** The report, with where in the guard each comparison is written left out. */
@@ -154,7 +157,7 @@ class ATotalOverAListTheBodyWritesOutIsReadTest {
     @Test
     void aRangeOfMoreThanAreWrittenOutIsNotReadAndEndsAtTheFigure() {
         String report = measured("List.sum(List.map(n -> a.pay, List.rangeInclusive(1, 1025)))");
-        assertTrue(report.contains("not read"), report);
+        assertTrue(NotRead.in(report), report);
         assertNotEquals(measured("a.pay"), report);
     }
 
@@ -207,7 +210,7 @@ class ATotalOverAListTheBodyWritesOutIsReadTest {
     void anElementThatIsNoFormStopsOnlyTheWaysThatKeepIt() {
         String report = measured("List.sum(List.map(m -> m.pay * m.days * m.pay,"
                 + " List.filter(m -> m.days >= 17, [a, b])))");
-        assertTrue(report.contains("not read"), report);
+        assertTrue(NotRead.in(report), report);
         assertFalse(report.contains("states no law"), report);
     }
 

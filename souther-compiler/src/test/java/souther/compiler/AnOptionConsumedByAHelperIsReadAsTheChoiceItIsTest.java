@@ -51,7 +51,7 @@ class AnOptionConsumedByAHelperIsReadAsTheChoiceItIsTest {
                 let f (h) = Option.withDefault(0, h.qty) >= 3
                 """);
 
-        assertFalse(report.contains("not read"), report);
+        assertFalse(NotRead.in(report), report);
         assertEquals("complete", measurement(report), report);
     }
 
@@ -80,7 +80,7 @@ class AnOptionConsumedByAHelperIsReadAsTheChoiceItIsTest {
                 let f (h) = Option.withDefault(5, h.qty) >= 3
                 """);
 
-        assertFalse(report.contains("not read"), report);
+        assertFalse(NotRead.in(report), report);
         assertEquals("complete", measurement(report), report);
     }
 

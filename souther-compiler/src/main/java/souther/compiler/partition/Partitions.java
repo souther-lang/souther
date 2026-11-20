@@ -20,7 +20,7 @@ import souther.compiler.inputs.CasesAtARule;
 import souther.compiler.inputs.Distinctions;
 import souther.compiler.inputs.EmptyInput;
 import souther.compiler.inputs.PositionValuesNotSeparated;
-import souther.compiler.inputs.RuleWhereARunMayStop;
+import souther.compiler.inputs.WhatIsShownOfAStop;
 import souther.compiler.check.PlacesTheRulesRead;
 import souther.compiler.check.Shape;
 import souther.compiler.check.TypeOps;
@@ -170,7 +170,7 @@ public final class Partitions {
                                List<StandingQuestion> unanswered,
                                java.util.Set<NumericTerm> uncertain,
                                List<RuleWithoutALine> rulesWithoutALine,
-                               List<souther.compiler.inputs.RuleWhereARunMayStop> rulesWhereARunMayStop,
+                               List<WhatIsShownOfAStop> stopsShown,
                                List<souther.compiler.inputs.PositionValuesNotSeparated> notSeparated,
                                List<Border> between,
                                java.util.Map<AxisId, List<Border>> along,
@@ -190,7 +190,7 @@ public final class Partitions {
                             List<StandingQuestion> unanswered,
                             Set<NumericTerm> uncertain,
                             List<RuleWithoutALine> rulesWithoutALine,
-                            List<RuleWhereARunMayStop> rulesWhereARunMayStop,
+                            List<WhatIsShownOfAStop> stopsShown,
                             List<PositionValuesNotSeparated> notSeparated,
                             List<Border> between,
                             Map<AxisId, List<Border>> along,
@@ -203,7 +203,7 @@ public final class Partitions {
                             List<DerivedValue.Replaced> replaced,
                             List<CasesAtARule<CaseExpansion.CameTo>> caseExpansions,
                             ReadingsReadOn readOn) {
-            this(measurements, unanswered, uncertain, rulesWithoutALine, rulesWhereARunMayStop,
+            this(measurements, unanswered, uncertain, rulesWithoutALine, stopsShown,
                     notSeparated, between, along, reaching, partitionClosure, borderClosure,
                     inputIsEmpty, operationsStanding, strings, replaced, caseExpansions, readOn,
                     List.of());
@@ -214,7 +214,7 @@ public final class Partitions {
                             List<StandingQuestion> unanswered,
                             Set<NumericTerm> uncertain,
                             List<RuleWithoutALine> rulesWithoutALine,
-                            List<RuleWhereARunMayStop> rulesWhereARunMayStop,
+                            List<WhatIsShownOfAStop> stopsShown,
                             List<PositionValuesNotSeparated> notSeparated,
                             List<Border> between,
                             Map<AxisId, List<Border>> along,
@@ -226,7 +226,7 @@ public final class Partitions {
                             StringsReached strings,
                             List<DerivedValue.Replaced> replaced,
                             List<CasesAtARule<CaseExpansion.CameTo>> caseExpansions) {
-            this(measurements, unanswered, uncertain, rulesWithoutALine, rulesWhereARunMayStop,
+            this(measurements, unanswered, uncertain, rulesWithoutALine, stopsShown,
                     notSeparated, between, along, reaching, partitionClosure, borderClosure,
                     inputIsEmpty, operationsStanding, strings, replaced, caseExpansions,
                     ReadingsReadOn.NONE);
@@ -237,7 +237,7 @@ public final class Partitions {
                             List<StandingQuestion> unanswered,
                             Set<NumericTerm> uncertain,
                             List<RuleWithoutALine> rulesWithoutALine,
-                            List<RuleWhereARunMayStop> rulesWhereARunMayStop,
+                            List<WhatIsShownOfAStop> stopsShown,
                             List<PositionValuesNotSeparated> notSeparated,
                             List<Border> between,
                             Map<AxisId, List<Border>> along,
@@ -248,7 +248,7 @@ public final class Partitions {
                             WhereTheOperationsStand operationsStanding,
                             StringsReached strings,
                             List<DerivedValue.Replaced> replaced) {
-            this(measurements, unanswered, uncertain, rulesWithoutALine, rulesWhereARunMayStop,
+            this(measurements, unanswered, uncertain, rulesWithoutALine, stopsShown,
                     notSeparated, between, along, reaching, partitionClosure, borderClosure,
                     inputIsEmpty, operationsStanding, strings, replaced, List.of(),
                     ReadingsReadOn.NONE);
@@ -263,7 +263,7 @@ public final class Partitions {
             unanswered = List.copyOf(unanswered);
             uncertain = java.util.Set.copyOf(uncertain);
             rulesWithoutALine = List.copyOf(rulesWithoutALine);
-            rulesWhereARunMayStop = List.copyOf(rulesWhereARunMayStop);
+            stopsShown = List.copyOf(stopsShown);
             notSeparated = List.copyOf(notSeparated);
             between = List.copyOf(between);
             java.util.Map<AxisId, List<Border>> lines = new LinkedHashMap<>();

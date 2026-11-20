@@ -4,6 +4,8 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.ACompiledModel;
 import souther.compiler.inputs.RuleWhereARunMayStop;
+import souther.compiler.inputs.RuleWhereAStopIsNotShown;
+import souther.compiler.inputs.WhatIsShownOfAStop;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
@@ -83,26 +85,33 @@ class ALineThroughAnElementIsDrawnWhereTheElementPutsItTest {
     /**
      * Where an element stands is kept below the most a list holds in what an operation over it
      * is shown to come to, along a way stating the list holds something as without one: one
-     * added to it stops no run, and {@code a} added to it may.
+     * added to it stops no run, and {@code a} added to it is not shown to stop none.
      */
     @Test
     void theMostAListHoldsStillKeepsAnOperationOverWhereAnElementStands() {
         String holding = "if List.length(xs) >= 1 then List.mapIndexed((i, _) -> %s, xs) else []";
-        assertEquals(List.of(), mayStop(compiled("a: Int, xs: List<Int>", "List<Bool>",
+        assertEquals(List.of(), stopsShown(compiled("a: Int, xs: List<Int>", "List<Bool>",
                 holding.formatted("i + 1 == a"))));
-        assertEquals(1, mayStop(compiled("a: Int, xs: List<Int>", "List<Bool>",
-                holding.formatted("a + i >= 3"))).size());
+        assertEquals(List.of(RuleWhereAStopIsNotShown.class), stopsShown(compiled(
+                "a: Int, xs: List<Int>", "List<Bool>", holding.formatted("a + i >= 3")))
+                .stream().map(Object::getClass).toList());
     }
 
     private static final String FROM_THREE =
             "List.rangeInclusive(3, days) |> List.filter(n -> a + n >= 10)";
 
-    /** The rules of {@code m} some run reaching them may stop in. */
-    private static List<RuleWhereARunMayStop> mayStop(Compilation compilation) {
+    /** The rules of {@code m} some run reaching them is shown to stop in. */
+    private static List<WhatIsShownOfAStop> mayStop(Compilation compilation) {
+        return stopsShown(compilation).stream()
+                .filter(RuleWhereARunMayStop.class::isInstance).toList();
+    }
+
+    /** What is shown of a run stopping at each rule of {@code m}. */
+    private static List<WhatIsShownOfAStop> stopsShown(Compilation compilation) {
         Partitions.Partitioning divided =
                 compilation.db().ask(new Adequacy.Divided("w1", "m")).value();
         assertNotNull(divided, "m was divided");
-        return divided.rulesWhereARunMayStop();
+        return divided.stopsShown();
     }
 
     /** Where the lines of {@code m} on {@code a} are drawn, in the order they are read. */

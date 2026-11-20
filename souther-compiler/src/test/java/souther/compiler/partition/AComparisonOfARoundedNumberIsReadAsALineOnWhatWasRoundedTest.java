@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ACompiledModel;
+import souther.compiler.NotRead;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
@@ -167,7 +168,7 @@ class AComparisonOfARoundedNumberIsReadAsALineOnWhatWasRoundedTest {
                 }
                 """);
         assertTrue(report.contains("measurement: complete"), report);
-        assertFalse(report.contains("not read"), report);
+        assertFalse(NotRead.in(report), report);
     }
 
     /**

@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ACompiledModel;
+import souther.compiler.NotRead;
 import souther.compiler.UnreadBesideItsStops;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
@@ -254,7 +255,7 @@ class AnAverageOfAmountsBoundedOnePlaceEachIsReadWhereItIsLookedUpTest {
         ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
-                .anyMatch(line -> line.contains("not read")
+                .anyMatch(line -> NotRead.isOne(line)
                         && line.contains(UnreadBesideItsStops.STOPS_NOT_ALL_TOLD));
     }
 
@@ -276,16 +277,19 @@ class AnAverageOfAmountsBoundedOnePlaceEachIsReadWhereItIsLookedUpTest {
     }
 
     /** Control: without a bound on each amount the total of two can pass the greatest
-     *  {@code Int}, and a run stops there; bounded, none does. */
+     *  {@code Int}, and a run getting there stops; bounded, none does. The stop is said with the
+     *  rows it turns on, as one not resolved: the amounts are totalled in what a helper answers
+     *  over values the declarations bound, which no existence of a stopping run is shown over. */
     @Test
-    void theSameAverageOfAmountsWithNoBoundIsToldToStopWhereATotalPassesAnInt() {
+    void theSameAverageOfAmountsWithNoBoundIsSaidToStopWhereATotalPassesAnInt() {
         assertTrue(stopsWhereATotalPassesAnInt(report("", "", AVERAGE_WRITTEN_AT_THE_CALL)));
         assertFalse(stopsWhereATotalPassesAnInt(report(BOUNDS, "", AVERAGE_WRITTEN_AT_THE_CALL)));
     }
 
-    /** Whether {@code report} says a run stops where the total of a month passes an {@code Int}. */
+    /** Whether {@code report} says a run that gets there stops where the total of a month passes
+     *  an {@code Int}. */
     private static boolean stopsWhereATotalPassesAnInt(List<String> report) {
-        return report.stream().anyMatch(line -> line.contains("may stop a run")
+        return report.stream().anyMatch(line -> line.contains("stop not resolved:")
                 && line.contains("w.first.base + w.first.extra is at least 9223372036854775808"));
     }
 }

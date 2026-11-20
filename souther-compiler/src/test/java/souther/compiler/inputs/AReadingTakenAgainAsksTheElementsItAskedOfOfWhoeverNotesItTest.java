@@ -6,6 +6,7 @@ import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -34,7 +35,7 @@ class AReadingTakenAgainAsksTheElementsItAskedOfOfWhoeverNotesItTest {
     private static ElementsMet.Footprint readThrough(BindingId name) {
         ElementsMet met = new ElementsMet();
         ElementsMet.Noting noting = met.noting();
-        met.admits(through(name));
+        met.admits(through(name), Set.of());
         return noting.ended();
     }
 
@@ -52,9 +53,9 @@ class AReadingTakenAgainAsksTheElementsItAskedOfOfWhoeverNotesItTest {
         ElementsMet.Footprint taken = wholeTaking(readThrough(A));
         assertNotNull(taken);
         ElementsMet standingForB = new ElementsMet();
-        standingForB.admits(through(B));
+        standingForB.admits(through(B), Set.of());
         ElementsMet standingForA = new ElementsMet();
-        standingForA.admits(through(A));
+        standingForA.admits(through(A), Set.of());
         ElementsMet nothingMet = new ElementsMet();
         for (ElementsMet where : List.of(standingForA, standingForB, nothingMet)) {
             assertEquals(where.agrees(read), where.agrees(taken),

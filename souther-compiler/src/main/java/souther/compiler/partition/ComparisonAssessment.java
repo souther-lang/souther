@@ -1735,16 +1735,17 @@ sealed interface ComparisonAssessment {
     private static List<Reachability.Reaching> waysArrivedBy(Reachability way,
                                                             List<ComparisonArrival> arrivals) {
         if (!(way instanceof Reachability.Reaching reaching)
-                || arrivals.stream().allMatch(ComparisonArrival.NothingArrives.class::isInstance)) {
+                || arrivals.stream().allMatch(ComparisonArrival::nothingGetsPast)) {
             return List.of();
         }
         return List.of(reaching);
     }
 
     /**
-     * Whether {@code way} is not shown to leave no row at the rule: it is not one the declarations
-     * and the conditions on it rule out, the places it is watched at do not all prove that nothing
-     * arrives, and some region the way leaves is not shown to hold nothing.
+     * Whether {@code way} is not shown to leave no row at a value of the rule: it is not one the
+     * declarations and the conditions on it rule out, the places it is watched at do not all prove
+     * that nothing gets past what it works out ({@link ComparisonArrival#nothingGetsPast}), and
+     * some region the way leaves is not shown to hold nothing. What a line of it is asked of.
      *
      * <p>No proof that a row arrives. The reading of the way is an inclusion, and a way it cannot
      * take in leaves the region as wide as the declarations do, so this is true of a way it could
@@ -1752,6 +1753,18 @@ sealed interface ComparisonAssessment {
      */
     static boolean someRowArrives(Reachability way, List<ComparisonArrival> arrivals) {
         return waysArrivedBy(way, arrivals).stream().anyMatch(Reachability::leavesARow);
+    }
+
+    /**
+     * Whether {@code way} is not shown to leave no row at the rule itself, before what it works
+     * out: as {@link #someRowArrives}, with a place every run at which stops in what the rule
+     * works out ({@link ComparisonArrival#nothingGetsTo}) a place rows get to. What whether a run
+     * stops in it is asked of, which a run that stops there has done without getting past it.
+     */
+    static boolean someRowGetsTo(Reachability way, List<ComparisonArrival> arrivals) {
+        return way instanceof Reachability.Reaching reaching
+                && !arrivals.stream().allMatch(ComparisonArrival::nothingGetsTo)
+                && reaching.leavesARow();
     }
 
     /**
@@ -1830,7 +1843,7 @@ sealed interface ComparisonAssessment {
         boolean reached = false;
         boolean crossed = false;
         for (ComparisonArrival arrival : arrivals) {
-            if (arrival instanceof ComparisonArrival.NothingArrives) {
+            if (arrival.nothingGetsPast()) {
                 continue;
             }
             Cutting.Sides sides = new Cutting.Sides(cutting);
@@ -1859,7 +1872,7 @@ sealed interface ComparisonAssessment {
         }
         List<SearchRegion> past = taken.holdingEveryRow();
         for (ComparisonArrival arrival : arrivals) {
-            if (arrival instanceof ComparisonArrival.NothingArrives) {
+            if (arrival.nothingGetsPast()) {
                 continue;
             }
             Cutting.Sides sides = new Cutting.Sides(cutting);
@@ -1877,7 +1890,8 @@ sealed interface ComparisonAssessment {
                                           ComparisonArrival arrival) {
         return cutting.valuesIn(switch (arrival) {
             case ComparisonArrival.Values arriving -> cutting.narrowedBy(arriving, region);
-            case ComparisonArrival.NoProjection _, ComparisonArrival.NothingArrives _ -> region;
+            case ComparisonArrival.NoProjection _, ComparisonArrival.NothingArrives _,
+                 ComparisonArrival.EveryOneStopsInIt _ -> region;
         });
     }
 

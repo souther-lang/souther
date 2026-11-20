@@ -640,27 +640,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return told == WhatARelationLeavesUndivided.Told.EVERY;
         }
 
-        /**
-         * Whether a run working this out may stop in an operation told over a bound value: one is
-         * told only where no value the number takes is shown to keep it within its type, and a run
-         * stops in it at whichever value takes it past. Which rows hand the number such a value no
-         * form of the input's numbers says, and where every run stops says only where every value
-         * does.
-         */
-        boolean aRunMayStopOverABoundValue() {
-            return operations.stream().anyMatch(each -> !each.stopsOnRowsOfTheInput()
-                    && !each.overAValueWorkedOut());
-        }
-
-        /**
-         * The operations told over a value a run works out
-         * ({@link IntOperand.OfAValueWorkedOut}): what those values may come to shows where no
-         * run stops in them, and never that one does, so each is a stop left untold unless the
-         * way to it keeps it within its type.
-         */
-        List<IntOperation> overValuesWorkedOut() {
-            return operations.stream().filter(IntOperation::overAValueWorkedOut).toList();
-        }
     }
 
     UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
@@ -2840,7 +2819,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 List<Bounded> rows = new ArrayList<>(before);
                 rows.add(past);
                 List<EveryRunStops.Within> where = rowsWhere(rows, read, regions);
-                if (where != null) {
+                if (where != null && !where.isEmpty()) {
                     out.add(new EveryRunStops(written(it.form()), where,
                             it.ofTheRepresentation() ? keepingEveryRunGoing(where, read) : null));
                 }
@@ -2895,44 +2874,27 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * Whether a run on a row {@code regions} leave may stop in an operation {@code working}
-     * tells: one over a bound value no value of it is shown to keep within its type, or one over
-     * the input's numbers past one of its ends on some such row. What a run works out before it
-     * is not asked, since a run stopping there stops all the same; nor whether every operation is
-     * told, since one told is one a run works out. False where the regions leave no row.
+     * Whether no row {@code regions} leave takes {@code it} past either of its ends, where the rows
+     * a run stops at in it can be said as rows of the input ({@link IntOperation#stopsOnRowsOfTheInput}).
+     * The regions hold every row that arrives, so none past an end is none a run stops at. False
+     * where it is no such operation, which is not that some row takes it past.
      */
-    static boolean aRunMayStopIn(Working working, InputReading read, List<SearchRegion> regions) {
-        if (regions.isEmpty()) {
+    static boolean noRowTakesItPastItsEnds(IntOperation it, InputReading read,
+                                           List<SearchRegion> regions) {
+        if (!it.stopsOnRowsOfTheInput()) {
             return false;
         }
-        if (working.aRunMayStopOverABoundValue()) {
-            return true;
-        }
-        for (IntOperation it : working.operations()) {
-            LinearForm<NumericTerm> form = it.overTheInput();
-            if (form != null && (rowsWhere(List.of(new Bounded(form,
-                            it.greatest().add(BigInteger.ONE), null)), read, regions) != null
-                    || rowsWhere(List.of(new Bounded(form, null,
-                            it.least().subtract(BigInteger.ONE))), read, regions) != null)) {
-                return true;
-            }
-        }
-        return false;
+        LinearForm<NumericTerm> form = it.overTheInput();
+        return rowsWhere(List.of(new Bounded(form, it.greatest().add(BigInteger.ONE), null)), read,
+                regions) == null
+                && rowsWhere(List.of(new Bounded(form, null, it.least().subtract(BigInteger.ONE))),
+                        read, regions) == null;
     }
 
-    /** Whether {@code working} tells no operation, so that {@link #aRunMayStopIn} is false of it
-     *  on any region and the regions it is asked over do not need working out. That is no
-     *  claim that a run stops nowhere ({@link Working#NO_STOPS}). */
+    /** Whether {@code working} tells no operation. That is no claim that a run stops nowhere
+     *  ({@link Working#NO_STOPS}). */
     static boolean tellsNoOperation(Working working) {
         return working.operations().isEmpty();
-    }
-
-    /**
-     * Whether a run getting to this relation may stop in an operation the reading told over a
-     * bound value ({@link Working#aRunMayStopOverABoundValue}).
-     */
-    boolean aRunMayStopOverABoundValue() {
-        return working.aRunMayStopOverABoundValue();
     }
 
     /**
@@ -2978,8 +2940,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     /**
      * The rows meeting every one of {@code bounds}, as each form of numbers they hold between two
      * ends: the forms alike but for the constant met into one, a form of one number said as that
-     * number's run within its type, and an end that is the type's own left unsaid. Null where no
-     * row meets them, or no region leaves one that does.
+     * number's run within its type, and an end that is the type's own left unsaid. Where every end
+     * is the type's own, so that the rows are every value the numbers can hold, those ends are
+     * said: rows there are are said. Null where no row meets them, or no region leaves one that
+     * does, and only there.
      */
     private static List<EveryRunStops.Within> rowsWhere(List<Bounded> bounds, InputReading read,
                                                         List<SearchRegion> regions) {
@@ -3017,6 +2981,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         List<EveryRunStops.Within> out = new ArrayList<>();
+        // The same with the type's own ends said, for rows that are every value there is.
+        List<EveryRunStops.Within> everyValue = new ArrayList<>();
         List<Bounded> asked = new ArrayList<>();
         for (Map.Entry<Map<NumericTerm, ExactRatio>, BigInteger[]> each : met.entrySet()) {
             LinearForm<NumericTerm> form = new LinearForm<>(ExactRatio.ZERO, each.getKey());
@@ -3033,14 +2999,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 return null;
             }
             asked.add(new Bounded(form, least, greatest));
+            NumericTerm.FromOnePosition alone = form.coefs().size() == 1
+                    ? (NumericTerm.FromOnePosition) form.coefs().keySet().iterator().next() : null;
             BigInteger shownLeast = least != null && least.equals(typeLeast) ? null : least;
             BigInteger shownGreatest = greatest != null && greatest.equals(typeGreatest) ? null
                     : greatest;
             if (shownLeast != null || shownGreatest != null) {
-                out.add(new EveryRunStops.Within(written(form), shownLeast, shownGreatest,
-                        form.coefs().size() == 1
-                                ? (NumericTerm.FromOnePosition) form.coefs().keySet().iterator()
-                                        .next() : null));
+                out.add(new EveryRunStops.Within(written(form), shownLeast, shownGreatest, alone));
+            }
+            if (least != null || greatest != null) {
+                everyValue.add(new EveryRunStops.Within(written(form), least, greatest, alone));
             }
         }
         // And every number of them within its type, which every row is, for the regions: a
@@ -3050,10 +3018,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             asked.add(new Bounded(alone, typeEndOf(alone, true, read),
                     typeEndOf(alone, false, read)));
         }
+        if (regions.stream().noneMatch(region -> holdsARow(region, asked))) {
+            return null;
+        }
+        List<EveryRunStops.Within> said = out.isEmpty() ? everyValue : out;
         // In the order of what they are written as, which is what a report is compared by.
-        out.sort(Comparator.comparing(EveryRunStops.Within::form));
-        return out.isEmpty() || regions.stream().noneMatch(region -> holdsARow(region, asked))
-                ? null : out;
+        return said.stream().sorted(Comparator.comparing(EveryRunStops.Within::form)).toList();
     }
 
     /** Whether {@code region}, narrowed to {@code bounds}, is not shown to hold no row. A bound

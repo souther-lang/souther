@@ -142,7 +142,7 @@ class AnOperationOnTheWayTyingAStringsLengthToANumberPartsTheStringsAtTheLengths
     void theRowsANumberCannotCarryPastTheAdditionAreReportedAsAStop() {
         String report = human(measured(ROWS.formatted("String.length(own) + r.n > 0")));
 
-        assertTrue(report.contains("every run stops in String.length(rows[*].tag@Some)"
+        assertTrue(report.contains("stops in String.length(rows[*].tag@Some)"
                 + " + rows[*].n where String.length(rows[*].tag@Some) + rows[*].n is at least"
                 + " 9223372036854775808"), report);
     }
@@ -165,7 +165,8 @@ class AnOperationOnTheWayTyingAStringsLengthToANumberPartsTheStringsAtTheLengths
         String report = human(measured(MONTH.formatted(
                 "String.length(a.name) + String.length(b.name)")));
 
-        assertFalse(report.contains("every run stops"), report);
+        assertFalse(report.contains("stops in String.length(a.name) + String.length(b.name)"),
+                report);
     }
 
     /** And a length beside a number that may be the greatest {@code Int} can. */
@@ -173,7 +174,7 @@ class AnOperationOnTheWayTyingAStringsLengthToANumberPartsTheStringsAtTheLengths
     void aSumOfALengthAndANumberThatMayBeTheGreatestIsAStop() {
         String report = human(measured(MONTH.formatted("String.length(a.name) + b.pay")));
 
-        assertTrue(report.contains("every run stops in String.length(a.name) + b.pay where"
+        assertTrue(report.contains("stops in String.length(a.name) + b.pay where"
                 + " String.length(a.name) + b.pay is at least 9223372036854775808"), report);
         assertFalse(report.contains("at most"), report);
     }

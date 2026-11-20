@@ -6,6 +6,7 @@ import org.opentest4j.AssertionFailedError;
 
 import souther.compiler.ACompiledModel;
 import souther.compiler.DocumentShape;
+import souther.compiler.NotRead;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
@@ -284,7 +285,7 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
         Compilation reversed = read(modelOfWhetherItHoldsAnything("List.reverse(xs)"));
         assertEquals(axisOf(plain), axisOf(reversed), () -> report(reversed));
         assertEquals(decisionsOf(plain), decisionsOf(reversed), () -> report(reversed));
-        assertFalse(report(reversed).contains("not read"), () -> report(reversed));
+        assertFalse(NotRead.in(report(reversed)), () -> report(reversed));
     }
 
     /** Each side of a line is read, and neither is read as the other. */
@@ -849,7 +850,7 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
                 new Shape("Set<Label>",
                         "List.flatMap(t -> List.map(l -> l.value, Set.toList(t.labels)), ts)"))) {
             Compilation compilation = measured(modelOfTouches(shape.labels(), shape.keys()));
-            assertFalse(report(compilation).contains("not read"),
+            assertFalse(NotRead.in(report(compilation)),
                     () -> shape + ": " + report(compilation));
             assertTrue(json(compilation).contains("occurrences(ts[*].labels[*])"),
                     () -> shape + ": " + report(compilation));
@@ -1376,7 +1377,7 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
      *  comparison stands, which moves with how the keys are spelled. */
     private static List<String> unreadOf(Compilation compilation) {
         return report(compilation).lines().map(String::strip)
-                .filter(line -> line.contains("not read"))
+                .filter(NotRead::isOne)
                 .map(line -> line.replaceAll("comparison@\\S+ ", "comparison "))
                 .toList();
     }

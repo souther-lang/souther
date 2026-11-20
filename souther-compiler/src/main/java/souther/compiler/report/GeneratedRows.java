@@ -1308,7 +1308,7 @@ public final class GeneratedRows {
                     About.ARowAtAnArmAwaitsItsAnswer _, About.AnUnansweredRow _,
                     About.APositionNoLineDivides _, About.APositionThisCouldNotRead _,
                     About.ARuleWithoutALine _, About.ARuleNothingClassified _,
-                    About.ARuleThatMayStopARun _,
+                    About.ARuleThatMayStopARun _, About.ARuleWhoseStopIsNotShown _,
                     About.AQuestionNothingAnswered _,
                     About.APositionWhoseRulesWereNotReached _,
                     About.APositionReadWiderThanItsRules _ ->
