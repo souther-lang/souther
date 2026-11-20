@@ -1205,7 +1205,13 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              *  closure applied only where there is something to apply it to: a stop told of it
              *  here would be one of runs that never work it out, so nothing of it is told. */
             private void passedOverOnSomeRuns(Denotation skipped) {
-                told.passedOver(reached, skipped);
+                passedOverOnSomeRuns(skipped, reached);
+            }
+
+            /** The same, asked of {@code onTheRuns}, which says what the runs that work
+             *  {@code skipped} out entered on the way to it ({@link WorkedOutToReachIt#onThe}). */
+            private void passedOverOnSomeRuns(Denotation skipped, WorkedOutToReachIt onTheRuns) {
+                told.passedOver(onTheRuns, skipped);
             }
 
             /** Whether what {@code value} works out is told here for where a run stops: it reads
@@ -1239,9 +1245,10 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 List<Core> always = Evaluated.inOrder(here).stream()
                         .filter(step -> step instanceof Evaluated.Step.Always)
                         .map(Evaluated.Step::expression).toList();
-                for (Core each : WorkedOutToReachIt.whatIsRunWith(here)) {
-                    if (always.stream().noneMatch(one -> one == each)) {
-                        passedOverOnSomeRuns(new Denotation(each, at));
+                for (WorkedOutToReachIt.Part each : WorkedOutToReachIt.partsOf(here)) {
+                    if (always.stream().noneMatch(one -> one == each.expression())) {
+                        passedOverOnSomeRuns(new Denotation(each.expression(), at),
+                                reached.onThe(here, each, at));
                     }
                 }
             }
@@ -3172,7 +3179,17 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
     static UndividedByARelation.Working workedOutByEvaluating(Core expression, InputReads at,
                                                               InputReading ofTheInput,
                                                               WhatTheAnalysisAnswersFor answersFor) {
-        if (WorkedOutToReachIt.of(ofTheInput).endsNoRun(new Denotation(expression, at))) {
+        return workedOutByEvaluating(expression, at, ofTheInput, answersFor,
+                WorkedOutToReachIt.of(ofTheInput));
+    }
+
+    /** The same, where {@code reached} says what the runs evaluating {@code expression} entered on
+     *  the way to it ({@link WorkedOutToReachIt#onTheArm}). */
+    static UndividedByARelation.Working workedOutByEvaluating(Core expression, InputReads at,
+                                                              InputReading ofTheInput,
+                                                              WhatTheAnalysisAnswersFor answersFor,
+                                                              WorkedOutToReachIt reached) {
+        if (reached.endsNoRun(new Denotation(expression, at))) {
             return UndividedByARelation.Working.NOTHING;
         }
         return toldEvaluating(expression, at, ofTheInput, answersFor).workedOut().stops()

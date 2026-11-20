@@ -1,0 +1,24 @@
+// A value made on the arm of a choice, handed on to the same helper again, which is what a report
+// saying no run stops where nothing tells of one is written about.
+module conformance.allowances exposing ( Nights, Drawn, draw )
+
+data Nights = Int
+    invariant value >= 0
+data Drawn = { taken: Nights, left: Nights }
+
+// Nights drawn from three allowances in turn, each draw from what the one before it left. What a
+// draw leaves is made on the arm where more was used than the allowance holds, so it is above
+// nought there and the rule holds on every run that makes it.
+behavior draw : (used: Nights, a: Nights, b: Nights, c: Nights) -> Drawn
+    constructs Drawn, Nights
+
+let draw (used, a, b, c) = {
+    let (_, rest) = take(used, a)
+    let (_, more) = take(rest, b)
+    let (taken, left) = take(more, c)
+    Drawn { taken = taken, left = left }
+}
+
+let take (used: Nights, cap: Nights): (Nights, Nights) =
+    if used.value <= cap.value then (used, Nights(0))
+    else (cap, Nights(used.value - cap.value))

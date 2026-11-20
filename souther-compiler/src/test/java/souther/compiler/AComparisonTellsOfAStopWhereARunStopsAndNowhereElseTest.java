@@ -155,14 +155,6 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
                 + "element does not rule the stop out");
         TOLD_THOUGH_NONE_STOPS.put("lengthOfAStepOfNoElements", "the same, for what a step works "
                 + "out at the elements of a list the way leaves none of");
-        TOLD_THOUGH_NONE_STOPS.put("tuplePartBesideAPartMadeWhereItHolds", "a construction is "
-                + "told over the number it is handed, and the condition of the arm it is made in "
-                + "narrows no range of that number, so Yen(q - 5) made only where q > 5 is told "
-                + "as one that may be refused");
-        UNTOLD_THOUGH_NONE_STOPS.put("tuplePartBesideAPartMadeWhereItHolds", "the same, for the "
-                + "part read: what the arm is made of is not shown to end no run, and what an arm "
-                + "works out is told by no reading of the part, which every run would take as "
-                + "its own");
         NOT_TOLD.put("absOfANumber", "a call's own stop, here the least Int having no absolute "
                 + "value, is told by no reading as an operation of the call: only what it is "
                 + "made of is");
@@ -223,10 +215,12 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
         // the same step, where the filter keeps no element the step stops at
         FORMS.put("lengthOfAStepOfAFilterKeepingNoEnd",
                 "List.length(List.map(x -> x + 1, List.filter(y -> y < 0, ds))) >= 2");
-        UNTOLD_THOUGH_NONE_STOPS.put("lengthOfAStepOfAFilterKeepingNoEnd", "a closure's body is "
-                + "worked out only of what it is handed, and what the filter keeps narrows no "
-                + "range of that, so x + 1 is not shown to end no run; told over every element "
-                + "it would be a stop of elements the step never sees");
+        // the same, where the test keeps the elements between two numbers, and where it is
+        // written the other way round
+        FORMS.put("lengthOfAStepOfAFilterKeepingBetween", "List.length(List.map(x -> x + 1, "
+                + "List.filter(y -> y > 0 && y < 100, ds))) >= 2");
+        FORMS.put("lengthOfAStepOfAFilterKeepingNoEndTheOtherWayRound",
+                "List.length(List.map(x -> x + 1, List.filter(y -> 0 > y, ds))) >= 2");
         NOT_TOLD.put("lengthOfAnArmStep", "what an arm works out is worked out only where the "
                 + "arm is taken, which an operation told over the elements cannot say");
         FORMS.put("lengthOfAnArmStep",
