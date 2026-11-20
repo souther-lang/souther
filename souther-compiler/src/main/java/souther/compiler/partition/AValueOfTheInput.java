@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
-import souther.compiler.check.ExpandedClauseResult;
+import souther.compiler.check.DeclarationMeaning;
+import souther.compiler.check.PublishedDeclarationResult;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Shape;
 import souther.compiler.check.TypeView;
@@ -85,12 +86,19 @@ final class AValueOfTheInput {
         };
     }
 
-    /** Whether the declaration {@code name} writes no clause, as the reading of its clauses
-     *  found them. */
+    /** Whether the declaration {@code name} writes no clause and spreads nothing, as it publishes
+     *  what it says: a unit, or a product of its own fields alone. */
     private static boolean writesNoClause(TypeSymbol name, RuleReadingSource rules) {
-        return name instanceof TypeSymbol.AtModule declared
-                && rules.invariants().of(declared.key())
-                        instanceof ExpandedClauseResult.Found(var clauses)
-                && clauses.clauses().isEmpty();
+        if (!(name instanceof TypeSymbol.AtModule declared)
+                || !(rules.published().of(declared.key())
+                        instanceof PublishedDeclarationResult.Found(DeclarationMeaning said))) {
+            return false;
+        }
+        return switch (said) {
+            case DeclarationMeaning.Product product ->
+                    product.clauses().isEmpty() && product.includes().isEmpty();
+            case DeclarationMeaning.Unit _ -> true;
+            case DeclarationMeaning.Sum _ -> false;
+        };
     }
 }
