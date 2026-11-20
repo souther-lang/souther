@@ -1482,6 +1482,12 @@ final class WorkedOutToReachIt {
      * out stands at no place.
      */
     private FormRange numbersOfAPathOfTheElements(Core path, InputReads where, ArmsTaken arms) {
+        Core.Read name = theNameTheAccessesAreReadOff(path);
+        return name == null ? null : numbersOfAWayInTheElements(path, name, where, arms);
+    }
+
+    /** The name a run of accesses is read off, or null where it is read off anything else. */
+    private static Core.Read theNameTheAccessesAreReadOff(Core path) {
         Core root = Core.withoutStanding(path);
         while (true) {
             switch (root) {
@@ -1489,17 +1495,15 @@ final class WorkedOutToReachIt {
                 case Core.FieldProjection projection ->
                         root = Core.withoutStanding(projection.base());
                 default -> {
-                    if (!(root instanceof Core.Read name) || name.binding() == null) {
-                        return null;
-                    }
-                    return numbersOfAWayInTheElements(path, name, where, arms);
+                    return (root instanceof Core.Read name && name.binding() != null) ? name : null;
                 }
             }
         }
     }
 
-    /** A name {@code let} binds to the one name it is given, as a helper's parameter is to what it
-     *  is applied to, is followed to the name that is handed an element. */
+    /** A name {@code let} binds to the one value it is given, as a helper's parameter is to what
+     *  it is applied to, is followed to the name that is handed an element: the value may be that
+     *  name or a way down from it, which the way read here goes through. */
     private FormRange numbersOfAWayInTheElements(Core path, Core.Read name,
                                                  InputReads reading, ArmsTaken arms) {
         DeclarationNewtypes newtypes = read.rules().newtypes();
@@ -1509,12 +1513,12 @@ final class WorkedOutToReachIt {
         Core container = where.containerOfTheElementHandedTo(current.binding());
         while (container == null) {
             List<Denotation> given = boundTo(new Denotation(current, where));
-            if (given.size() != 1
-                    || !(Core.withoutStanding(given.getFirst().value()) instanceof Core.Read next)
-                    || next.binding() == null || held.containsKey(next.binding())) {
+            Core.Read next = given.size() != 1 ? null
+                    : theNameTheAccessesAreReadOff(given.getFirst().value());
+            if (next == null || held.containsKey(current.binding())) {
                 return null;
             }
-            held.put(current.binding(), next);
+            held.put(current.binding(), given.getFirst().value());
             current = next;
             where = given.getFirst().at();
             container = where.containerOfTheElementHandedTo(current.binding());

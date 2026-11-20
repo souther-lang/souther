@@ -229,9 +229,10 @@ class AnAverageOfAmountsBoundedOnePlaceEachIsReadWhereItIsLookedUpTest {
 
             data Yen = Int
                 invariant value >= 0
-            data Pay = { base: Yen, extra: Yen, days: Int }
+            data Pay = { base: Yen, extra: Yen }
                 %s
-            data Window = { first: Pay, second: Pay, third: Pay }
+            data Month = { pay: Pay, days: Int }
+            data Window = { first: Month, second: Month, third: Month }
             data Row = { grade: Int, lowerBound: Yen }
             data Decision = { grade: Int }
             data NoMonth = { n: Int }
@@ -242,12 +243,13 @@ class AnAverageOfAmountsBoundedOnePlaceEachIsReadWhereItIsLookedUpTest {
             let gradeRowFor (m: Yen): Row =
                 List.fold((acc, r) -> if r.lowerBound <= m then r else acc,
                           Row { grade = 0, lowerBound = Yen(0) }, table)
-            let monthsOf (w: Window): List<Pay> = [ w.first, w.second, w.third ]
-            let payableOf (w: Window): List<Pay> =
+            let monthsOf (w: Window): List<Month> = [ w.first, w.second, w.third ]
+            let payableOf (w: Window): List<Month> =
                 List.filter(r -> r.days >= 17, monthsOf(w))
-            let averageOf (records: List<Pay>): Yen =
+            let averageOf (records: List<Month>): Yen =
                 Yen(Rational.toInt(DOWN,
-                    List.sum(List.map(p -> totalOf(p).value, records)) / List.length(records)))
+                    List.sum(List.map(r -> totalOf(r.pay).value, records))
+                        / List.length(records)))
 
             behavior f : (w: Window) -> Decision | NoMonth
                 constructs Decision, Row, Yen, NoMonth
