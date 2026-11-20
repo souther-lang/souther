@@ -127,8 +127,8 @@ final class WhatAWayLeavesOfAValue {
         SearchRegion elements = region;
         for (OnTheWay each : onTheWay) {
             if (each instanceof OnTheWay.TakenIn(var _, RowDemand.ForAll every, var _, var _)
-                    && holding.contains(every.container()) && every.ofEachElement().oneWay()) {
-                for (RowDemand.Relational relation : every.relations()) {
+                    && holding.contains(every.container())) {
+                for (RowDemand.Relational relation : every.heldOfEveryElement()) {
                     elements = relation.constraint().narrowing(elements);
                 }
             }
