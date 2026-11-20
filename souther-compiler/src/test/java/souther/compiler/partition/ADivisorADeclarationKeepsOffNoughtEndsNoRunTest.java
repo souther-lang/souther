@@ -35,7 +35,7 @@ class ADivisorADeclarationKeepsOffNoughtEndsNoRunTest {
             let split (eaches, pack) = {
                 let leftover = %s
                 guard leftover == 0 else Part { left = leftover }
-                Whole { n = 1 }
+                Whole { n = %s }
             }
 
             example split
@@ -50,8 +50,13 @@ class ADivisorADeclarationKeepsOffNoughtEndsNoRunTest {
 
     /** The comparisons the report says nothing is read of, or none. */
     private static List<String> notRead(String invariant, String leftover, String rows) {
+        return notRead(invariant, leftover, "1", rows);
+    }
+
+    private static List<String> notRead(String invariant, String leftover, String whole,
+                                        String rows) {
         Compilation compilation = Compilation.ofSource(
-                SOURCE.formatted(invariant, leftover, rows), "Main");
+                SOURCE.formatted(invariant, leftover, whole, rows), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
@@ -71,6 +76,17 @@ class ADivisorADeclarationKeepsOffNoughtEndsNoRunTest {
                 | "exact" : (Eaches(24), PackSize(-12)) -> Whole { n = 1 }
                 | "short" : (Eaches(25), PackSize(-12)) -> Part { left = -11 }""";
         assertEquals(List.of(), notRead("invariant value <= -1", FLOOR_MOD, rows));
+    }
+
+    /** The quotient is worked out after the comparison, so it is no stop of the rows the guard
+     *  lets through; the remainder before it is what the divisor's declaration decides. */
+    @Test
+    void aRoundedQuotientAfterTheGuardLeavesARemainderByASizeRead() {
+        String quotient = "Rational.toInt(DOWN, eaches.value / pack.value)";
+        String rows = """
+                | "exact" : (Eaches(24), PackSize(12)) -> Whole { n = 2 }""";
+        assertEquals(List.of(), notRead("invariant value >= 1", FLOOR_MOD, quotient, rows));
+        assertFalse(notRead("", FLOOR_MOD, quotient, rows).isEmpty());
     }
 
     @Test
