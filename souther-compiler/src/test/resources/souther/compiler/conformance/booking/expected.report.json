@@ -8986,6 +8986,30 @@
         },
         "reason" : "relation_not_shown_to_reach_every_value"
       }, {
+        "kind" : "rule_stop_not_shown",
+        "disposition" : "reported",
+        "subject" : "comparison@7:23:19",
+        "ruleId" : {
+          "kind" : "comparison",
+          "declaredIn" : "conformance.allowances",
+          "definition" : "take",
+          "behavior" : "draw",
+          "ordinal" : 1,
+          "lowered" : 0
+        },
+        "asks" : [ {
+          "construction" : "Nights",
+          "at" : {
+            "sourceId" : "7",
+            "line" : 24,
+            "column" : 16,
+            "writtenAt" : {
+              "kind" : "here"
+            }
+          },
+          "reason" : "asks_not_read"
+        } ]
+      }, {
         "kind" : "rule_unaccounted",
         "disposition" : "reported",
         "subject" : "comparison@7:23:19 — what this rule states about a",

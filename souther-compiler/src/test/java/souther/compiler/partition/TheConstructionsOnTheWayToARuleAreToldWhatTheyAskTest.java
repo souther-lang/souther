@@ -427,14 +427,61 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
     }
 
     /**
+     * A construction on an arm whose condition holds what it asks stops no run that takes the arm,
+     * and nothing is said of it under a rule after it.
+     */
+    @Test
+    void aConstructionOnAnArmThatHoldsWhatItAsksIsSaidNowhere() {
+        Compilation compilation = compiled(HEAD + """
+                behavior plan : (gross: Decimal, rate: Decimal, limit: Decimal) -> Out
+                    constructs Out, Refund
+
+                let plan (gross, rate, limit) = {
+                    let net = if Decimal.compare(gross, rate) <= 0 then Refund(0.0m)
+                        else Refund(Decimal.subtract(gross, rate))
+                    Out {
+                        refund = net,
+                        fee = Refund(0.0m),
+                        within = Decimal.compare(gross, limit) <= 0
+                    }
+                }
+                """);
+        assertEquals(List.of(), asksOf(compilation));
+    }
+
+    /**
      * A construction after one whose condition is not read is not shown to stop a run, since the
-     * one before may end it first, and is said as not resolved.
+     * one before may end it first, and is said as not resolved for that reason; the one before is
+     * said for its own, and not left out.
      */
     @Test
     void aConstructionAfterOneNotReadIsNotResolved() {
-        Compilation compilation = compiled(UNTYPED);
-        assertEquals(1, toldIn(compilation, "rule_stop_not_shown").size());
+        Compilation compilation = compiled(HEAD + """
+                data Span = { lo: Decimal, hi: Decimal }
+                    invariant lo <= hi
+
+                behavior plan : (gross: Decimal, limit: Decimal) -> Out
+                    constructs Out, Refund, Span
+
+                let plan (gross, limit) = {
+                    let span = Span { lo = gross, hi = limit }
+                    Out {
+                        refund = Refund(gross),
+                        fee = Refund(0.0m),
+                        within = Decimal.compare(span.lo, span.hi) <= 0
+                    }
+                }
+                """);
+        assertEquals(List.of("Span: asks_not_read", "Refund: something_before_it_may_stop"),
+                asksOf(compilation).stream()
+                        .map(one -> one.path("construction").asString() + ": "
+                                + one.path("reason").asString())
+                        .toList());
         assertEquals(List.of(), toldIn(compilation, "rule_may_stop_a_run"));
+        assertTrue(Pattern.compile("stop not resolved: [^\\n]*; whether a run stops at Span at "
+                        + "[0-9]+:[0-9]+ is not determined: what its type requires of the values "
+                        + "it is made of is not read")
+                .matcher(human(compilation)).find(), human(compilation));
     }
 
     /** What an {@code Int} construction asks is asked as a decimal number too. */

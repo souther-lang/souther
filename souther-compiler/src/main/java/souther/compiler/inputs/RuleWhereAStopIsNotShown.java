@@ -20,18 +20,19 @@ import java.util.Set;
  * ({@link RuleWhereARunMayStop}): showing that one operation stops a run says nothing of another.
  *
  * <p>Two things leave it unresolved, and either is enough. An operation the rule works out to be
- * evaluated, of which neither is shown ({@code notShown}, which and why for each); and what a
- * construction a run works out on the way to the rule asks of the run ({@code asks}), where a run
- * that does not meet it stops before it gets to the rule, and no run is shown to be one that does
- * not. Each is said of what it is about and not of the rule as a whole.
+ * evaluated, of which neither is shown ({@code notShown}, which and why for each); and a
+ * construction a run may work out on the way to the rule ({@code asks}), where a run that does not
+ * meet what it asks stops before it gets to the rule, and neither that some run does not nor that
+ * every run does is shown. Each is said of what it is about and not of the rule as a whole.
  *
  * @param rule      which rule
  * @param reachedBy every question a reader was offered for the rule, as for a rule with no line
  * @param readAt    every copy of the model's code the rule was read at here
  * @param notShown  each operation neither is shown of, and why, each once, in the order the rule
  *                  works them out; empty where all of them are shown one way or the other
- * @param asks      what each construction on the way asks of a run, each once and as written;
- *                  empty where none asks anything
+ * @param asks      each construction on the way neither is shown of, with what it asks where
+ *                  that is read and why, each once and as written; empty where all of them are
+ *                  shown one way or the other
  * @param everyRunStops the values at which every run getting to the rule stops, each once, where
  *                  that is known: a proof of where a run stops if one gets there, and not that one
  *                  does, which is what is not resolved here. Never what makes this said: a stop
@@ -39,7 +40,7 @@ import java.util.Set;
  */
 public record RuleWhereAStopIsNotShown(RuleRef rule, Set<RuleReportAnchor> reachedBy,
                                        ModelOccurrences readAt, List<AStopNotShown> notShown,
-                                       List<WhatAConstructionAsks> asks,
+                                       List<AConstructionStopNotShown> asks,
                                        List<EveryRunStops> everyRunStops)
         implements WhatIsShownOfAStop {
 
@@ -60,7 +61,7 @@ public record RuleWhereAStopIsNotShown(RuleRef rule, Set<RuleReportAnchor> reach
     /** One reader's finding about a rule. */
     public static RuleWhereAStopIsNotShown of(RuleCitation cited, ModelOccurrences readAt,
                                               List<AStopNotShown> notShown,
-                                              List<WhatAConstructionAsks> asks,
+                                              List<AConstructionStopNotShown> asks,
                                               List<EveryRunStops> everyRunStops) {
         return new RuleWhereAStopIsNotShown(cited.rule(), RuleCitation.anchorOf(cited), readAt,
                 notShown, asks, everyRunStops);
@@ -84,7 +85,7 @@ public record RuleWhereAStopIsNotShown(RuleRef rule, Set<RuleReportAnchor> reach
         both.addAll(that.reachedBy);
         List<AStopNotShown> open = new ArrayList<>(notShown);
         open.addAll(that.notShown);
-        List<WhatAConstructionAsks> asked = new ArrayList<>(asks);
+        List<AConstructionStopNotShown> asked = new ArrayList<>(asks);
         asked.addAll(that.asks);
         List<EveryRunStops> stops = new ArrayList<>(everyRunStops);
         stops.addAll(that.everyRunStops);

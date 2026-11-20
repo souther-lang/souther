@@ -6,8 +6,10 @@ import souther.compiler.diag.SourceRendering;
 import souther.compiler.inputs.AConstructionStopShown;
 import souther.compiler.inputs.AStopShown;
 import souther.compiler.inputs.RuleWhereARunMayStop;
+import souther.compiler.inputs.RuleWhereAStopIsNotShown;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.WhatIsShownOfAStop;
+import souther.compiler.inputs.WhyAConstructionStopIsNotShown;
 import souther.compiler.partition.Partitions;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -40,9 +42,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * tells is one shown from the model and not one a row came to.
  *
  * <p>What stops a run and is said as not resolved, rather than as a stop, is written down in
- * {@link #NOT_SHOWN}, one form each with why: a stop the compiler learns to show moves the form out
- * of it. What stops a run and is not said at all is in {@link #NOTHING_SAID}, and a form that is
- * not there and says nothing is a stop dropped without a word.
+ * {@link #NOT_SHOWN}, one form each with the reason the report gives: a stop the compiler learns to
+ * show moves the form out of it. A form that stops a run and says nothing of it, not even that it
+ * is not resolved, is a stop dropped without a word, and none is allowed.
  *
  * <p>This holds the report and the program to one another on these inputs, and not on every
  * input: a stop only some other value reaches is not found by it.
@@ -61,11 +63,10 @@ class AConstructionIsToldOfAStopWhereARunStopsThereTest {
 
     private static final Map<String, Form> FORMS = new LinkedHashMap<>();
 
-    /** What a run stops at and is said as not resolved, each with why. */
-    private static final Map<String, String> NOT_SHOWN = new LinkedHashMap<>();
-
-    /** What a run stops at and nothing is said of, each with why. */
-    private static final Map<String, String> NOTHING_SAID = new LinkedHashMap<>();
+    /** What a run stops at and is said as not resolved, each with the reason said of a
+     *  construction on the way. */
+    private static final Map<String, WhyAConstructionStopIsNotShown> NOT_SHOWN =
+            new LinkedHashMap<>();
 
     static {
         // one construction, over an Int and over a Decimal
@@ -84,11 +85,11 @@ class AConstructionIsToldOfAStopWhereARunStopsThereTest {
         FORMS.put("onAnArmOfAnotherNumber", new Form("OneC", "Count",
                 "{ let m = if Decimal.compare(d, 0.0m) < 0 then Count(q) else Count(0) \n "
                         + "OneC { a = m, w = q <= 3 } }"));
-        NOT_SHOWN.put("onAnArmOfAnotherNumber", "it is made on one arm of a choice the way to the "
-                + "rule says nothing of, so no value is shown to get to it");
-        NOTHING_SAID.put("onAnArmOfAnotherNumber", "what a construction on an arm of a value "
-                + "worked out before the rule asks is not among what the constructions on the way "
-                + "ask, so nothing is said of it");
+        FORMS.put("onAnArmSomeOfWhoseRunsItRefuses", new Form("OneC", "Count",
+                "{ let m = if q < 5 then Count(q) else Count(0) \n OneC { a = m, w = q <= 3 } }"));
+        // a construction over a place no rule on the way reads
+        FORMS.put("overAPlaceNoRuleReads", new Form("OneC", "Count",
+                "OneC { a = Count(q), w = Decimal.compare(d, e) <= 0 }"));
         FORMS.put("rightOfAnOr", new Form("OneC", "Count",
                 "{ let ok = q < 0 || Count(q).value >= 3 \n OneC { a = Count(0), w = ok } }"));
         FORMS.put("armNoRunTakes", new Form("OneS", "Small",
@@ -129,15 +130,13 @@ class AConstructionIsToldOfAStopWhereARunStopsThereTest {
         // something before it that may end a run first
         FORMS.put("overflowFirst", new Form("OneC", "Count",
                 "OneC { a = Count(q + 1), w = q <= 3 }"));
-        NOT_SHOWN.put("overflowFirst", "what it is made of may end the run first, an Int worked "
-                + "out past its type, and no stop is shown past it");
-        FORMS.put("aConstructionNotReadFirst", new Form("TwoH", "Held",
+        // what it is made of may end the run first, an Int worked out past its type
+        NOT_SHOWN.put("overflowFirst", WhyAConstructionStopIsNotShown.SOMETHING_BEFORE_IT_MAY_STOP);
+        // the construction before it refuses no run, which is read as asking nothing
+        FORMS.put("aConstructionThatRefusesNoneFirst", new Form("TwoH", "Held",
                 "{ let f = Decimal.multiply(d, e) \n TwoH { a = Held(Decimal.max(0.0m, "
                         + "Decimal.subtract(d, f))), b = Held(Decimal.min(f, d)), "
                         + "w = Decimal.compare(d, 3.0m) <= 0 } }"));
-        NOT_SHOWN.put("aConstructionNotReadFirst", "the construction before it is made of a "
-                + "number whose condition is not read, so whether it ends the run first is not "
-                + "known");
     }
 
     @Test
@@ -188,6 +187,7 @@ class AConstructionIsToldOfAStopWhereARunStopsThereTest {
         TreeSet<String> shownAndItsValueDoesNotStop = new TreeSet<>();
         TreeSet<String> stopsAndNotShown = new TreeSet<>();
         TreeSet<String> stopsAndNothingSaid = new TreeSet<>();
+        TreeSet<String> notSaidWhy = new TreeSet<>();
         for (int at = 0; at < names.size(); at++) {
             Object behavior = Emitted.behavior(loader, "demo", "b" + at)
                     .getConstructor().newInstance();
@@ -219,6 +219,11 @@ class AConstructionIsToldOfAStopWhereARunStopsThereTest {
                     stopsAndNothingSaid.add(names.get(at));
                 }
             }
+            WhyAConstructionStopIsNotShown why = NOT_SHOWN.get(names.get(at));
+            List<WhyAConstructionStopIsNotShown> reasons = reasonsSaid(compilation, "b" + at);
+            if (why != null && !reasons.contains(why)) {
+                notSaidWhy.add(names.get(at) + " said " + reasons);
+            }
         }
         assertAll(
                 () -> assertEquals(new TreeSet<>(), shownAndNoRunStops,
@@ -231,10 +236,26 @@ class AConstructionIsToldOfAStopWhereARunStopsThereTest {
                 () -> assertEquals(new TreeSet<>(NOT_SHOWN.keySet()), stopsAndNotShown,
                         "a run stops and no stop is shown, beside the forms the compiler cannot "
                                 + "yet show"),
-                () -> assertEquals(new TreeSet<>(NOTHING_SAID.keySet()), stopsAndNothingSaid,
+                () -> assertEquals(new TreeSet<>(), stopsAndNothingSaid,
                         "a run stops and the report says nothing of it, not even that it is not "
-                                + "resolved, beside the forms whose construction is read as asking "
-                                + "nothing"));
+                                + "resolved"),
+                () -> assertEquals(new TreeSet<>(), notSaidWhy,
+                        "a stop not resolved is said without the reason written down for it"));
+    }
+
+    /** Why each construction on the way to a rule of {@code behavior} is said as not resolved,
+     *  of every rule the reading says it of. */
+    private static List<WhyAConstructionStopIsNotShown> reasonsSaid(Compilation compilation,
+                                                                     String behavior) {
+        Partitions.Partitioning divided =
+                compilation.db().ask(new Adequacy.Divided("demo", behavior)).value();
+        List<WhyAConstructionStopIsNotShown> out = new ArrayList<>();
+        for (WhatIsShownOfAStop each : divided.stopsShown()) {
+            if (each instanceof RuleWhereAStopIsNotShown open) {
+                open.asks().forEach(one -> out.add(one.why()));
+            }
+        }
+        return out;
     }
 
     private static final int SHOWN = 0;
