@@ -1421,12 +1421,22 @@ public final class GuardThresholds {
         if (each.stopsIn().isEmpty() && each.worksOutOnEach().isEmpty()) {
             boolean arrives = ComparisonAssessment.someRowArrives(toIt, arrivals);
             for (UndividedByARelation relation : arrived.relationsRead()) {
+                if (relation.working().operations().isEmpty()
+                        && !relation.working().aStopUntold()) {
+                    continue;
+                }
                 out.add(new StopAssessment.Place(new ComparisonReadings.Reading.WorkedOutAt(
                         StopEvidence.ofWhatIsToldOf(relation.working()), null, null), arrives,
                         each.assumed()));
             }
         }
         for (ComparisonReadings.Reading.WorkedOutAt worked : each.whatARunWorksOut()) {
+            // A place that tells no operation and no stop left untold has nothing to judge, and
+            // its way is not worked out.
+            if (worked.stops().operations().operations().isEmpty()
+                    && !worked.stops().operations().aStopUntold()) {
+                continue;
+            }
             Proposition reached = reachedWhere(worked);
             boolean arrives = aRowArrivesWhereItIsWorkedOut(each, worked, toIt, arrivals,
                     wayToACase);
