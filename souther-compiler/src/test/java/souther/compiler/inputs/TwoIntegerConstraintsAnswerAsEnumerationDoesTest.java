@@ -72,7 +72,7 @@ class TwoIntegerConstraintsAnswerAsEnumerationDoesTest {
                 assertEquals(counted, held.shadowOn(axis), () -> axis + " of " + system);
                 runs += counted instanceof Shadow.Run ? 1 : 0;
                 nothing += counted instanceof Shadow.Nothing ? 1 : 0;
-                unknown += counted instanceof Shadow.Unknown ? 1 : 0;
+                unknown += counted instanceof Shadow.NotARun ? 1 : 0;
             }
         }
         // The sample holds each kind of answer, so that agreeing is not agreeing on one.
@@ -117,8 +117,61 @@ class TwoIntegerConstraintsAnswerAsEnumerationDoesTest {
         }
         system.add(new Row(1, 0, 0, Rel.GE).asAConstraint());
         system.add(new Row(1, 0, -1_000_000, Rel.LE).asAConstraint());
-        assertEquals(new Shadow.Unknown(),
+        assertEquals(new Shadow.OverTheLimit(),
                 TwoIntegerConstraints.of("x", "y", system).shadowOn("x"));
+    }
+
+    /** Over the limit is not worked out and is said so; one step under it is. */
+    @Test
+    void theLimitOnClassesIsAtFortyNinetySixAndNotBeyond() {
+        // y at least x over 4096, and at most x: 4096 classes, then 4097.
+        assertEquals(false, TwoIntegerConstraints.of("x", "y", List.of(
+                new Row(1, -4096, 0, Rel.LE).asAConstraint(),
+                new Row(-1, 1, 0, Rel.LE).asAConstraint(),
+                new Row(1, 0, 0, Rel.GE).asAConstraint(),
+                new Row(1, 0, -9999, Rel.LE).asAConstraint()))
+                .shadowOn("x") instanceof Shadow.OverTheLimit);
+        assertEquals(new Shadow.OverTheLimit(), TwoIntegerConstraints.of("x", "y", List.of(
+                new Row(1, -4097, 0, Rel.LE).asAConstraint(),
+                new Row(-1, 1, 0, Rel.LE).asAConstraint(),
+                new Row(1, 0, 0, Rel.GE).asAConstraint(),
+                new Row(1, 0, -9999, Rel.LE).asAConstraint())).shadowOn("x"));
+    }
+
+    @Test
+    void theLimitOnConstraintsIsSixtyFourAndNotBeyond() {
+        List<Constraint<String>> constraints = new ArrayList<>();
+        for (int i = 0; i < 64; i++) {
+            constraints.add(new Row(1, 0, -i, Rel.LE).asAConstraint());
+        }
+        assertEquals(true, TwoIntegerConstraints.of("x", "y", constraints) != null);
+        constraints.add(new Row(1, 0, -64, Rel.LE).asAConstraint());
+        assertNull(TwoIntegerConstraints.of("x", "y", constraints));
+    }
+
+    /** No bound on either number, and a bound on one side only. */
+    @Test
+    void aNumberWithNoBoundHasPartnersWithoutAnEnd() {
+        assertEquals(new Shadow.Run(null, null),
+                TwoIntegerConstraints.of("x", "y", List.<Constraint<String>>of()).shadowOn("x"));
+        // y at least x, x at least nought: x from nought up, whatever y is.
+        TwoIntegerConstraints<String> above = TwoIntegerConstraints.of("x", "y", List.of(
+                new Row(-1, 1, 0, Rel.GE).asAConstraint(),
+                new Row(1, 0, 0, Rel.GE).asAConstraint()));
+        assertEquals(new Shadow.Run(BigInteger.ZERO, null), above.shadowOn("x"));
+        assertEquals(new Shadow.Run(BigInteger.ZERO, null), above.shadowOn("y"));
+    }
+
+    /**
+     * A coefficient too fine to hold as a whole numerator over a whole denominator is no
+     * constraint, and is not taken for another: a power of two as far below nought as exponents go.
+     */
+    @Test
+    void aCoefficientTooFineToHoldIsNotTakenForAnother() {
+        ExactRatio tiny = new ExactRatio(BigInteger.ONE, BigInteger.ONE, Long.MIN_VALUE, 0);
+        assertNull(TwoIntegerConstraints.of("x", "y", List.of(new Constraint<>(
+                new LinearForm<>(ExactRatio.ZERO, Map.of("x", ExactRatio.ONE, "y", tiny)),
+                Rel.LE))));
     }
 
     /** What counting the whole numbers of the box says of {@code axis}. */
@@ -141,7 +194,7 @@ class TwoIntegerConstraintsAnswerAsEnumerationDoesTest {
         int greatest = having.getLast();
         return having.size() == greatest - least + 1
                 ? new Shadow.Run(BigInteger.valueOf(least), BigInteger.valueOf(greatest))
-                : new Shadow.Unknown();
+                : new Shadow.NotARun();
     }
 
     /** The box, as four constraints. */

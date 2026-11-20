@@ -67,8 +67,15 @@ public final class TwoIntegerConstraints<A> {
          */
         record Run(BigInteger least, BigInteger greatest) implements Shadow {}
 
-        /** The numbers that have a partner are no run, or more was asked than is worked out. */
-        record Unknown() implements Shadow {}
+        /** Worked out: the numbers that have a partner are some, and no run (the even numbers). */
+        record NotARun() implements Shadow {}
+
+        /**
+         * More was asked than a question is worked out in ({@link #MOST_CLASSES},
+         * {@link #MOST_WORK}), so nothing is said of the numbers that have a partner: they may be
+         * a run, or none.
+         */
+        record OverTheLimit() implements Shadow {}
     }
 
     /** One constraint: {@code form rel 0}. */
@@ -196,13 +203,13 @@ public final class TwoIntegerConstraints<A> {
             }
         }
         if (period.compareTo(BigInteger.valueOf(MOST_CLASSES)) > 0) {
-            return new Shadow.Unknown();
+            return new Shadow.OverTheLimit();
         }
         int classes = period.intValueExact();
         // The work is the pairs of bounds asked at every class, which neither limit above bounds
         // by itself.
         if ((long) classes * (1L * lower.size() * upper.size() + alone.size() + 1) > MOST_WORK) {
-            return new Shadow.Unknown();
+            return new Shadow.OverTheLimit();
         }
         BigInteger[][] slopes = slopesOf(period, lower, upper);
         BigInteger[][] steps = new BigInteger[classes][];
@@ -241,7 +248,7 @@ public final class TwoIntegerConstraints<A> {
         // A run only where every class holds every one of its numbers between the two ends.
         for (int residue = 0; residue < classes; residue++) {
             if (!classFillsTheRun(BigInteger.valueOf(residue), period, steps[residue], from, to)) {
-                return new Shadow.Unknown();
+                return new Shadow.NotARun();
             }
         }
         return new Shadow.Run(from, to);

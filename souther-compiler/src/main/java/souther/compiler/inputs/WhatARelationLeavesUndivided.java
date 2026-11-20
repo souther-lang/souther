@@ -1276,7 +1276,8 @@ public final class WhatARelationLeavesUndivided {
                     new WholeRun(BigInteger.ONE, BigInteger.ZERO);
             case TwoIntegerConstraints.Shadow.Run(BigInteger least, BigInteger greatest) ->
                     new WholeRun(least, greatest);
-            case TwoIntegerConstraints.Shadow.Unknown _ -> null;
+            case TwoIntegerConstraints.Shadow.NotARun _,
+                 TwoIntegerConstraints.Shadow.OverTheLimit _ -> null;
         };
     }
 

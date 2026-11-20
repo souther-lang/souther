@@ -4268,7 +4268,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // the rows of the way: no side runs apart from the other there.
         RowsOfTheWay rowsOfTheWay = !offItsLine && sides.size() == 2
                 && !standApart(0, 1, independent)
-                ? rowsOfTheWay(way, terms, sources, read, roomy) : null;
+                ? rowsOfTheWay(way, terms, sources, read) : null;
         for (int at = 0; rowsOfTheWay != null && at < sides.size(); at++) {
             if (leaves.get(at) != null || out.containsAll(sides.get(at).madeOf())) {
                 continue;
@@ -10998,20 +10998,25 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * <p>Shown where each side is one number, the value at its place, with every value its
      * declarations hold taken ({@code realizes}) and no rule of the declarations relating the
      * two; where the way declined nothing and every statement of it is a form of those two
-     * numbers alone, so that what it states is all it states of them.
+     * numbers alone, so that what it states is all it states of them. Those are the
+     * {@link RowsOfTheWay.Premises} it states, one for each.
      */
     private RowsOfTheWay rowsOfTheWay(StatedWay way,
                                       List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms,
-                                      List<Source> sources, InputReading read,
-                                      Set<Object> ignoring) {
+                                      List<Source> sources, InputReading read) {
         List<NumericTerm> numbers = sides.stream().map(Side::number).toList();
         if (terms.size() != 2 || numbers.contains(null) || numbers.get(0).equals(numbers.get(1))
-                || !way.heldWhole() || !way.declined().map(Set::isEmpty).orElse(false)
-                || terms.stream().anyMatch(each -> each.spacing() != Granularity.DISCRETE
-                        || !each.itsPlace() || !each.holds().equals(each.realizes()))
-                || !apartByTheDeclarations(0, 1, sources, read, ignoring)) {
+                || terms.stream().anyMatch(each -> each.spacing() != Granularity.DISCRETE)) {
             return null;
         }
+        // Every rule of the declarations counts, and none is put aside as a reading of the
+        // comparison's own line puts some: that holds of the rows at the line and says nothing of
+        // the rows at every other value of a side.
+        RowsOfTheWay.Premises premises = new RowsOfTheWay.Premises(
+                terms.stream().allMatch(WhatARelationLeavesUndivided.Term::itsPlace),
+                terms.stream().allMatch(each -> each.holds().equals(each.realizes())),
+                apartByTheDeclarations(0, 1, sources, read),
+                way.heldWhole() && way.declined().map(Set::isEmpty).orElse(false));
         List<TwoIntegerConstraints.Constraint<NumericTerm>> stated = new ArrayList<>();
         for (OnAWay each : way.written()) {
             TakenConstraint.Affine affine = each.affine();
@@ -11022,7 +11027,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             stated.add(new TwoIntegerConstraints.Constraint<>(affine.form(), affine.rel()));
         }
         return RowsOfTheWay.of(numbers, stated,
-                terms.stream().map(WhatARelationLeavesUndivided.Term::holds).toList());
+                terms.stream().map(WhatARelationLeavesUndivided.Term::holds).toList(), premises);
     }
 
     /**

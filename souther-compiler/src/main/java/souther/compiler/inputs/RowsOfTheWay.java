@@ -13,40 +13,75 @@ import java.util.List;
  * and no other.
  *
  * <p>What {@link TwoIntegerConstraints} answers is about points, and points are rows only here. A
- * reader that makes one of these says the constraints are the whole of what the declarations and
- * the way hold of the two numbers: the way states nothing else of them and declined nothing, each
- * number is the value at its place with every value its declarations hold taken, and no rule of
- * the declarations relates the two. Where it cannot say so it makes none, and a claim that some
- * value has a row beside it has nothing to rest on.
+ * function asking which values have a row beside them takes this and cannot be handed constraints
+ * that only bound the rows from outside.
  *
- * <p>Not a proof of anything by being made: it is the reader's statement, kept as a type so that
- * a function asking which values have a row beside them takes this and cannot be handed
- * constraints that only bound the rows from outside.
- *
- * @param numbers     the two numbers, in the order the relation names them
- * @param constraints the constraints over them
+ * <p>Made only by {@link #of}, which asks for the facts the claim rests on as
+ * {@link Premises}, one named fact for each, so that a reader making one has to state every one
+ * and cannot leave one out. It cannot check them: what a reader shows of a way and its
+ * declarations is the reader's to show, and these are the facts it is asked for.
  */
-public record RowsOfTheWay(List<NumericTerm> numbers,
-                           TwoIntegerConstraints<NumericTerm> constraints) {
+public final class RowsOfTheWay {
 
-    public RowsOfTheWay {
-        numbers = List.copyOf(numbers);
-        if (numbers.size() != 2) {
-            throw new IllegalArgumentException("rows over two numbers: " + numbers);
+    /**
+     * What a reader states of the way and the declarations, each a fact it has shown and the
+     * constraints are the rows only if every one holds.
+     *
+     * @param eachNumberIsTheValueAtItsPlace   neither number is taken of something else, a part of
+     *                                         a date or a count, which a rule between them may name
+     *                                         in a way the constraints do not
+     * @param everyValueOfItsDeclaredRunIsTaken each number takes every value its declarations hold,
+     *                                         so that the run given is not wider than the values
+     *                                         there are
+     * @param noRuleOfTheDeclarationsRelatesThem no rule of the declarations relates the two
+     *                                         numbers, none put aside as a reading of one line puts
+     *                                         some: a rule left out is a point the constraints
+     *                                         keep that is no row
+     * @param theWayDeclinedNothing            every condition on the way to the comparison was
+     *                                         read, so that no statement of it is missing here
+     */
+    public record Premises(boolean eachNumberIsTheValueAtItsPlace,
+                           boolean everyValueOfItsDeclaredRunIsTaken,
+                           boolean noRuleOfTheDeclarationsRelatesThem,
+                           boolean theWayDeclinedNothing) {
+
+        boolean allHold() {
+            return eachNumberIsTheValueAtItsPlace && everyValueOfItsDeclaredRunIsTaken
+                    && noRuleOfTheDeclarationsRelatesThem && theWayDeclinedNothing;
         }
+    }
+
+    private final List<NumericTerm> numbers;
+    private final TwoIntegerConstraints<NumericTerm> constraints;
+
+    private RowsOfTheWay(List<NumericTerm> numbers,
+                         TwoIntegerConstraints<NumericTerm> constraints) {
+        this.numbers = List.copyOf(numbers);
+        this.constraints = constraints;
+    }
+
+    /** The two numbers, in the order the relation names them. */
+    public List<NumericTerm> numbers() {
+        return numbers;
+    }
+
+    /** The constraints over them. */
+    public TwoIntegerConstraints<NumericTerm> constraints() {
+        return constraints;
     }
 
     /**
      * The rows that the statements of the way {@code stated} leave the two {@code numbers}, each
-     * held to the run {@code declared} says of it, or null where a statement is not about these
-     * two alone or holds one apart from a value, or an end is not a number.
-     *
-     * <p>Says nothing of whether that is all the way and the declarations hold of them: the caller
-     * who passes the statements has shown it, and that is what making one is.
+     * held to the run {@code declared} says of it, or null where {@code premises} do not all hold,
+     * a statement is not about these two alone or holds one apart from a value, or an end is not a
+     * number.
      */
     public static RowsOfTheWay of(List<NumericTerm> numbers,
                                   List<TwoIntegerConstraints.Constraint<NumericTerm>> stated,
-                                  List<NumericDomain.Bounds> declared) {
+                                  List<NumericDomain.Bounds> declared, Premises premises) {
+        if (numbers.size() != 2 || declared.size() != 2 || !premises.allHold()) {
+            return null;
+        }
         TwoIntegerConstraints<NumericTerm> held =
                 TwoIntegerConstraints.of(numbers.get(0), numbers.get(1), stated);
         for (int at = 0; at < 2 && held != null; at++) {
