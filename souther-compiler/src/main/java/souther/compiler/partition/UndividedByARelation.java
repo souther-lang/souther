@@ -2412,7 +2412,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         List<OnAWay> written = conditionsOf(way, remainder);
         if (leavesNoRow(WhatStatementsOfOneFormDecide.of(
                 written.stream().map(OnAWay::affine).toList(), askedAsAStatement()), written,
-                read)) {
+                datesTheWayStates(written, read), read)) {
             return Optional.empty();
         }
         Optional<Set<String>> declined = parametersDeclined(way);
@@ -3731,18 +3731,34 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * Whether what {@code way} states leaves no row: statements of the form this relation is of
      * that no point of it meets ({@link WhatStatementsOfOneFormDecide.Verdict#noRowArrives}), or
      * of a piece of a string no string the way holds is, or one no string lacking the separator
-     * the way counts is. Of what the way states alone, and of no region.
+     * the way counts is, or of parts of dates no dates hold
+     * ({@link DatesHeldApartAlongAWay#someSetNoDatesHold}). Of what the way states alone, and of
+     * no region.
      */
     private boolean leavesNoRow(StatedWay way, InputReading read) {
-        return leavesNoRow(way.decided(), way.written(), read);
+        return leavesNoRow(way.decided(), way.written(), way.byTheCalendar(), read);
     }
 
     /** The same, of a way stating {@code written}, whose statements of this relation's form come
-     *  to {@code decided}. */
+     *  to {@code decided} and whose dates the calendar answers as {@code byTheCalendar} says. */
     private boolean leavesNoRow(WhatStatementsOfOneFormDecide.Verdict decided,
-                                List<OnAWay> written, InputReading read) {
+                                List<OnAWay> written, DatesHeldApartAlongAWay byTheCalendar,
+                                InputReading read) {
         return decided.noRowArrives() || noStringIsThePieceTheWayHolds(written)
-                || noStringIsWithoutTheSeparatorTheWayCounts(written, read);
+                || noStringIsWithoutTheSeparatorTheWayCounts(written, read)
+                || byTheCalendar.someSetNoDatesHold();
+    }
+
+    /**
+     * What the calendar answers of the dates a way stating {@code written} names: every statement
+     * of it holds at every row along the way, so a set of dates none hold is a way no row comes
+     * along. Of what the way states alone, and of nothing the run narrows, which the relation's
+     * own operators narrow as well.
+     */
+    private static DatesHeldApartAlongAWay datesTheWayStates(List<OnAWay> written,
+                                                             InputReading read) {
+        return DatesHeldApartAlongAWay.of(written, List.of(), List.of(),
+                taken -> daysOfTheDate(taken, read));
     }
 
     /**
@@ -3843,6 +3859,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *
      * @param decided what the statements of the form this relation is of left of it decide, asked
      *                of every one of them before any is taken away for the relation's own reading
+     * @param byTheCalendar what the calendar answers of the dates {@code written} names, asked
+     *                once for the way however often whether it leaves no row is
      */
     private record StatedWay(SearchRegion region, List<OnAWay> written, boolean heldWhole,
                              Optional<Set<String>> declined, DemandReading.Answered past,
@@ -3851,7 +3869,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                              boolean offItsLine, List<RemainderCoverage.Proof> covered,
                              List<OnAWay> unfree, RoomOnTheWay lengthsRoom,
                              Rebuilding rebuilt, WayRead entire,
-                             WhatStatementsOfOneFormDecide.Verdict decided) {}
+                             WhatStatementsOfOneFormDecide.Verdict decided,
+                             DatesHeldApartAlongAWay byTheCalendar) {}
 
     /** The way stating {@code written} over {@code region}, as {@link StatedWay} says. */
     private StatedWay stated(InputReading read, List<Source> sources, List<Carrier> carriers,
@@ -3897,7 +3916,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         WhatStatementsOfOneFormDecide.Verdict decided = WhatStatementsOfOneFormDecide.of(
                 unfree.stream().map(OnAWay::affine).toList(), askedAsAStatement());
         return new StatedWay(region, written, heldWhole, declined, past, applied, asStated,
-                inWholeSteps, offItsLine, covered, unfree, lengthsRoom, rebuilt, entire, decided);
+                inWholeSteps, offItsLine, covered, unfree, lengthsRoom, rebuilt, entire, decided,
+                datesTheWayStates(written, read));
     }
 
     /**

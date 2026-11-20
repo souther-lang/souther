@@ -403,9 +403,9 @@ class AValueTheOtherDatesBoundSettlesIsAClassOfItsOwnTest {
                 classes(compilation).toString());
     }
 
-    /** The comparison of ages read again along a way that also states {@code ofAnotherDate} of a
-     *  date {@code d} nothing ties to the person or the day. */
-    private static String readAgainBeside(String ofAnotherDate) {
+    /** The comparison of ages read again along a way that also states {@code ofOtherDates} of
+     *  dates {@code d} and {@code e} nothing ties to the person or the day. */
+    private static String readAgainBeside(String ofOtherDates) {
         return """
                 module d
 
@@ -416,12 +416,12 @@ class AValueTheOtherDatesBoundSettlesIsAClassOfItsOwnTest {
                     if Date.year(on) - Date.year(p.birthday) >= 60 || p.disabled
                     then 1800 else 1300
 
-                behavior ceiling : (p: P, on: Date, d: Date, r: Int) -> Int
-                let ceiling (p, on, d, r) =
+                behavior ceiling : (p: P, on: Date, d: Date, e: Date, r: Int) -> Int
+                let ceiling (p, on, d, e, r) =
                     if %s then
                         (if r >= old(p, on) then old(p, on) else 3)
                     else 4
-                """.formatted(ofAnotherDate);
+                """.formatted(ofOtherDates);
     }
 
     /**
@@ -439,17 +439,34 @@ class AValueTheOtherDatesBoundSettlesIsAClassOfItsOwnTest {
     }
 
     /**
-     * Statements of another date that no date holds, the thirtieth of February: no row comes
-     * along the way, so the ages are not read off what the region leaves there. Read there,
-     * they would be read of rows there are none of.
+     * Statements of another date that no date holds, the thirtieth of February: the way says no
+     * row comes along it, and the comparison of ages, which is only along it, is read as one no
+     * row arrives at.
      */
     @Test
-    void statementsOfAnotherDateThatNoDateHoldsLeaveTheAgesUnread() {
-        List<String> unread = unread(divided(
-                readAgainBeside("Date.month(d) == 2 && Date.day(d) == 30")));
+    void statementsOfAnotherDateThatNoDateHoldsLeaveNoRowAlongTheWay() {
+        List<String> unread = unreadOfTheComparisonsIn(divided(
+                readAgainBeside("Date.month(d) == 2 && Date.day(d) == 30")), "old");
 
-        assertTrue(unread.containsAll(List.of("Date.year(on)", "Date.year(p.birthday)")),
-                unread.toString());
+        assertEquals(List.of("Date.year(on) NOTHING_ARRIVES_AT_THE_RULES_LINE",
+                "Date.year(p.birthday) NOTHING_ARRIVES_AT_THE_RULES_LINE"), unread);
+    }
+
+    /**
+     * Statements of the years of two other dates that the years 10001 and 10000 hold, which the
+     * search for years does not meet: it looks at some of the years {@code d} may be, and no
+     * multiple of 10001 among them. The calendar finds no dates and does not show that none hold,
+     * so the way is not said to leave no row.
+     */
+    @Test
+    void statementsOfOtherDatesTheSearchGivesUpOnLeaveRowsAlongTheWay() {
+        List<String> unread = unreadOfTheComparisonsIn(divided(readAgainBeside(
+                "Date.year(d) >= 3000 && Date.year(d) <= 100000"
+                        + " && 10001 * Date.year(e) - 10000 * Date.year(d) >= 0"
+                        + " && 10001 * Date.year(e) - 10000 * Date.year(d) <= 0")), "old");
+
+        assertTrue(unread.stream().noneMatch(each ->
+                each.endsWith("NOTHING_ARRIVES_AT_THE_RULES_LINE")), unread.toString());
     }
 
     /**
