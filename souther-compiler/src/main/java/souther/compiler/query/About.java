@@ -2,9 +2,12 @@ package souther.compiler.query;
 
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleCitations;
+import souther.compiler.check.RuleRef;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.RuleWhereARunMayStop;
+import souther.compiler.inputs.RuleWhereAStopIsNotShown;
 import souther.compiler.numeric.Place;
 import souther.compiler.observe.RowRef;
 import souther.compiler.partition.ClassOfAPosition;
@@ -521,14 +524,13 @@ public sealed interface About {
      * in it. A rule every run stops in is not this, and has its own reason beside
      * {@link ARuleWithoutALine}.
      */
-    record ARuleThatMayStopARun(souther.compiler.inputs.RuleWhereARunMayStop finding)
-            implements OfARule {
+    record ARuleThatMayStopARun(RuleWhereARunMayStop finding) implements OfARule {
         public ARuleThatMayStopARun {
-            java.util.Objects.requireNonNull(finding, "a finding is about something");
+            Objects.requireNonNull(finding, "a finding is about something");
         }
 
         @Override
-        public souther.compiler.check.RuleRef rule() {
+        public RuleRef rule() {
             return finding.rule();
         }
 
@@ -542,20 +544,19 @@ public sealed interface About {
      * A rule of the model where whether a run stops on its way through it is not resolved: neither
      * that one does nor that none does is shown, of something it works out or of what a
      * construction on the way to it asks of a run
-     * ({@link souther.compiler.inputs.RuleWhereAStopIsNotShown}).
+     * ({@link RuleWhereAStopIsNotShown}).
      *
      * <p>Not a stop and not that there is none. Said of the rule whatever places it is filed at,
      * and beside a stop shown in the same rule; what it leaves a place's border is said of the
      * place apart, and this is no part of it.
      */
-    record ARuleWhoseStopIsNotShown(souther.compiler.inputs.RuleWhereAStopIsNotShown finding)
-            implements OfARule {
+    record ARuleWhoseStopIsNotShown(RuleWhereAStopIsNotShown finding) implements OfARule {
         public ARuleWhoseStopIsNotShown {
-            java.util.Objects.requireNonNull(finding, "a finding is about something");
+            Objects.requireNonNull(finding, "a finding is about something");
         }
 
         @Override
-        public souther.compiler.check.RuleRef rule() {
+        public RuleRef rule() {
             return finding.rule();
         }
 
