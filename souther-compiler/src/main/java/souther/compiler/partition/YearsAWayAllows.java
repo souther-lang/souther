@@ -118,66 +118,53 @@ final class YearsAWayAllows {
     }
 
     /**
-     * What {@link #holding} comes to: what the caller made of some years; that no years hold the
-     * statements; or neither shown.
-     */
-    sealed interface Holding<T> {
-
-        /** What the caller made of years at which every statement holds. */
-        record Made<T>(T made) implements Holding<T> {}
-
-        /** No years, one for each date, hold every statement, each year one of its date's cycle
-         *  and inside its date's years: every one that could was looked at. */
-        record NoneHold<T>() implements Holding<T> {}
-
-        /** Nothing made, and some years that could hold every statement not looked at, or looked
-         *  at and made nothing of. */
-        record NotShown<T>() implements Holding<T> {}
-    }
-
-    /**
      * What {@code made} makes of the first years it makes anything of, among those, one for each
      * date, at which every statement holds, each year one of a cycle of four hundred
-     * {@code ofTheCycle} sets for its date and inside the years {@code allowed} gives it. What the
-     * year of a moved date is beside the date's own year is the caller's to have put in the
-     * constants: every {@link Year#moved} here is read as moving nothing.
+     * {@code ofTheCycle} sets for its date and inside the years {@code allowed} gives it — or null
+     * where it makes nothing of any. What the year of a moved date is beside the date's own year
+     * is the caller's to have put in the constants: every {@link Year#moved} here is read as moving
+     * nothing.
      *
      * <p>The years of the cycle are where some day gives what the caller asks of the date, which a
      * year only some days of which the date may be need not have among them: so whether the years
      * are taken is what {@code made} makes of them, and the search goes on past those it makes
-     * nothing of.
-     *
-     * <p>Where it makes nothing, no years hold the statements only where the search looked at every
-     * year that could, and made nothing of none that do ({@link Holding.NoneHold}).
+     * nothing of. Every year that could hold the statements not looked at is told to
+     * {@code looked}; why {@code made} makes nothing of one, the caller tells it.
      *
      * @param ofTheCycle for each date, the years of a cycle, by the year modulo four hundred
      * @param allowed    for each date, its first and last year
      * @param made       what the caller makes of the years, or null where it makes nothing
      */
-    static <T> Holding<T> holding(List<Statement> statements, List<BitSet> ofTheCycle,
-                                  List<int[]> allowed, Function<long[], T> made) {
+    static <T> T holding(List<Statement> statements, List<BitSet> ofTheCycle,
+                         List<int[]> allowed, Function<long[], T> made, Looked looked) {
         int dates = ofTheCycle.size();
         if (dates == 0 || dates > MOST_DATES || allowed.size() != dates
                 || !staysInsideTheType(statements)) {
-            return new Holding.NotShown<>();
+            looked.missed();
+            return null;
         }
-        Looked looked = new Looked();
-        T found = years(statements, (date, year) ->
+        return years(statements, (date, year) ->
                 ofTheCycle.get(date).get(Math.floorMod(year, YEARS_OF_A_CYCLE)), allowed, made,
                 looked);
-        if (found != null) {
-            return new Holding.Made<>(found);
-        }
-        return looked.everyYear ? new Holding.NoneHold<>() : new Holding.NotShown<>();
     }
 
     /**
-     * Whether a search has looked at every year that could hold the statements: not once it
-     * passes some on the lattice inside the interval the statements leave, or makes nothing of
-     * years that hold them.
+     * Whether a search looked at everything that could hold what it was asked: told by whatever
+     * passes something by, so that a search that finds nothing says none holds only where nothing
+     * was passed.
      */
-    private static final class Looked {
-        boolean everyYear = true;
+    static final class Looked {
+
+        private boolean everything = true;
+
+        /** Something that could hold it was passed by. */
+        void missed() {
+            everything = false;
+        }
+
+        boolean everything() {
+            return everything;
+        }
     }
 
     /** Whether a year is one a date may be put in, before the statements are asked of it. */
@@ -227,18 +214,10 @@ final class YearsAWayAllows {
                     return null;
                 }
             }
-            T out = made.apply(chosen);
-            if (out == null) {
-                looked.everyYear = false;
-            }
-            return out;
+            return made.apply(chosen);
         }
-        Candidates candidates = yearsToLookAt(statements, weights, constants, chosen, date,
-                allowed.get(date));
-        if (!candidates.every()) {
-            looked.everyYear = false;
-        }
-        for (long year : candidates.years()) {
+        for (long year : yearsToLookAt(statements, weights, constants, chosen, date,
+                allowed.get(date), looked)) {
             if (!taken.at(date, year)) {
                 continue;
             }
@@ -271,13 +250,12 @@ final class YearsAWayAllows {
      * after it is eliminated from the statements as they stand over the whole numbers, each
      * statement written as sums that are not below nought.
      *
-     * <p>Every year that could hold the statements is in the interval and on the lattice, so the
-     * years are every one that could where they are every year of both. A statement of no year
-     * that does not hold leaves no interval.
+     * <p>Every year that could hold the statements is in the interval and on the lattice, and
+     * where the years given are fewer than those, {@code looked} is told.
      */
-    private static Candidates yearsToLookAt(List<Statement> statements, long[][] weights,
+    private static List<Long> yearsToLookAt(List<Statement> statements, long[][] weights,
                                             long[] constants, long[] chosen, int date,
-                                            int[] allowed) {
+                                            int[] allowed, Looked looked) {
         int later = date + 1 < chosen.length ? date + 1 : -1;
         Bounds bounds = new Bounds();
         bounds.low = bounds.low.max(BigInteger.valueOf(allowed[0]));
@@ -298,7 +276,7 @@ final class YearsAWayAllows {
                 lattice = Lattice.of(BigInteger.valueOf(weights[i][date]),
                         BigInteger.valueOf(weights[i][later]), constant);
                 if (lattice == null) {
-                    return Candidates.NONE;
+                    return List.of();
                 }
             }
             for (BigInteger[] sum : notBelowNought(weights[i][date],
@@ -322,7 +300,7 @@ final class YearsAWayAllows {
             }
         }
         if (bounds.low.compareTo(bounds.high) > 0) {
-            return Candidates.NONE;
+            return List.of();
         }
         long from = bounds.low.longValueExact();
         long to = bounds.high.longValueExact();
@@ -343,18 +321,10 @@ final class YearsAWayAllows {
                 }
             }
         }
-        return new Candidates(List.copyOf(out), BigInteger.valueOf(out.size())
-                .equals(lattice.yearsBetween(bounds.low, bounds.high)));
-    }
-
-    /**
-     * The years {@link #yearsToLookAt} gives a date, and whether they stand for every year that
-     * could hold the statements with the years already chosen.
-     */
-    private record Candidates(List<Long> years, boolean every) {
-
-        /** No year could. */
-        static final Candidates NONE = new Candidates(List.of(), true);
+        if (!BigInteger.valueOf(out.size()).equals(lattice.yearsBetween(bounds.low, bounds.high))) {
+            looked.missed();
+        }
+        return List.copyOf(out);
     }
 
     /**

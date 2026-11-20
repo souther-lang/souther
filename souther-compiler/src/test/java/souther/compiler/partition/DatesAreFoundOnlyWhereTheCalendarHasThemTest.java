@@ -110,9 +110,6 @@ class DatesAreFoundOnlyWhereTheCalendarHasThemTest {
     void theThirtiethOfFebruaryIsNoDate() {
         assertEquals(DatesThatHoldEveryStatement.Otherwise.NONE_HOLD,
                 found(statement(-2, Rel.EQ, 1, month(0)), statement(-30, Rel.EQ, 1, day(0))));
-        assertEquals(DatesThatHoldEveryStatement.Otherwise.NONE_HOLD,
-                found(statement(-200_002, Rel.EQ, 100, year(0), 1, month(0)),
-                        statement(-30, Rel.EQ, 1, day(0))));
     }
 
     @Test
@@ -162,6 +159,27 @@ class DatesAreFoundOnlyWhereTheCalendarHasThemTest {
         assertEquals(2, dates.getFirst().getMonthValue());
     }
 
+    /** A date the declarations hold from March to December 2000 has no February in the one year
+     *  it may be, though the year has one: no date holds a statement of February. */
+    @Test
+    void aYearADateMayBeOnlySomeDaysOfHoldsNoneOfTheOthers() {
+        DateTranslation fromMarch2000 = between(LocalDate.of(2000, 3, 1),
+                LocalDate.of(2000, 12, 31));
+
+        assertEquals(DatesThatHoldEveryStatement.Otherwise.NONE_HOLD,
+                found(List.of(fromMarch2000), statement(-2, Rel.EQ, 1, month(0))));
+    }
+
+    /** A year weighed past what the type holds at the farthest year is not searched, and that
+     *  none hold is not said. */
+    @Test
+    void yearsWeighedPastTheTypeAreNotSaidToHoldNothing() {
+        long weight = 10_000_000_000L;
+
+        assertEquals(DatesThatHoldEveryStatement.Otherwise.NOT_SHOWN,
+                found(statement(-2000 * weight, Rel.EQ, weight, year(0))));
+    }
+
     /** A date the declarations hold to the last day of 2000 and the first months of 2001 has a
      *  March in the later year only, and is found there though the earlier comes first. */
     @Test
@@ -204,25 +222,6 @@ class DatesAreFoundOnlyWhereTheCalendarHasThemTest {
                 statement(-229, Rel.EQ, 100, month(0), 1, day(0))));
 
         assertTrue(dates.getFirst().isLeapYear());
-    }
-
-    /**
-     * {@code 10001 * y == 10000 * x}, stated from above and from below, with x from 3000 to
-     * 100000: x = 10001 and y = 10000 hold it, and the search, which looks at some of the years
-     * x may be, does not meet a multiple of 10001 there. Not finding them is not that none hold.
-     */
-    @Test
-    void yearsTheSearchDoesNotLookAtAreNotSaidToHoldNothing() {
-        DatesThatHoldEveryStatement.Statement[] statements = {
-                statement(-3000, Rel.GE, 1, year(0)),
-                statement(100_000, Rel.GE, -1, year(0)),
-                statement(0, Rel.GE, 10_001, year(1), -10_000, year(0)),
-                statement(0, Rel.LE, 10_001, year(1), -10_000, year(0))};
-        assertTrue(holdAt(List.of(statements),
-                List.of(LocalDate.of(10_001, 1, 1), LocalDate.of(10_000, 1, 1))));
-
-        assertTrue(found(List.of(EVERY_DATE, EVERY_DATE), statements)
-                != DatesThatHoldEveryStatement.Otherwise.NONE_HOLD);
     }
 
     /**

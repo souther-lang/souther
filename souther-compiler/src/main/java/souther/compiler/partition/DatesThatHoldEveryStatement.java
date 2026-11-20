@@ -23,11 +23,12 @@ import java.util.Set;
  * and a statement weighing two of them may hold of numbers no date gives — the thirtieth of
  * February — or of some that one date does, February 2000.
  *
- * <p>Where none is found, that none hold is said only where every choice of what the parts come to
- * was looked at, and for each every year that could hold the statements with it
- * ({@link YearsAWayAllows.Holding.NoneHold}). The search looks at a few of the years the
- * statements leave and turns away what is past what it looks through at all, and where it does
- * either nothing is said ({@link Otherwise#NOT_SHOWN}).
+ * <p>Where none is found, that none hold is said only where nothing that could hold the statements
+ * was passed by ({@link YearsAWayAllows.Looked}): no day whose sums are past what a whole number
+ * holds, no year the search does not look at, and no dates made that the statements as written do
+ * not hold. The search looks at a few of the years the statements leave and turns away what is
+ * past what it looks through at all, and where it does either nothing is said
+ * ({@link Otherwise#NOT_SHOWN}).
  *
  * <p>A date's parts are written as its year and, for each part, what that part comes to beside
  * the year. The second comes round with the calendar's cycle of four hundred years, so it is read
@@ -101,9 +102,9 @@ final class DatesThatHoldEveryStatement {
                         : every.definedOnlyWhere(part.moved()));
             }
         }
+        YearsAWayAllows.Looked looked = new YearsAWayAllows.Looked();
         List<int[]> allowed = new ArrayList<>();
         List<Map<List<Long>, Kind>> kinds = new ArrayList<>();
-        boolean everyDay = true;
         long choices = 1;
         for (int date = 0; date < dates; date++) {
             DateTranslation every = wherever.get(date);
@@ -114,19 +115,19 @@ final class DatesThatHoldEveryStatement {
             // is taken only where every move is defined at it, as aDayOf asks.
             allowed.add(new int[] {LocalDate.ofEpochDay(every.first()).getYear(),
                     LocalDate.ofEpochDay(every.last()).getYear()});
-            Kinds ofIt = kindsOf(statements, partsOf.get(date));
-            if (ofIt.bySums().isEmpty()) {
-                return Otherwise.NOT_SHOWN;
-            }
-            everyDay &= ofIt.everyDay();
-            kinds.add(ofIt.bySums());
-            choices *= ofIt.bySums().size();
+            Map<List<Long>, Kind> ofIt = kindsOf(statements, partsOf.get(date), looked);
+            kinds.add(ofIt);
+            choices *= ofIt.size();
             if (choices > MOST_CHOICES) {
                 return Otherwise.NOT_SHOWN;
             }
         }
-        Answer out = choose(statements, partsOf, kinds, allowed, wherever, new ArrayList<>());
-        return (out == Otherwise.NONE_HOLD && !everyDay) ? Otherwise.NOT_SHOWN : out;
+        LocalDate[] found = choose(statements, partsOf, kinds, allowed, wherever, looked,
+                new ArrayList<>());
+        if (found != null) {
+            return new Found(List.of(found));
+        }
+        return looked.everything() ? Otherwise.NONE_HOLD : Otherwise.NOT_SHOWN;
     }
 
     /**
@@ -137,27 +138,21 @@ final class DatesThatHoldEveryStatement {
     private record Kind(BitSet years, Set<List<Integer>> beside) {}
 
     /**
-     * The kinds of a date's days by what the date's parts come to in each statement beside the
-     * weighed year, and whether every day is of one.
-     */
-    private record Kinds(Map<List<Long>, Kind> bySums, boolean everyDay) {}
-
-    /**
      * The kinds of a date's days, by what the date's parts come to in each statement beside the
      * weighed year. Days at which a sum is past what a whole number holds are of no kind: no date
      * found there holds every statement as {@link #everyStatementHoldsAt} asks it, and the other
-     * days are kinds all the same — but then not every day is of one.
+     * days are kinds all the same. Such a day is passed by, and {@code looked} is told.
      */
-    private static Kinds kindsOf(List<Statement> statements, List<Part> parts) {
+    private static Map<List<Long>, Kind> kindsOf(List<Statement> statements, List<Part> parts,
+                                                 YearsAWayAllows.Looked looked) {
         List<PartsOfADateOverACycle.Moved> asked = parts.stream().map(part ->
                 new PartsOfADateOverACycle.Moved(part.which(), part.moved().offsetDays()))
                 .toList();
         Map<List<Long>, Kind> out = new LinkedHashMap<>();
-        boolean everyDay = true;
         for (PartsOfADateOverACycle.Given each : PartsOfADateOverACycle.of(asked)) {
             List<Long> sums = sumsOf(statements, parts, each.values());
             if (sums == null) {
-                everyDay = false;
+                looked.missed();
             } else {
                 Kind kind = out.computeIfAbsent(sums, _ -> new Kind(
                         new BitSet(PartsOfADateOverACycle.YEARS_OF_A_CYCLE),
@@ -166,7 +161,7 @@ final class DatesThatHoldEveryStatement {
                 kind.beside().add(each.values());
             }
         }
-        return new Kinds(out, everyDay);
+        return out;
     }
 
     /** What {@code parts} coming to {@code values} come to in each statement, or null where a
@@ -193,25 +188,25 @@ final class DatesThatHoldEveryStatement {
 
     /**
      * Dates for the kinds still to be chosen after {@code chosen}, taken in turn: at each choice
-     * of a kind for every date, the years are chosen and the dates are made in them and checked.
-     * None hold where none do at any choice.
+     * of a kind for every date, the years are chosen and the dates are made in them and checked —
+     * or null. What is passed by on the way is told to {@code looked}.
      */
-    private static Answer choose(List<Statement> statements, List<List<Part>> partsOf,
-                                 List<Map<List<Long>, Kind>> kinds, List<int[]> allowed,
-                                 List<DateTranslation> wherever,
-                                 List<Map.Entry<List<Long>, Kind>> chosen) {
+    private static LocalDate[] choose(List<Statement> statements, List<List<Part>> partsOf,
+                                      List<Map<List<Long>, Kind>> kinds, List<int[]> allowed,
+                                      List<DateTranslation> wherever,
+                                      YearsAWayAllows.Looked looked,
+                                      List<Map.Entry<List<Long>, Kind>> chosen) {
         if (chosen.size() < kinds.size()) {
-            boolean shown = true;
             for (Map.Entry<List<Long>, Kind> kind : kinds.get(chosen.size()).entrySet()) {
                 chosen.add(kind);
-                Answer found = choose(statements, partsOf, kinds, allowed, wherever, chosen);
+                LocalDate[] found = choose(statements, partsOf, kinds, allowed, wherever, looked,
+                        chosen);
                 chosen.removeLast();
-                if (found instanceof Found) {
+                if (found != null) {
                     return found;
                 }
-                shown &= found == Otherwise.NONE_HOLD;
             }
-            return shown ? Otherwise.NONE_HOLD : Otherwise.NOT_SHOWN;
+            return null;
         }
         List<YearsAWayAllows.Statement> ofTheYears = new ArrayList<>();
         for (int at = 0; at < statements.size(); at++) {
@@ -222,7 +217,8 @@ final class DatesThatHoldEveryStatement {
                 try {
                     constant = Math.addExact(constant, chosen.get(date).getKey().get(at));
                 } catch (ArithmeticException _) {
-                    return Otherwise.NOT_SHOWN;
+                    looked.missed();
+                    return null;
                 }
                 long weight = 0;
                 for (Map.Entry<Part, Long> part : statement.parts().entrySet()) {
@@ -231,7 +227,8 @@ final class DatesThatHoldEveryStatement {
                         try {
                             weight = Math.addExact(weight, part.getValue());
                         } catch (ArithmeticException _) {
-                            return Otherwise.NOT_SHOWN;
+                            looked.missed();
+                            return null;
                         }
                     }
                 }
@@ -246,29 +243,28 @@ final class DatesThatHoldEveryStatement {
         List<BitSet> ofTheCycle = chosen.stream().map(kind -> kind.getValue().years()).toList();
         // A year the date may be only some days of may have none giving the kind, so the years
         // are taken only where the dates are made in them and hold every statement as written.
+        // A year with no day of the kind holds no date of it. Dates made that the statements as
+        // written do not hold are of the kind, whose sums hold them, so another day of it may:
+        // that day is passed by.
         List<Map<Long, Optional<LocalDate>>> dayIn = new ArrayList<>();
         chosen.forEach(_ -> dayIn.add(new HashMap<>()));
-        YearsAWayAllows.Holding<LocalDate[]> held = YearsAWayAllows.holding(ofTheYears,
-                ofTheCycle, allowed, years -> {
-                    LocalDate[] dates = new LocalDate[years.length];
-                    for (int date = 0; date < dates.length; date++) {
-                        int of = date;
-                        dates[date] = dayIn.get(date).computeIfAbsent(years[date], year ->
-                                Optional.ofNullable(aDayOf(partsOf.get(of),
-                                        chosen.get(of).getValue(), year, wherever.get(of))))
-                                .orElse(null);
-                        if (dates[date] == null) {
-                            return null;
-                        }
-                    }
-                    return everyStatementHoldsAt(statements, dates) ? dates : null;
-                });
-        return switch (held) {
-            case YearsAWayAllows.Holding.Made<LocalDate[]>(LocalDate[] dates) ->
-                    new Found(List.of(dates));
-            case YearsAWayAllows.Holding.NoneHold<LocalDate[]> _ -> Otherwise.NONE_HOLD;
-            case YearsAWayAllows.Holding.NotShown<LocalDate[]> _ -> Otherwise.NOT_SHOWN;
-        };
+        return YearsAWayAllows.holding(ofTheYears, ofTheCycle, allowed, years -> {
+            LocalDate[] dates = new LocalDate[years.length];
+            for (int date = 0; date < dates.length; date++) {
+                int of = date;
+                dates[date] = dayIn.get(date).computeIfAbsent(years[date], year ->
+                        Optional.ofNullable(aDayOf(partsOf.get(of), chosen.get(of).getValue(),
+                                year, wherever.get(of)))).orElse(null);
+                if (dates[date] == null) {
+                    return null;
+                }
+            }
+            if (everyStatementHoldsAt(statements, dates)) {
+                return dates;
+            }
+            looked.missed();
+            return null;
+        }, looked);
     }
 
     /** A day of {@code year} every move is defined at whose parts come to one of {@code kind}'s

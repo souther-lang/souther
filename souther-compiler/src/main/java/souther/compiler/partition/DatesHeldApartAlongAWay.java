@@ -29,11 +29,11 @@ import java.util.function.Function;
  * as fewer places than it turns on.
  *
  * <p>A set is held where every statement and narrowing reading a place of it is a form of parts
- * of dates outside every container that the declarations leave every date, or every date between
- * its ends, and some dates hold them all ({@link DatesThatHoldEveryStatement}). Anything else read
- * there is not asked of the calendar, and the set is neither held nor said to be held by no dates.
- * A part of a date inside a container may be of another element in each statement, so the
- * statements are not of one date there.
+ * of dates the declarations leave every date, or every date between its ends, and some dates hold
+ * them all ({@link DatesThatHoldEveryStatement}). The statements are asked as statements of one
+ * date each, which a part of a date inside a container is not
+ * ({@link WhatStatementsOfOneFormDecide#outsideEveryContainer}). Anything else read there is not
+ * asked of the calendar, and the set is neither held nor said to be held by no dates.
  */
 final class DatesHeldApartAlongAWay {
 
@@ -183,9 +183,9 @@ final class DatesHeldApartAlongAWay {
     }
 
     /**
-     * What the calendar answers of {@code statements}: not shown where a term of one is anything
-     * but a part of a date outside every container the declarations leave every date, or every
-     * date between its ends, or a weight or a constant is not a whole number.
+     * What the calendar answers of {@code statements}: not shown where one reads inside a
+     * container, a term of one is anything but a part of a date the declarations leave every
+     * date, or every date between its ends, or a weight or a constant is not a whole number.
      */
     private DatesThatHoldEveryStatement.Answer someDatesHoldAll(
             List<TakenConstraint.Affine> statements) {
@@ -195,13 +195,15 @@ final class DatesHeldApartAlongAWay {
         List<DateTranslation> days = new ArrayList<>();
         List<DatesThatHoldEveryStatement.Statement> asked = new ArrayList<>();
         for (TakenConstraint.Affine each : statements) {
+            if (!WhatStatementsOfOneFormDecide.outsideEveryContainer(each)) {
+                return notShown;
+            }
             // Two terms may be one part of one date, and their weights are that part's together.
             Map<DatesThatHoldEveryStatement.Part, BigInteger> weighed = new LinkedHashMap<>();
             for (Map.Entry<NumericTerm, ExactRatio> term : each.form().coefs().entrySet()) {
                 if (!(term.getKey() instanceof NumericTerm.TakenOf taken)
                         || !(taken.takenAs() instanceof TakenAs.PartOfDate(
-                                TakenAs.DatePart part))
-                        || taken.position().insideAContainer()) {
+                                TakenAs.DatePart part))) {
                     return notShown;
                 }
                 Integer date = dates.get(taken.position());
