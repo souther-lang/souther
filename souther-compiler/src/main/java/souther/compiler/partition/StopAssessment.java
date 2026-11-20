@@ -42,8 +42,9 @@ final class StopAssessment {
     private StopAssessment() {}
 
     /** How many values of the input are put to the proof of one operation before it is left
-     *  unresolved. */
-    static final int MOST_VALUES_TRIED = 512;
+     *  unresolved: as many as a search for an assignment on the way tries of one position. */
+    private static final int MOST_VALUES_TRIED =
+            CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT.maximum();
 
     /** Why no run stops in an operation, where that is shown. */
     enum WhyNone {
