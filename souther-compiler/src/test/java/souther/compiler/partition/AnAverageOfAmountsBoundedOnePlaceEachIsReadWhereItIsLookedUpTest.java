@@ -230,7 +230,7 @@ class AnAverageOfAmountsBoundedOnePlaceEachIsReadWhereItIsLookedUpTest {
             data Yen = Int
                 invariant value >= 0
             data Pay = { base: Yen, extra: Yen }
-                %s
+                %1$s
             data Month = { pay: Pay, days: Int }
             data Window = { first: Month, second: Month, third: Month }
             data Row = { grade: Int, lowerBound: Yen }
@@ -245,10 +245,10 @@ class AnAverageOfAmountsBoundedOnePlaceEachIsReadWhereItIsLookedUpTest {
                           Row { grade = 0, lowerBound = Yen(0) }, table)
             let monthsOf (w: Window): List<Month> = [ w.first, w.second, w.third ]
             let payableOf (w: Window): List<Month> =
-                List.filter(r -> r.days >= 17, monthsOf(w))
+                List.filter(r -> %2$s, monthsOf(w))
             let averageOf (records: List<Month>): Yen =
                 Yen(Rational.toInt(DOWN,
-                    List.sum(List.map(r -> totalOf(r.pay).value, records))
+                    List.sum(List.map(r -> %3$s, records))
                         / List.length(records)))
 
             behavior f : (w: Window) -> Decision | NoMonth
@@ -263,13 +263,24 @@ class AnAverageOfAmountsBoundedOnePlaceEachIsReadWhereItIsLookedUpTest {
     /** Whether the report says a run may end where nothing says so, of a model whose months are the
      *  ones a filter kept of three, averaged after a guard that one was kept. */
     private static boolean someStopIsLeftUntold(String bounds) {
+        return someStopIsLeftUntold(bounds, "r.days >= 17");
+    }
+
+    /** The same, of the months a filter kept by {@code test}, which is written of {@code r}. */
+    private static boolean someStopIsLeftUntold(String bounds, String test) {
+        return someStopIsLeftUntold(bounds, test, "totalOf(r.pay).value");
+    }
+
+    /** The same, of a month that comes to {@code month}, which is written of {@code r}. */
+    private static boolean someStopIsLeftUntold(String bounds, String test, String month) {
         Compilation compilation = Compilation.ofSource(
-                THE_MONTHS_ARE_FILTERED_AFTER_A_GUARD.formatted(bounds), "Main");
+                THE_MONTHS_ARE_FILTERED_AFTER_A_GUARD.formatted(bounds, test, month), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
-                .anyMatch(line -> line.contains("may end the run where nothing here says"));
+                .anyMatch(line -> line.contains("may end the run where nothing here says")
+                        || line.contains("may stop a run"));
     }
 
     /**
@@ -287,6 +298,34 @@ class AnAverageOfAmountsBoundedOnePlaceEachIsReadWhereItIsLookedUpTest {
     @Test
     void theSameAverageWithNoBoundLeavesAStopUntold() {
         assertTrue(someStopIsLeftUntold(""));
+    }
+
+    /**
+     * What decides which months are kept is worked out for each of the three, and is a stop of its
+     * own: that the months it keeps total within an {@code Int} says nothing of whether it
+     * answers.
+     */
+    @Test
+    void aTestThatMayEndARunStillLeavesAStopUntoldWhereTheMonthsAreBounded() {
+        assertTrue(someStopIsLeftUntold("""
+                invariant base.value <= 1000000000000
+                    invariant extra.value <= 1000000000000""",
+                "r.pay.base.value + 9223372036854775807 > 0"));
+    }
+
+    /**
+     * Three months of amounts up to a quintillion total within an {@code Int}, which twice as many
+     * elements as an {@code Int} counts would not: it holds only where the most months there are
+     * is three, however the list reached the total.
+     */
+    @Test
+    void theMostMonthsThereAreIsThreeWhateverFilterKeptThem() {
+        String bounds = """
+                invariant base.value <= 1000000000000000000
+                    invariant extra.value <= 1000000000000000000""";
+        assertFalse(someStopIsLeftUntold(bounds));
+        assertFalse(someStopIsLeftUntold(bounds, "r.days >= 17",
+                "r.pay.base.value + r.pay.extra.value"));
     }
 
     /** Control: the same months with no bound on each amount can pass an {@code Int} in the total

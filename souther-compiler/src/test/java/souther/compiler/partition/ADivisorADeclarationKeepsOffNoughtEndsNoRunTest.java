@@ -12,11 +12,13 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A remainder ends a run only on a divisor of nought. Where the declarations hold
  * the divisor to numbers that leave nought out, whether the range is above it or below it, the
- * operation ends none and nothing is said unread; where they leave nought in, it may, and says so.
+ * operation ends none: the model is measured complete and nothing is said unread. Where they leave
+ * nought in, it may, and the comparison it is worked out for is not read for that.
  */
 class ADivisorADeclarationKeepsOffNoughtEndsNoRunTest {
 
@@ -33,7 +35,7 @@ class ADivisorADeclarationKeepsOffNoughtEndsNoRunTest {
             behavior split : (eaches: Eaches, pack: PackSize) -> Whole | Part
 
             let split (eaches, pack) = {
-                let leftover = %s
+                let leftover = Int.floorMod(eaches.value, pack.value)
                 guard leftover == 0 else Part { left = leftover }
                 Whole { n = %s }
             }
@@ -42,32 +44,53 @@ class ADivisorADeclarationKeepsOffNoughtEndsNoRunTest {
             %s
             """;
 
-    private static final String FLOOR_MOD = "Int.floorMod(eaches.value, pack.value)";
+    private static final String QUOTIENT = "Rational.toInt(DOWN, eaches.value / pack.value)";
 
     private static final String ROWS_BY_TWELVE = """
                 | "exact" : (Eaches(24), PackSize(12)) -> Whole { n = 1 }
                 | "short" : (Eaches(25), PackSize(12)) -> Part { left = 1 }""";
 
-    /** The comparisons the report says nothing is read of, or none. */
-    private static List<String> notRead(String invariant, String leftover, String rows) {
-        return notRead(invariant, leftover, "1", rows);
-    }
-
-    private static List<String> notRead(String invariant, String leftover, String whole,
-                                        String rows) {
+    /** The report of the model, line by line. */
+    private static List<String> report(String invariant, String whole, String rows) {
         Compilation compilation = Compilation.ofSource(
-                SOURCE.formatted(invariant, leftover, whole, rows), "Main");
+                SOURCE.formatted(invariant, whole, rows), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
-                .filter(line -> line.contains("not read:"))
                 .toList();
+    }
+
+    private static boolean measuredComplete(List<String> report) {
+        return report.stream().anyMatch(line -> line.contains("m1")
+                && line.contains("measurement: complete"));
+    }
+
+    private static List<String> notRead(List<String> report) {
+        return report.stream().filter(line -> line.contains("not read:")).toList();
+    }
+
+    /** What is left unread because a run working the comparison out may end where nothing here
+     *  says. */
+    private static List<String> notReadForAStop(List<String> report) {
+        return notRead(report).stream()
+                .filter(line -> line.contains("may end the run where nothing here says"))
+                .toList();
+    }
+
+    private static void assertRead(List<String> report) {
+        assertEquals(List.of(), notRead(report));
+        assertTrue(measuredComplete(report), "the model is measured complete");
+    }
+
+    private static void assertNotReadForAStop(List<String> report) {
+        assertFalse(notReadForAStop(report).isEmpty(), "a stop is what leaves it unread");
+        assertFalse(measuredComplete(report), "the model is not measured complete");
     }
 
     @Test
     void aRemainderByASizeOfAtLeastOneIsRead() {
-        assertEquals(List.of(), notRead("invariant value >= 1", FLOOR_MOD, ROWS_BY_TWELVE));
+        assertRead(report("invariant value >= 1", "1", ROWS_BY_TWELVE));
     }
 
     @Test
@@ -75,29 +98,28 @@ class ADivisorADeclarationKeepsOffNoughtEndsNoRunTest {
         String rows = """
                 | "exact" : (Eaches(24), PackSize(-12)) -> Whole { n = 1 }
                 | "short" : (Eaches(25), PackSize(-12)) -> Part { left = -11 }""";
-        assertEquals(List.of(), notRead("invariant value <= -1", FLOOR_MOD, rows));
+        assertRead(report("invariant value <= -1", "1", rows));
     }
 
     /** The quotient is worked out after the comparison, so it is no stop of the rows the guard
      *  lets through; the remainder before it is what the divisor's declaration decides. */
     @Test
     void aRoundedQuotientAfterTheGuardLeavesARemainderByASizeRead() {
-        String quotient = "Rational.toInt(DOWN, eaches.value / pack.value)";
         String rows = """
                 | "exact" : (Eaches(24), PackSize(12)) -> Whole { n = 2 }""";
-        assertEquals(List.of(), notRead("invariant value >= 1", FLOOR_MOD, quotient, rows));
-        assertFalse(notRead("", FLOOR_MOD, quotient, rows).isEmpty());
+        assertRead(report("invariant value >= 1", QUOTIENT, rows));
+        assertNotReadForAStop(report("", QUOTIENT, rows));
     }
 
     @Test
     void aRemainderByAnIntThatMayBeNoughtIsNotRead() {
-        assertFalse(notRead("", FLOOR_MOD, ROWS_BY_TWELVE).isEmpty());
+        assertNotReadForAStop(report("", "1", ROWS_BY_TWELVE));
     }
 
     @Test
     void aRemainderByASizeThatReachesNoughtIsNotRead() {
         String rows = """
                 | "exact" : (Eaches(24), PackSize(1)) -> Whole { n = 1 }""";
-        assertFalse(notRead("invariant value >= -1 && value <= 1", FLOOR_MOD, rows).isEmpty());
+        assertNotReadForAStop(report("invariant value >= -1 && value <= 1", "1", rows));
     }
 }

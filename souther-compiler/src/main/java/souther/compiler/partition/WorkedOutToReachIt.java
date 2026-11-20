@@ -54,7 +54,6 @@ import souther.compiler.types.ValueName;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
@@ -1270,27 +1269,9 @@ final class WorkedOutToReachIt {
                 .map(Core.FieldValue::value).findFirst().orElse(null);
     }
 
-    /** Every element of {@code list} where it is a list written out, each as written — through a
-     *  value it refers to, run as the value is defined, or the one value a name was given — or
-     *  null where it is none. */
+    /** Every element of {@code list} where it is a list written out, each as written, or null
+     *  where it is none ({@link WrittenOutElements#of}). */
     private List<Denotation> elementsWrittenOut(Denotation list) {
-        Core written = Core.withoutStanding(list.value());
-        if (written instanceof Core.MaterialisedValue) {
-            Denotation defined = list.at().taken(written);
-            return defined == null ? null : elementsWrittenOut(defined);
-        }
-        if (written instanceof Core.Read && boundTo(list) instanceof List<Denotation> given
-                && given.size() == 1) {
-            return elementsWrittenOut(given.getFirst());
-        }
-        if (written instanceof Core.LetIn let) {
-            return elementsWrittenOut(new Denotation(let.body(),
-                    list.at().and(let.binder(), let.value())));
-        }
-        if (written instanceof Core.ListLit literal) {
-            return literal.elements().stream().map(each -> new Denotation(each, list.at()))
-                    .toList();
-        }
         return WrittenOutElements.of(list, read.rules().symbols(), read.rules().newtypes())
                 instanceof WrittenOutElements.Walked.Each each
                 ? each.asWritten().stream().map(ReadMeaning.Occurrence::value).toList() : null;

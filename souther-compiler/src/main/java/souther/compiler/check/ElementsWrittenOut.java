@@ -243,9 +243,21 @@ public final class ElementsWrittenOut {
                 : Optional.empty();
     }
 
-    /** Every element {@code container} holds. */
+    /**
+     * Every element {@code container} holds.
+     *
+     * <p>Of the container as it stands, through the names it was given, the {@code let}s around it
+     * and the helpers whose body answers it ({@link Reading#standing}): a container is asked here
+     * as the walk below asks the one it takes its elements from, so what a reader hands over is not
+     * made to stand for itself first.
+     */
     public static <E> Walked<E> of(Stood<E> container, Reading<E> reading) {
-        return of(container, reading, Integer.MAX_VALUE, new int[] {0});
+        return of(standing(container, reading), reading, Integer.MAX_VALUE, new int[] {0});
+    }
+
+    /** {@code container} where it stands. */
+    private static <E> Stood<E> standing(Stood<E> container, Reading<E> reading) {
+        return reading.standing(container.value(), container.at());
     }
 
     /**
@@ -258,7 +270,8 @@ public final class ElementsWrittenOut {
      * there on every run ({@link #onEveryRun}) — one a step keeps on a condition that turns on the
      * run makes the count turn on it too, and one past the figure leaves it unwritten.
      */
-    public static <E> OptionalLong sizeOf(Stood<E> container, Reading<E> reading) {
+    public static <E> OptionalLong sizeOf(Stood<E> asked, Reading<E> reading) {
+        Stood<E> container = standing(asked, reading);
         Core value = Core.withoutStanding(container.value());
         if (value instanceof Core.Str text) {
             return OptionalLong.of(ScalarValues.count(text.value()));
@@ -285,7 +298,8 @@ public final class ElementsWrittenOut {
      * where it is not: the elements the walk writes out, less those that are there on no run.
      * Where every one is there on every run it is the count {@link #sizeOf} answers.
      */
-    public static <E> OptionalLong mostOf(Stood<E> container, Reading<E> reading) {
+    public static <E> OptionalLong mostOf(Stood<E> asked, Reading<E> reading) {
+        Stood<E> container = standing(asked, reading);
         OptionalLong exact = sizeOf(container, reading);
         if (exact.isPresent()) {
             return exact;
