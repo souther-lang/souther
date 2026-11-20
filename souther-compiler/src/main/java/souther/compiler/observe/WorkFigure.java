@@ -35,6 +35,18 @@ public enum WorkFigure {
     /** How many combinations of two positions' classes are counted. */
     PAIRS_OF_CLASSES_COUNTED(new SearchMessage.PairsOfClassesCounted()),
 
+    /** How many residue classes of one number a question of which values of it have a whole
+     *  number of another beside them is worked out over. */
+    CLASSES_OF_A_WHOLE_NUMBER_QUESTION(new SearchMessage.ClassesOfAWholeNumberQuestion()),
+
+    /** How many bounds a question of which values of one whole number have another beside them
+     *  holds. */
+    BOUNDS_OF_A_WHOLE_NUMBER_QUESTION(new SearchMessage.BoundsOfAWholeNumberQuestion()),
+
+    /** How many pairs of bounds, over every class, a question of which values of one whole number
+     *  have another beside them is worked out in. */
+    STEPS_OF_A_WHOLE_NUMBER_QUESTION(new SearchMessage.StepsOfAWholeNumberQuestion()),
+
     /** How many combinations in one group of decisions are measured. */
     COMBINATIONS_OF_A_GROUP_MEASURED(new SearchMessage.CombinationsOfAGroupMeasured()),
 

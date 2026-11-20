@@ -46,10 +46,12 @@ import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.RepresentationBounds;
 import souther.compiler.inputs.Requirements;
+import souther.compiler.inputs.RowsOfTheWay;
 import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.inputs.TwoIntegerConstraints;
 import souther.compiler.inputs.ValuesAt;
 import souther.compiler.inputs.WhatARelationLeavesUndivided;
 import souther.compiler.meaning.DecisionAtom;
@@ -2491,8 +2493,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         Optional<Set<String>> declined = parametersDeclined(way);
         DemandReading.Answered past = way.gotPastAsAsked();
-        if (!nothingUnreadBearsOnIt(way)
-                || mayStopOnWhatItReads(past, read, way.region(), written, declined, Set.of())) {
+        if (!everyRowAlongTheWayGetsToTheRelation(nothingUnreadBearsOnIt(way), past, read,
+                way.region(), written, declined)) {
             return Optional.of(Map.of());
         }
         List<Carrier> carriers = declared.carriers();
@@ -2527,7 +2529,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private record SidesAlongTheWay(List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms,
                                     WhatARelationLeavesUndivided.Independence independent,
                                     WhatARelationLeavesUndivided.Operations operations,
-                                    List<OnAWay> conditions) {}
+                                    List<OnAWay> conditions,
+                                    List<TakenConstraint> narrowing) {}
 
     /** {@link SidesAlongTheWay} of the way stating {@code written} over {@code region}. */
     private SidesAlongTheWay sidesAlongTheWay(List<OnAWay> written, DemandReading.Answered past,
@@ -2544,7 +2547,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 operationsOverTheSides(read, entire.conditions(), true,
                         totalsWrittenByOneElement(terms),
                         numbers -> heldApart(numbers, read, theWay)),
-                entire.conditions());
+                entire.conditions(), entire.narrowing());
     }
 
     /** What this leaves its places over what the declarations leave. */
@@ -2654,7 +2657,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                          ComparisonWitnesses.AtAComparison witnesses) {
         DemandReading.Answered past = way.gotPastAsAsked();
         RowsWay rows = new RowsWay(stated(read, sources, carriers, way.region(), conditions,
-                heldWhole, declined, past, way.narrowedBy()));
+                heldWhole, declined, past, way.narrowedBy(), false));
         if (noRowComesAlong(rows, read)) {
             return WhatItLeaves.NO_ROW_COMES_ALONG;
         }
@@ -2681,7 +2684,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return all;
         });
         StatedWay ofTheModel = stated(read, sources, carriers, model, conditions, heldWhole,
-                declined, past.without(stops), modelBy);
+                declined, past.without(stops), modelBy, true);
         if (leavesNoRow(ofTheModel, read)) {
             return reached(linesAlong(read, sources, carriers, rows.stated(), remainders,
                     witnesses, run, reaches), run, read, witnesses);
@@ -3412,6 +3415,26 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
+     * Whether every row along a way gets to the relation: nothing the way left unread bears on it
+     * ({@code nothingUnreadBears}, {@link #nothingUnreadBearsOnIt}), and no run along it may stop
+     * on what it reads ({@link #mayStopOnWhatItReads}).
+     *
+     * <p>The one place this is said. What a claim about the rows along a way, that one is shown
+     * each way or that a value has a row beside it, rests on is this and not a list of what the
+     * claim's reader remembered of the way: every claim asks it here, so what a new source of
+     * restriction on the rows (an operation before, a run that ties, a condition declined) comes to
+     * is answered once for all of them.
+     */
+    private boolean everyRowAlongTheWayGetsToTheRelation(boolean nothingUnreadBears,
+                                                         DemandReading.Answered past,
+                                                         InputReading read, SearchRegion region,
+                                                         List<OnAWay> written,
+                                                         Optional<Set<String>> declined) {
+        return nothingUnreadBears
+                && !mayStopOnWhatItReads(past, read, region, written, declined, Set.of());
+    }
+
+    /**
      * Whether the way left nothing unread that bears on this relation: it declined no condition,
      * or only the arms that find the value a side was kept an end of ({@link
      * Quantity.KeptSoFar.Seed.OfTheKey}).
@@ -3986,7 +4009,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                    Optional<List<TakenConstraint>> applied,
                                    ComparisonWitnesses.AtAComparison witnesses) {
         RowsWay rows = new RowsWay(stated(read, sources, carriers, region, written, heldWhole,
-                declined, past, applied));
+                declined, past, applied, false));
         if (noRowComesAlong(rows, read)) {
             return WhatItLeaves.NO_ROW_COMES_ALONG;
         }
@@ -4190,6 +4213,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *                of every one of them before any is taken away for the relation's own reading
      * @param byTheCalendar what the calendar answers of the dates {@code written} names, asked
      *                once for the way however often whether it leaves no row is
+     * @param endsLeftOut whether this is the model's reading of the way, which leaves out where a
+     *                representation stops ({@link Reachability.Reaching#gotPastAtTheEnds}): the
+     *                rows it holds are the model's, and a run may stop at some of them
      */
     private record StatedWay(SearchRegion region, List<OnAWay> written, boolean heldWhole,
                              Optional<Set<String>> declined, DemandReading.Answered past,
@@ -4199,13 +4225,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                              List<OnAWay> unfree, RoomOnTheWay lengthsRoom,
                              Rebuilding rebuilt, WayRead entire,
                              WhatStatementsOfOneFormDecide.Verdict decided,
-                             PlacesTiedAlongAWay byTheCalendar) {}
+                             PlacesTiedAlongAWay byTheCalendar, boolean endsLeftOut) {}
 
     /** The way stating {@code written} over {@code region}, as {@link StatedWay} says. */
     private StatedWay stated(InputReading read, List<Source> sources, List<Carrier> carriers,
                              SearchRegion region, List<OnAWay> written, boolean heldWhole,
                              Optional<Set<String>> declined, DemandReading.Answered past,
-                             Optional<List<TakenConstraint>> applied) {
+                             Optional<List<TakenConstraint>> applied, boolean endsLeftOut) {
         // A way stating nothing but that the rows are off the line this relation draws — the form
         // held unequal to nought, as `sign == 0` taken the other way holds
         // `Decimal.compare(a, b)` — ties no side to anything: it takes the rows on the line away,
@@ -4246,7 +4272,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 unfree.stream().map(OnAWay::affine).toList(), askedAsAStatement());
         return new StatedWay(region, written, heldWhole, declined, past, applied, asStated,
                 inWholeSteps, offItsLine, covered, unfree, lengthsRoom, rebuilt, entire, decided,
-                datesTheWayStates(written, read));
+                datesTheWayStates(written, read), endsLeftOut);
     }
 
     /**
@@ -4468,6 +4494,31 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 } else {
                     leaves.set(at, apart.get(at));
                 }
+            }
+        }
+        // A side nothing above showed anything of, where the way ties the two sides, is asked of
+        // the rows of the way: no side runs apart from the other there.
+        SidesAlongTheWay ofTheWay = !offItsLine && sides.size() == 2 && way.heldWhole()
+                && !standApart(0, 1, independent)
+                && IntStream.range(0, sides.size()).anyMatch(at -> leaves.get(at) == null
+                        && !out.containsAll(sides.get(at).madeOf()))
+                ? sidesAlongTheWay(way.written(), way.past(), way.region(), read, sources,
+                        carriers)
+                : null;
+        RowsOfTheWay rowsOfTheWay = ofTheWay == null ? null
+                : rowsOfTheWay(way, ofTheWay, sources, read);
+        for (int at = 0; rowsOfTheWay != null && at < sides.size(); at++) {
+            if (leaves.get(at) != null || out.containsAll(sides.get(at).madeOf())) {
+                continue;
+            }
+            WhatARelationLeavesUndivided.Leaves tied =
+                    WhatARelationLeavesUndivided.leavesAlongATie(rowsOfTheWay,
+                            rowsOfTheWay.numbers(), ofTheWay.terms(), at, constant, relation,
+                            greatestOf(carriers.get(at)), ofTheWay.operations(), stopped);
+            if (tied instanceof WhatARelationLeavesUndivided.Leaves.Undivided) {
+                out.addAll(sides.get(at).madeOf());
+            } else {
+                leaves.set(at, tied);
             }
         }
         for (int at = 0; at < sides.size(); at++) {
@@ -11189,6 +11240,63 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 : count.exactly().minus(ExactRatio.ONE);
         return next instanceof ExactAnswer.Held<ExactRatio>(ExactRatio beside)
                 && above.admits(beside);
+    }
+
+    /**
+     * The rows of {@code way} over the two numbers this relation is between, or null where they
+     * are not shown to be everything the way and the declarations hold of them
+     * ({@link RowsOfTheWay}).
+     *
+     * <p>Shown by what asks the same of a way elsewhere: whether every row along it gets to the
+     * relation and whether the region shows each number a row ({@link #comingOutOn}), asked of
+     * the sides as the way's own region holds them with every statement in
+     * ({@link #sidesAlongTheWay}), and not of what a reading of the comparison's line widened.
+     * Beside those, where each side is one number, the value at its place, with every value its
+     * declarations hold taken ({@code realizes}), and no rule of the declarations, none put aside
+     * as that reading puts some, relating the two. Those are the {@link RowsOfTheWay.Premises},
+     * and the way's statements are what is left to say, which they are only where each is a form
+     * of the two numbers alone.
+     */
+    private RowsOfTheWay rowsOfTheWay(StatedWay way, SidesAlongTheWay along,
+                                      List<Source> sources, InputReading read) {
+        List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms = along.terms();
+        List<NumericTerm> numbers = sides.stream().map(Side::number).toList();
+        if (terms.size() != 2 || numbers.contains(null) || numbers.get(0).equals(numbers.get(1))
+                || terms.stream().anyMatch(each -> each.spacing() != Granularity.DISCRETE)) {
+            return null;
+        }
+        PlacesTiedAlongAWay tied = placesTiedAlong(along.conditions(), way.past(), read);
+        RowsOfTheWay.Premises premises = new RowsOfTheWay.Premises(
+                terms.stream().allMatch(WhatARelationLeavesUndivided.Term::itsPlace),
+                terms.stream().allMatch(each -> each.holds().equals(each.realizes())),
+                apartByTheDeclarations(0, 1, sources, read),
+                everyRowAlongTheWayGetsToTheRelation(way.heldWhole(), way.past(), read,
+                        way.region(), way.written(), way.declined()),
+                numbers.stream().allMatch(each -> whatTheRegionShowsOfItIsARow(each,
+                        along.conditions(), way.past(), way.declined(), tied, read)),
+                !way.endsLeftOut());
+        List<TwoIntegerConstraints.Constraint<NumericTerm>> stated = new ArrayList<>();
+        for (OnAWay each : along.conditions()) {
+            TakenConstraint.Affine affine = each.affine();
+            if (affine == null || each.elementsOf() != null || each.bySome() != null
+                    || each.byEvery() != null) {
+                return null;
+            }
+            stated.add(new TwoIntegerConstraints.Constraint<>(affine.form(), affine.rel()));
+        }
+        // What the operators before the relation narrow, and the relation's own working: a row
+        // gets to the comparison only where each holds, so they are rows' restrictions as much
+        // as what the way states. What the region carries of them is here whole or the rows are
+        // not claimed: one that is not a form of the two numbers alone (one that names a third, or
+        // is no line) is a restriction the constraints cannot hold.
+        for (TakenConstraint each : along.narrowing()) {
+            if (!(each instanceof TakenConstraint.Affine affine)) {
+                return null;
+            }
+            stated.add(new TwoIntegerConstraints.Constraint<>(affine.form(), affine.rel()));
+        }
+        return RowsOfTheWay.of(numbers, stated,
+                terms.stream().map(WhatARelationLeavesUndivided.Term::holds).toList(), premises);
     }
 
     /**

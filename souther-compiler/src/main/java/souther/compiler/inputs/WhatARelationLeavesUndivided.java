@@ -6,12 +6,15 @@ import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactCut;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumberRegion;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.WholeNumberRuns;
 import souther.compiler.numeric.WholeNumberSet;
+import souther.compiler.observe.Figure;
+import souther.compiler.observe.WorkFigure;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -1268,6 +1271,107 @@ public final class WhatARelationLeavesUndivided {
         return shown(bounded, withinTheirOrders, at, constant, asking, overlap, independent,
                 jointly, arithmetic) instanceof Leaves.Settled settled
                 ? settled.besideWhatTheModelDraws(model) : shownFree;
+    }
+
+    /**
+     * What {@code relation} leaves the values of the term at {@code at} where the way to it ties
+     * the two terms to one another, asked of the rows of the way and not of runs the terms take
+     * apart — or null where neither is shown.
+     *
+     * <p>The values of the term that have a whole number of the other beside them, with the
+     * relation holding and again with it failing, are the whole numbers of the way's rows with
+     * that taken in ({@link RowsOfTheWay}), and each is exactly a run
+     * ({@link TwoIntegerConstraints.Shadow}). A value outside the one that fails has no row that
+     * fails the relation, so it settles it; a value in both has a row each way, so it leaves it
+     * either way. Both are facts of the rows, and not a bound or a sample.
+     *
+     * <p>Where the program stops a row ({@link RowsComputed#computesEveryRowWithin}) a row is a row
+     * of no run to its end, and nothing is said. Where the answer is no run, or the relation is
+     * one this holds apart ({@code ==}, {@code !=}), null.
+     */
+    public static <P> Leaves leavesAlongATie(RowsOfTheWay rows, List<NumericTerm> numbers,
+                                             List<Term<P>> terms, int at, ExactRatio constant,
+                                             Rel relation, BigInteger greatest,
+                                             Operations operations, Set<Figure> stopped) {
+        if (terms.size() != 2 || constant == null || !rows.numbers().equals(numbers)
+                || relation == Rel.EQ || relation == Rel.NE
+                || terms.stream().anyMatch(each -> each.weight().isZero())
+                || !RowsComputed.upTo(greatest).withOperations(operations)
+                        .computesEveryRowWithin(terms, constant)) {
+            return null;
+        }
+        LinearForm<NumericTerm> form = new LinearForm<>(constant, Map.of(
+                numbers.get(0), terms.get(0).weight(), numbers.get(1), terms.get(1).weight()));
+        TwoIntegerConstraints<NumericTerm> holding = rows.constraints().with(form, relation);
+        TwoIntegerConstraints<NumericTerm> failing = rows.constraints().with(form,
+                relation.denied());
+        NumericTerm number = numbers.get(at);
+        WholeRun held = WholeRun.ofTheValues(terms.get(at).holds());
+        TwoIntegerConstraints.Shadow shadowHolding =
+                holding == null ? null : holding.shadowOn(number);
+        TwoIntegerConstraints.Shadow shadowFailing =
+                failing == null ? null : failing.shadowOn(number);
+        // A limit reached is said, and is not taken for a set that is no run.
+        stopAtTheLimit(shadowHolding, stopped);
+        stopAtTheLimit(shadowFailing, stopped);
+        WholeRun holds = shadowHolding == null ? null : runOf(shadowHolding);
+        WholeRun fails = shadowFailing == null ? null : runOf(shadowFailing);
+        if (held == null || holds == null || fails == null) {
+            return null;
+        }
+        List<SettledRun> runs = new ArrayList<>();
+        for (WholeRun run : outside(held, fails)) {
+            runs.add(SettledRun.whole(run.low(), run.high(), true));
+        }
+        for (WholeRun run : outside(held.meet(fails), holds)) {
+            runs.add(SettledRun.whole(run.low(), run.high(), false));
+        }
+        return runs.isEmpty() ? new Leaves.Undivided()
+                : Leaves.Settled.ofWhole(inOrder(runs, true), held.low(), held.high());
+    }
+
+    /** The figure a question stopped at, put with the ones the search stopped at, where it stopped
+     *  at a limit. */
+    private static void stopAtTheLimit(TwoIntegerConstraints.Shadow shadow, Set<Figure> stopped) {
+        if (shadow instanceof TwoIntegerConstraints.Shadow.OverTheLimit(
+                TwoIntegerConstraints.Limit limit)) {
+            stopped.add(switch (limit) {
+                case CLASSES -> WorkFigure.CLASSES_OF_A_WHOLE_NUMBER_QUESTION
+                        .at(TwoIntegerConstraints.MOST_CLASSES);
+                case BOUNDS -> WorkFigure.BOUNDS_OF_A_WHOLE_NUMBER_QUESTION
+                        .at(TwoIntegerConstraints.MOST_BOUNDS);
+                case STEPS -> WorkFigure.STEPS_OF_A_WHOLE_NUMBER_QUESTION
+                        .at(TwoIntegerConstraints.MOST_STEPS);
+            });
+        }
+    }
+
+    /** The whole numbers a shadow holds, none for one that holds none, and null for no answer. */
+    private static WholeRun runOf(TwoIntegerConstraints.Shadow shadow) {
+        return switch (shadow) {
+            case TwoIntegerConstraints.Shadow.Nothing _ ->
+                    new WholeRun(BigInteger.ONE, BigInteger.ZERO);
+            case TwoIntegerConstraints.Shadow.Run(BigInteger least, BigInteger greatest) ->
+                    new WholeRun(least, greatest);
+            case TwoIntegerConstraints.Shadow.NotARun _,
+                 TwoIntegerConstraints.Shadow.OverTheLimit _ -> null;
+        };
+    }
+
+    /** The whole numbers of {@code within} that {@code taken} leaves out, as the runs below and
+     *  above it. Every one of them where {@code taken} holds none. */
+    private static List<WholeRun> outside(WholeRun within, WholeRun taken) {
+        if (!taken.holdsAWholeNumber()) {
+            return List.of(within);
+        }
+        List<WholeRun> out = new ArrayList<>();
+        if (taken.low() != null) {
+            out.add(within.meet(new WholeRun(null, taken.low().subtract(BigInteger.ONE))));
+        }
+        if (taken.high() != null) {
+            out.add(within.meet(new WholeRun(taken.high().add(BigInteger.ONE), null)));
+        }
+        return out.stream().filter(WholeRun::holdsAWholeNumber).toList();
     }
 
     /**

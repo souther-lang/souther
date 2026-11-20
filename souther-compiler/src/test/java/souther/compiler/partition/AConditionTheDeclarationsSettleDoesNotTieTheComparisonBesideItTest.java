@@ -74,14 +74,75 @@ class AConditionTheDeclarationsSettleDoesNotTieTheComparisonBesideItTest {
 
     /**
      * {@code eaches >= pack} keeps rows off {@code eaches < 2 * pack}, so it is a statement of the
-     * way and ties the two: the comparison after it is read alone as {@code eaches < 2 * pack} is,
-     * which would say of every value of {@code eaches} what only some rows hold.
+     * way and ties the two. What the comparison leaves each is then asked of the rows of the way:
+     * {@code eaches = 1} has only {@code pack = 1} and settles it, and every other value of either
+     * has a row each way.
      */
     @Test
-    void aConditionTheDeclarationsDoNotSettleStillTiesTheComparisonAfterIt() {
+    void aConditionTheDeclarationsDoNotSettleTiesTheComparisonAfterItAndIsReadOverTheRowsOfTheWay() {
+        JsonNode report = reportOf(BOUND,
+                "eaches.value >= pack.value && eaches.value < 2 * pack.value", "12", "0");
+        assertTrue(List.of(READ).containsAll(reasonsNotRead(report)), report::toString);
+    }
+
+    /** Over the whole of {@code Int} {@code 2 * pack} stops a run, so no row is shown there. */
+    @Test
+    void whereTheTiedComparisonMayStopARunItIsNotRead() {
         JsonNode report = reportOf("",
                 "eaches.value >= pack.value && eaches.value < 2 * pack.value", "12", "0");
-        assertTrue(reasonsNotRead(report).contains(NOT_SHOWN_TO_REACH), report::toString);
+        assertFalse(reasonsNotRead(report).equals(List.of(READ)), report::toString);
+    }
+
+    /**
+     * A question the rows of the way are counted by that passes a limit is said to have, with the
+     * figure it passed, and is not left as a relation nothing was shown of. {@code 4097 * pack}
+     * rounds the bounds of {@code pack} by 4097 and by 1 and so leaves 4097 classes of
+     * {@code eaches}, one more than a question is worked out over, where the numbers run far
+     * enough for the line {@code eaches = 4097 * pack} to cross them.
+     */
+    @Test
+    void aQuestionOverTheLimitSaysWhichFigureItStoppedAt() {
+        JsonNode report = reportOf("    invariant value <= 10000000",
+                "eaches.value >= pack.value && eaches.value < 4097 * pack.value", "12", "0");
+        assertTrue(report.toString().contains("classes_of_a_whole_number_question"),
+                report::toString);
+    }
+
+    /**
+     * Rows of the way are only what its statements leave where no rule of the declarations relates
+     * the two numbers as well: {@code eaches >= pack} held by the record they are fields of is a
+     * rule the statements do not state, and the comparison is not read over their rows.
+     */
+    @Test
+    void aRuleOfTheDeclarationsBetweenTheTwoNumbersKeepsTheComparisonNotRead() {
+        Compilation compilation = Compilation.ofSource("""
+                module m1
+
+                data Eaches = Int
+                    invariant value >= 0 && value <= 1000
+                data PackSize = Int
+                    invariant value >= 1 && value <= 1000
+                data Both = { eaches: Eaches, pack: PackSize }
+                    invariant coversAPack = eaches.value >= pack.value
+                data Whole = { n: Int }
+                data Part = { left: Int }
+
+                behavior split : (both: Both) -> Whole | Part
+
+                let split (both) = {
+                    guard both.eaches.value < 2 * both.pack.value else Part { left = 1 }
+                    Whole { n = 1 }
+                }
+
+                example split
+                    | "a" : (Both { eaches = Eaches(12), pack = PackSize(12) }) -> Whole { n = 1 }
+                    | "b" : (Both { eaches = Eaches(30), pack = PackSize(12) }) -> Part { left = 1 }
+                """, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        ACompiledModel.compiles(compilation);
+        JsonNode report = JSON.readTree(AdequacyReport.of(compilation)
+                .json(SourceRendering.namedByIdentity(compilation.texts())));
+        assertFalse(List.of(READ).containsAll(reasonsNotRead(report)), report::toString);
     }
 
     /** The reasons of the places not read, each as many times as it is said. */
