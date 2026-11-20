@@ -135,6 +135,7 @@ public final class ClassCoexistence {
         if (known == null) {
             known = declared.relates(Set.of(axes.get(one).term()), Set.of(axes.get(other).term()));
             related[one][other] = known;
+            related[other][one] = known;
         }
         return known;
     }
@@ -181,8 +182,12 @@ public final class ClassCoexistence {
         if (!(end.at() instanceof Count count)) {
             return region.assuming(term, end.at(), rel);
         }
-        return region.assuming(LinearForm.atomMinusConstant(term, count.exactly()), rel)
-                instanceof SearchRegion.Assumption.Taken(SearchRegion taken) ? taken : region;
+        SearchRegion.Assumption assumed =
+                region.assuming(LinearForm.atomMinusConstant(term, count.exactly()), rel);
+        if (assumed instanceof SearchRegion.Assumption.Taken(SearchRegion taken)) {
+            return taken;
+        }
+        return region;
     }
 
     /**
