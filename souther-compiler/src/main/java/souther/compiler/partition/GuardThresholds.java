@@ -24,7 +24,7 @@ import souther.compiler.check.ValueOrigin;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.EveryRunStops;
 import souther.compiler.inputs.AStopShown;
-import souther.compiler.inputs.ReasonsAStopIsNotShown;
+import souther.compiler.inputs.AStopNotShown;
 import souther.compiler.inputs.WhatAConstructionAsks;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputNumber;
@@ -428,8 +428,8 @@ public final class GuardThresholds {
                                                     .apply(decides)));
                             // And whether a run that gets to it works out something of which
                             // neither is shown, beside a stop shown in something else.
-                            ReasonsAStopIsNotShown stopsNotShown =
-                                    StopAssessment.whyNotShown(judged);
+                            List<AStopNotShown> stopsNotShown =
+                                    StopAssessment.stopsNotShown(judged);
                             // And, apart from that, whether what a run works out to get past it
                             // is read far enough to say where a line of it lies: a stop no
                             // operation tells, one told where no row is asked to stop in it, or
@@ -1222,7 +1222,7 @@ public final class GuardThresholds {
                                RuleReachNumbering reaches,
                                ComparisonAssessment read, LinesReadOn linesReadOn,
                                List<AStopShown> shown,
-                               ReasonsAStopIsNotShown stopsNotShown,
+                               List<AStopNotShown> stopsNotShown,
                                boolean stopsNotFullyRead,
                                List<EveryRunStops> stops,
                                List<WhatAConstructionAsks> asks,

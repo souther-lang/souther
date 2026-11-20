@@ -106,6 +106,7 @@ import souther.compiler.diag.msg.ReportMessage;
 
 import java.math.BigInteger;
 import souther.compiler.inputs.ABoundThatKeepsEveryRunGoing;
+import souther.compiler.inputs.AStopNotShown;
 import souther.compiler.inputs.AuthoredOrder;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.ElementKey;
@@ -4503,8 +4504,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             if (f.about() instanceof About.ARuleWhoseStopIsNotShown(var it)) {
                 marked(out, f, page, new ReportMessage.StopNotShown(
                         cited(it.cited(), page, declaredIn, places),
-                        it.notShown().isEmpty() ? new ReportMessage.Nothing()
-                                : new ReportMessage.WhetherEvaluatingItStopsARunIsNotDetermined(),
+                        stopsNotShownSaid(it.notShown(), page),
                         aRunGettingThereStopsAt(it.everyRunStops(), page),
                         it.asks().isEmpty() ? new ReportMessage.Nothing()
                                 : new ReportMessage.WhatTheConstructionsOnTheWayAskIsNotDetermined(
@@ -7276,6 +7276,31 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     + " or a date: " + bound.bound());
         };
         return "invariant " + bound.named() + (bound.atMost() ? " <= " : " >= ") + value;
+    }
+
+    /** Each operation of a rule whether a run stops in is not resolved, and why, as the human
+     *  report says it after the rule: of the operation, and never of the rule as a whole. */
+    private static Message stopsNotShownSaid(List<AStopNotShown> notShown, Page page) {
+        StringBuilder out = new StringBuilder();
+        for (AStopNotShown each : notShown) {
+            Message why = switch (each.why()) {
+                case NO_OPERATION_TOLD -> new ReportMessage.NoOperationIsReadThere();
+                case ON_ROWS_OF_THE_STATEMENT -> new ReportMessage.TheComparisonStopsOnRowsItStates();
+                case ON_AN_ARM -> new ReportMessage.ItIsWorkedOutOnAnArm();
+                case ON_AN_APPLICATION -> new ReportMessage.ItIsWorkedOutOnEachElement();
+                case NOT_EVERY_OPERATION_TOLD -> new ReportMessage.AnotherPartIsNotRead();
+                case SOMETHING_BEFORE_IT_MAY_STOP -> new ReportMessage.SomethingBeforeItMayStopARun();
+                case A_CONDITION_NOT_READ -> new ReportMessage.AConditionOnTheWayIsNotRead();
+                case NOT_OVER_THE_INPUT -> new ReportMessage.ItIsOverAValueTheBodyWorksOut();
+                case NO_VALUE_SHOWN -> new ReportMessage.NoInputMeetingTheTypesIsBuilt();
+                case NO_VALUE_FOUND -> new ReportMessage.NoInputTriedTakesItPastItsType();
+                case NO_VALUE_FOUND_WITHIN_WHAT_IS_TRIED -> new ReportMessage.TheInputsTriedRanOut();
+            };
+            out.append(page.say(each.operation()
+                    .<Message>map(operation -> new ReportMessage.StopNotShownIn(operation, why))
+                    .orElseGet(() -> new ReportMessage.StopNotShownInWhatItWorksOut(why))));
+        }
+        return new ReportMessage.Verbatim(out.toString());
     }
 
     /** Where every run getting to a rule stops, as the human report says it after the rule. */
@@ -11448,12 +11473,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 }
             }
         }
-        // And, of a rule where whether a run stops is not resolved, whether that is of what it
-        // works out, and what each construction on the way asks of a run that works it out,
-        // which the words beside the rule say from the same condition.
+        // And, of a rule where whether a run stops is not resolved, each operation that is not,
+        // and why, and what each construction on the way asks of a run that works it out, which
+        // the words beside the rule say from the same condition.
         if (finding.about() instanceof About.ARuleWhoseStopIsNotShown(var it)
                 && !it.notShown().isEmpty()) {
-            f.put("evaluatingNotResolved", true);
+            ArrayNode unresolved = f.putArray("unresolved");
+            for (AStopNotShown each : it.notShown()) {
+                ObjectNode one = unresolved.addObject();
+                each.operation().ifPresent(operation -> one.put("operation", operation));
+                one.put("reason", word(each.why()));
+            }
         }
         if (finding.about() instanceof About.ARuleWhoseStopIsNotShown(var it)
                 && !it.asks().isEmpty()) {

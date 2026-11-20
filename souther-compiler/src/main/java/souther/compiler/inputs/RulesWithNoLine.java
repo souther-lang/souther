@@ -217,7 +217,7 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
          *  way to it asks of a run, and the values at which every run getting there stops
          *  ({@link RuleWhereAStopIsNotShown}). */
         public void stopNotShown(RuleCitation cited, ModelOccurrences readAt,
-                                 ReasonsAStopIsNotShown notShown,
+                                 List<AStopNotShown> notShown,
                                  List<WhatAConstructionAsks> asks,
                                  List<EveryRunStops> everyRunStops) {
             stopped(RuleWhereAStopIsNotShown.of(cited, readAt, notShown, asks, everyRunStops));

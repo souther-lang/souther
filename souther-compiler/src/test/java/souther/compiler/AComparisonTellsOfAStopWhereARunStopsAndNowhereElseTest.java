@@ -470,9 +470,9 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
             if (started.matches()) {
                 current = started.group(1);
                 out.put(current, new int[3]);
-            } else if (current != null && line.contains("may stop a run")) {
+            } else if (current != null && line.startsWith("· may stop a run:")) {
                 out.get(current)[MAY_STOP]++;
-            } else if (current != null && line.contains("stop not resolved:")) {
+            } else if (current != null && line.startsWith("· stop not resolved:")) {
                 out.get(current)[NOT_READ]++;
                 out.get(current)[UNTOLD]++;
             } else if (current != null && line.startsWith("· not read:")) {

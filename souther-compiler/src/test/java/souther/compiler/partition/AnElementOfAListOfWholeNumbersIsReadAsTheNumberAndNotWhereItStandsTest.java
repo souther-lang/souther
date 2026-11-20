@@ -42,8 +42,10 @@ class AnElementOfAListOfWholeNumbersIsReadAsTheNumberAndNotWhereItStandsTest {
         assertEquals(List.of(
                 "· no line: comparison@4:41 — it relates the value here to another value rather"
                         + " than dividing the values here, about `ns[*]`",
-                "· stop not resolved: comparison@4:41 — whether evaluating this rule can stop a"
-                        + " run has not been determined; a run that gets there stops in"
+                "· stop not resolved: comparison@4:41; whether a run stops in a + ns[*] is not"
+                        + " determined: " + ON_EACH_ELEMENT + "; whether a run stops in"
+                        + " a + ns[*] + 3 is not determined: " + ON_EACH_ELEMENT
+                        + "; a run that gets there stops in"
                         + " a + ns[*] where a + ns[*] is at least 9223372036854775808, in"
                         + " a + ns[*] + 3 where a + ns[*] is 9223372036854775805 to"
                         + " 9223372036854775807, and no such run is shown to exist"),
@@ -63,8 +65,8 @@ class AnElementOfAListOfWholeNumbersIsReadAsTheNumberAndNotWhereItStandsTest {
     void aSumPastItsTypeAtSomePlacesIsARuleWhoseStopIsNotResolved() {
         List<String> report = report("a: Nat, xs: List<Int>",
                 "List.any(b -> b, List.mapIndexed((i, _) -> a.value + i >= 10, xs))");
-        assertEquals(List.of("· stop not resolved: comparison@4:72 — whether evaluating this rule"
-                        + " can stop a run has not been determined"),
+        assertEquals(List.of("· stop not resolved: comparison@4:72; whether a run stops in a + i"
+                        + " is not determined: " + ON_EACH_ELEMENT),
                 report.stream().filter(line -> line.startsWith("· may stop")
                         || line.startsWith("· stop not resolved")).toList());
     }
@@ -86,14 +88,19 @@ class AnElementOfAListOfWholeNumbersIsReadAsTheNumberAndNotWhereItStandsTest {
         List<String> report = AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
                 .map(String::strip).toList();
-        assertEquals(List.of("· stop not resolved: comparison@3:36 — whether evaluating this rule"
-                        + " can stop a run has not been determined; a run that gets there stops in"
-                        + " a + 10 where a is at least 9223372036854775798, and no such run is"
-                        + " shown to exist"),
+        assertEquals(List.of("· stop not resolved: comparison@3:36; whether a run stops in a + 10"
+                        + " is not determined: " + ON_EACH_ELEMENT + "; a run that gets there"
+                        + " stops in a + 10 where a is at least 9223372036854775798, and no such"
+                        + " run is shown to exist"),
                 report.stream().filter(line -> line.startsWith("· may stop")
                         || line.startsWith("· stop not resolved")).toList());
         assertEquals(List.of("0", "-10"), lines(compilation));
     }
+
+    /** Why a stop worked out on each element is not resolved, as the report says it. */
+    private static final String ON_EACH_ELEMENT = "it is worked out inside a function applied to"
+            + " each element, and a stop is looked for only where the comparison itself is"
+            + " evaluated";
 
     /** The values of the lines drawn in {@code m}, in the order they are measured. */
     private static List<String> lines(Compilation compilation) {

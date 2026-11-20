@@ -1,10 +1,10 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.AStopNotShown;
 import souther.compiler.inputs.AStopShown;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Position;
-import souther.compiler.inputs.ReasonsAStopIsNotShown;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.WhyAStopIsNotShown;
 import souther.compiler.numeric.ExactAnswer;
@@ -17,6 +17,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -179,15 +180,17 @@ final class StopAssessment {
         return out;
     }
 
-    /** Why neither is shown of what {@code judged} leave unresolved, each once. */
-    static ReasonsAStopIsNotShown whyNotShown(List<Judgement> judged) {
-        Set<WhyAStopIsNotShown> out = new LinkedHashSet<>();
+    /** Each operation {@code judged} leave unresolved, as written, and why, in the order they were
+     *  judged: none written where no operation names the stop. */
+    static List<AStopNotShown> stopsNotShown(List<Judgement> judged) {
+        List<AStopNotShown> out = new ArrayList<>();
         for (Judgement each : judged) {
-            if (each instanceof Judgement.Unresolved(var _, WhyAStopIsNotShown why)) {
-                out.add(why);
+            if (each instanceof Judgement.Unresolved(var operation, WhyAStopIsNotShown why)) {
+                out.add(new AStopNotShown(Optional.ofNullable(operation)
+                        .map(it -> UndividedByARelation.written(it.form())), why));
             }
         }
-        return ReasonsAStopIsNotShown.of(out);
+        return out;
     }
 
     /**

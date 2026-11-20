@@ -4700,6 +4700,21 @@
         },
         "reason" : "non_constant_divisor"
       }, {
+        "kind" : "rule_stop_not_shown",
+        "disposition" : "reported",
+        "subject" : "comparison@1:49:24",
+        "ruleId" : {
+          "kind" : "comparison",
+          "declaredIn" : "conformance.splitting",
+          "definition" : "apportionExactly",
+          "behavior" : "apportionExactly",
+          "ordinal" : 4,
+          "lowered" : 0
+        },
+        "unresolved" : [ {
+          "reason" : "no_operation_told"
+        } ]
+      }, {
         "kind" : "rule_unaccounted",
         "disposition" : "reported",
         "subject" : "comparison@1:49:24 — what this rule states about amount",
@@ -7826,6 +7841,21 @@
           "lowered" : 0
         },
         "reason" : "rule_relating_two_values"
+      }, {
+        "kind" : "rule_stop_not_shown",
+        "disposition" : "reported",
+        "subject" : "comparison@2:85:39",
+        "ruleId" : {
+          "kind" : "comparison",
+          "declaredIn" : "conformance.shipping",
+          "definition" : "高額割増",
+          "behavior" : "出荷する",
+          "ordinal" : 1,
+          "lowered" : 0
+        },
+        "unresolved" : [ {
+          "reason" : "no_operation_told"
+        } ]
       } ]
     }, {
       "name" : "送料を出す",

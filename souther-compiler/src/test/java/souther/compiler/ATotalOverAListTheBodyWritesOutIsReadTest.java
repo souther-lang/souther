@@ -57,10 +57,13 @@ class ATotalOverAListTheBodyWritesOutIsReadTest {
      * addition it works out, and is shown to stop where two of the pays together pass the type; a
      * total over a list written out is one operation, and is shown to stop where the whole total
      * passes it, as is a total over what a closure makes of each element of one, once each
-     * application is worked out. What else is read of them is the same.
+     * application is worked out. Whether a run that gets there is shown to exist turns on the form
+     * the operation is read in, so the stop is left out whether it is said as shown or as not
+     * resolved. What else is read of them is the same.
      */
     private static String besideWhereEveryRunStops(String report) {
-        return report.replaceAll("(?m)^.*may stop a run:.*every run stops.*\\R", "");
+        return report.replaceAll("(?m)^.*(may stop a run:.*every run stops|stop not resolved:.*a"
+                + " run that gets there stops).*\\R", "");
     }
 
     /** The report, with where in the guard each comparison is written left out. */

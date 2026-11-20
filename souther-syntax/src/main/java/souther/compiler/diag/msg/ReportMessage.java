@@ -529,12 +529,54 @@ public sealed interface ReportMessage extends Message {
     record MayStopARun(String rule, Message every, String calls)
             implements ReportMessage, Prose {}
 
-    /** A rule where whether a run stops on its way through it is not resolved: of what it works
-     *  out ({@code evaluating}), of what the constructions on the way ask ({@code asks}), or
-     *  both. */
-    record StopNotShown(String rule, Message evaluating, Message every, Message asks,
+    /** A rule where whether a run stops on its way through it is not resolved: of the operations
+     *  it works out ({@code unresolved}, each said by {@link StopNotShownIn} or
+     *  {@link StopNotShownInWhatItWorksOut}), of what the constructions on the way ask
+     *  ({@code asks}), or both. */
+    record StopNotShown(String rule, Message unresolved, Message every, Message asks,
                         String calls)
             implements ReportMessage, Prose {}
+
+    /** Whether a run stops in {@code operation} is not resolved, for {@code why}. */
+    record StopNotShownIn(String operation, Message why) implements ReportMessage, Prose {}
+
+    /** Whether a run stops in something worked out that no operation names is not resolved, for
+     *  {@code why}. */
+    record StopNotShownInWhatItWorksOut(Message why) implements ReportMessage, Prose {}
+
+    /** Why a stop is not resolved: something worked out is read as no operation. */
+    record NoOperationIsReadThere() implements ReportMessage, Prose {}
+
+    /** Why: the comparison stops a run on rows it states, and no input reaching them is looked
+     *  for. */
+    record TheComparisonStopsOnRowsItStates() implements ReportMessage, Prose {}
+
+    /** Why: the operation is worked out on one arm of a choice. */
+    record ItIsWorkedOutOnAnArm() implements ReportMessage, Prose {}
+
+    /** Why: the operation is worked out inside a function applied to each element. */
+    record ItIsWorkedOutOnEachElement() implements ReportMessage, Prose {}
+
+    /** Why: another part of the comparison may stop a run first and is not read. */
+    record AnotherPartIsNotRead() implements ReportMessage, Prose {}
+
+    /** Why: something evaluated before the comparison may stop a run first. */
+    record SomethingBeforeItMayStopARun() implements ReportMessage, Prose {}
+
+    /** Why: a condition on the way is no comparison of whole numbers of the input. */
+    record AConditionOnTheWayIsNotRead() implements ReportMessage, Prose {}
+
+    /** Why: the operation is over a value the body works out. */
+    record ItIsOverAValueTheBodyWorksOut() implements ReportMessage, Prose {}
+
+    /** Why: the input's types declare invariants or cases, and no input meeting them is built. */
+    record NoInputMeetingTheTypesIsBuilt() implements ReportMessage, Prose {}
+
+    /** Why: no input tried takes the operation past its type. */
+    record NoInputTriedTakesItPastItsType() implements ReportMessage, Prose {}
+
+    /** Why: the inputs tried ran out before one took the operation past its type. */
+    record TheInputsTriedRanOut() implements ReportMessage, Prose {}
 
     /** Where a run that gets to a rule stops, said of a rule where no run is shown to get
      *  there. */
@@ -547,9 +589,6 @@ public sealed interface ReportMessage extends Message {
      */
     record ABoundOnTheInputWouldKeepEveryRunFromIt(String data, String invariant)
             implements ReportMessage, Prose {}
-
-    /** Neither that evaluating a rule stops a run nor that it does not is shown. */
-    record WhetherEvaluatingItStopsARunIsNotDetermined() implements ReportMessage, Prose {}
 
     /** What the constructions on the way to a rule ask of a run, no run being shown not to meet
      *  it: {@code asks}, each said by {@link ConstructionAsks} or {@link ConstructionNeverPassed}. */

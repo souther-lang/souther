@@ -5,9 +5,15 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * What shows that a run stops in a rule: the operation, as written, and a value of the input that
- * exists, gets to it with nothing before it ending the run, and works it out past its ends — the
- * whole number at each place of the input that value is asked to hold, and anything at the rest.
+ * What showed that a run stops in a rule, as a finding carries it: the operation, as written, and
+ * the value of the input the proof rested on — the whole number at each place of the input that
+ * value is asked to hold, and anything at the rest.
+ *
+ * <p>The published account of a proof, and not the proof. The proof is made by the stop
+ * assessment of a comparison and by nothing else, once a value is shown to exist, to get to the
+ * operation with nothing before it ending the run, and to work the operation out past its ends;
+ * this is what that proof is said as. Building one of these shows nothing, and a finding that a run
+ * stops is made from the assessment's proofs alone.
  *
  * @param operation the operation the run stops in, as written
  * @param at        the number at each place the value is asked to hold, in the order the input

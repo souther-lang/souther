@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.ACompiledModel;
 import souther.compiler.inputs.AStopShown;
 import souther.compiler.inputs.BlockReason;
-import souther.compiler.inputs.ReasonsAStopIsNotShown;
+import souther.compiler.inputs.AStopNotShown;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.RuleWhereARunMayStop;
 import souther.compiler.inputs.RuleWhereAStopIsNotShown;
@@ -19,6 +19,7 @@ import souther.compiler.query.Compilation;
 import java.math.BigInteger;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -56,7 +57,7 @@ class WhatIsShownOfAStopIsSaidOfTheRuleTest {
                 "if (if q > 5 then q + 1 else 3) >= q then 1 else 2");
         List<WhatIsShownOfAStop> shown = stopsShown(compilation);
         assertEquals(List.of(RuleWhereAStopIsNotShown.class), kinds(shown));
-        assertEquals(ReasonsAStopIsNotShown.of(List.of(WhyAStopIsNotShown.ON_AN_ARM)),
+        assertEquals(List.of(new AStopNotShown(Optional.of("q + 1"), WhyAStopIsNotShown.ON_AN_ARM)),
                 ((RuleWhereAStopIsNotShown) shown.getFirst()).notShown());
         assertFalse(holdsABorderOpen(compilation));
     }
@@ -222,8 +223,8 @@ class WhatIsShownOfAStopIsSaidOfTheRuleTest {
         RuleWhereAStopIsNotShown open = shown.stream()
                 .filter(RuleWhereAStopIsNotShown.class::isInstance)
                 .map(RuleWhereAStopIsNotShown.class::cast).findFirst().orElseThrow();
-        assertEquals(ReasonsAStopIsNotShown.of(
-                List.of(WhyAStopIsNotShown.SOMETHING_BEFORE_IT_MAY_STOP)), open.notShown());
+        assertEquals(List.of(WhyAStopIsNotShown.SOMETHING_BEFORE_IT_MAY_STOP),
+                open.notShown().stream().map(AStopNotShown::why).distinct().toList());
     }
 
     /** Whether what a run works out to evaluate a rule holds the border of a place it is filed
