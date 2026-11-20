@@ -367,27 +367,14 @@ public final class TwoIntegerConstraints<A> {
     }
 
     /**
-     * {@code ratio} as a whole numerator over a positive whole denominator, or null where it is
-     * not worked out: the exact ratio carries powers of two and five beside its fraction.
+     * {@code ratio} as a whole numerator over a positive whole denominator in lowest terms, which
+     * the ratio says ({@link ExactRatio#asTerms}); null where either is too large to hold.
      */
     private static BigInteger[] fractionOf(ExactRatio ratio) {
-        BigInteger numerator = ratio.numeratorWithoutUnits();
-        BigInteger denominator = ratio.denominatorWithoutUnits();
-        long twos = ratio.twos();
-        long fives = ratio.fives();
-        if (Math.abs(twos) > 4096 || Math.abs(fives) > 4096) {
-            return null;
-        }
-        BigInteger two = BigInteger.TWO;
-        BigInteger five = BigInteger.valueOf(5);
-        numerator = twos >= 0 ? numerator.multiply(two.pow((int) twos)) : numerator;
-        denominator = twos < 0 ? denominator.multiply(two.pow((int) -twos)) : denominator;
-        numerator = fives >= 0 ? numerator.multiply(five.pow((int) fives)) : numerator;
-        denominator = fives < 0 ? denominator.multiply(five.pow((int) -fives)) : denominator;
-        BigInteger shared = numerator.gcd(denominator);
-        if (shared.signum() == 0) {
-            return new BigInteger[] {BigInteger.ZERO, BigInteger.ONE};
-        }
-        return new BigInteger[] {numerator.divide(shared), denominator.divide(shared)};
+        ExactRatio.Terms terms = ratio.asTerms();
+        BigInteger numerator = terms.comesTo().floor().orNull();
+        BigInteger denominator = terms.per().floor().orNull();
+        return numerator == null || denominator == null ? null
+                : new BigInteger[] {numerator, denominator};
     }
 }
