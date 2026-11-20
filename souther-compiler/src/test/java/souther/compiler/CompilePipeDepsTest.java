@@ -46,13 +46,10 @@ class CompilePipeDepsTest {
         // emitted, asked for rather than spelled
         return """
                 package demo;
-                import net.unit8.raoh.Ok;
-                import net.unit8.raoh.Path;
-                import net.unit8.raoh.decode.Decoder;
+                import souther.runtime.Result;
                 public final class %s extends %s {
                     public Mid apply(%s in) {
-                        Decoder d = Mid.decoder();
-                        return (Mid) ((Ok) d.decode("%s", Path.ROOT)).value();
+                        return ((Result.Ok<Mid, ?>) Mid.decoder().decode("%s")).value();
                     }
                 }
                 """.formatted(cls, Emitted.behaviorInterface("demo", param), inType, midValue);

@@ -53,9 +53,10 @@ class ABuildIsAddedToRatherThanRewrittenTest {
 
         assertTrue(edited.contains("<!-- pinned deliberately: see the incident on the 3rd -->"),
                 "the author's comment did not survive the edit");
-        assertEquals(2, elements(edited, "dependency"),
-                "the runtime did not land in the dependencies that were there");
+        assertEquals(3, elements(edited, "dependency"),
+                "the runtime and its binding did not land in the dependencies that were there");
         assertTrue(edited.contains("<artifactId>souther-runtime</artifactId>"), edited);
+        assertTrue(edited.contains("<artifactId>souther-raoh</artifactId>"), edited);
         assertEquals(1, elements(edited, "plugin"));
         assertEquals("com.acme:billing", MavenBuild.coordinateOf(edited).toString());
         // The plugin reads the Souther off the runtime the pom now names, and takes no version of
@@ -101,12 +102,18 @@ class ABuildIsAddedToRatherThanRewrittenTest {
         assertEquals(1, elements(edited, "plugins"));
     }
 
-    /** Running it again writes nothing: the same text comes back, so nothing is written at all. */
+    /**
+     * Running it again writes nothing: the same text comes back, so nothing is written at all. A
+     * pom that names the runtime and reads through another binding is not given Raoh's either.
+     */
     @Test
     void aPomThatAlreadyDeclaresSoutherComesBackUnchanged() {
         String once = MavenBuild.withSoutherDeclared(POM, "9.9.9");
+        String another = once.replace("<artifactId>souther-raoh</artifactId>",
+                "<artifactId>souther-yavi</artifactId>");
 
         assertSame(once, MavenBuild.withSoutherDeclared(once, "9.9.9"));
+        assertSame(another, MavenBuild.withSoutherDeclared(another, "9.9.9"));
     }
 
     /**
@@ -143,8 +150,10 @@ class ABuildIsAddedToRatherThanRewrittenTest {
                 "a second plugins block, which Gradle refuses:\n" + edited);
         assertEquals(GradleBuild.Applied.ALREADY, GradleBuild.appliedIn(edited, true));
         assertEquals("com.acme", GradleBuild.groupOf(edited, true));
-        assertTrue(edited.endsWith("souther {\n    southerVersion = \"9.9.9\"\n}\n"),
+        assertTrue(edited.contains("souther {\n    southerVersion = \"9.9.9\"\n}\n"),
                 "the plugin is not told which Souther to compile with:\n" + edited);
+        assertTrue(edited.contains("    implementation(\"org.souther-lang:souther-raoh:9.9.9\")\n}\n"),
+                "the decoder binding is not declared at the Souther compiled with:\n" + edited);
     }
 
     /**
@@ -211,6 +220,7 @@ class ABuildIsAddedToRatherThanRewrittenTest {
 
         assertTrue(edited.contains("id 'org.souther-lang.souther' version"), edited);
         assertTrue(edited.contains("southerVersion = '9.9.9'"), edited);
+        assertTrue(edited.contains("implementation 'org.souther-lang:souther-raoh:9.9.9'"), edited);
     }
 
     /**

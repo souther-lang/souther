@@ -21,7 +21,7 @@ import static souther.compiler.codegen.Descriptors.*;
  * answer ({@code Backend.generatePipe}), the field a Java-supplied factory
  * ({@code Backend.emitDataFactory}) hands {@code __construct}, and the arguments and answer an
  * {@code ensures} check reads at a crossing ({@code Backend.emitCheckingApply}). A decoder's own
- * leaf ({@code CodecGen.emitStringLeaf}) and the compiler's two original boundary doors
+ * leaf ({@code Decoding.string}) and the compiler's two original boundary doors
  * ({@code Reserved.name}/{@code CanonicalNames.name}, a source literal) are the same invariant
  * established a different way and are not this class's business.
  *

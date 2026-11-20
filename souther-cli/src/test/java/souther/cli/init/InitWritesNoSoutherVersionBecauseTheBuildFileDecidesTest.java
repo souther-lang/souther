@@ -30,23 +30,27 @@ class InitWritesNoSoutherVersionBecauseTheBuildFileDecidesTest {
                 "-d", directory.toString()}, Locale.ENGLISH, said, said, directory, "9.9.9", null);
     }
 
+    /** The decoder binding the build declares is at the Souther the build names, too. */
     @Test
-    void aMavenProjectIsWrittenWithoutOne(@TempDir Path parent) {
+    void aMavenProjectIsWrittenWithoutOne(@TempDir Path parent) throws Exception {
         Path project = parent.resolve("maven");
 
         assertEquals(0, init(project, "maven"));
 
-        assertTrue(Files.exists(project.resolve("pom.xml")));
+        String pom = Files.readString(project.resolve("pom.xml"));
+        assertTrue(pom.contains("<artifactId>souther-raoh</artifactId>\n"
+                + "            <version>${souther.version}</version>"), pom);
         assertFalse(Files.exists(project.resolve(VERSION_FILE)));
     }
 
     @Test
-    void aGradleProjectIsWrittenWithoutOne(@TempDir Path parent) {
+    void aGradleProjectIsWrittenWithoutOne(@TempDir Path parent) throws Exception {
         Path project = parent.resolve("gradle");
 
         assertEquals(0, init(project, "gradle"));
 
-        assertTrue(Files.exists(project.resolve("build.gradle.kts")));
+        String script = Files.readString(project.resolve("build.gradle.kts"));
+        assertTrue(script.contains("implementation(\"org.souther-lang:souther-raoh:9.9.9\")"), script);
         assertFalse(Files.exists(project.resolve(VERSION_FILE)));
     }
 }

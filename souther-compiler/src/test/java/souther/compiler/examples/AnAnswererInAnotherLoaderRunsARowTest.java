@@ -5,9 +5,8 @@ import souther.compiler.execute.EvaluationPolicy;
 import souther.compiler.execute.jvm.JvmDeadlines;
 import souther.compiler.observe.Observations;
 import souther.compiler.observe.ArmObservation;
-import net.unit8.raoh.Ok;
-import net.unit8.raoh.Result;
-import net.unit8.raoh.decode.Decoder;
+import souther.runtime.Result;
+import souther.runtime.boundary.Decoder;
 
 import org.junit.jupiter.api.Test;
 
@@ -189,11 +188,9 @@ class AnAnswererInAnotherLoaderRunsARowTest {
                 Class<?> amount = mine.loadClass("example.crossing.金額");
                 java.lang.reflect.Method decoder = amount.getDeclaredMethod("decoder");
                 decoder.setAccessible(true);
-                @SuppressWarnings("unchecked")
-                Decoder<Object, ?> d = (Decoder<Object, ?>) decoder.invoke(null);
-                Result<?> read = d.decode(neutral.read(), net.unit8.raoh.Path.ROOT);
-                assertInstanceOf(Ok.class, read, "the neutral form is what a derived decoder reads");
-                return ((Ok<?>) read).value();
+                Result<?, ?> read = ((Decoder<?>) decoder.invoke(null)).decode(neutral.read());
+                return assertInstanceOf(Result.Ok.class, read,
+                        "the neutral form is what a derived decoder reads").value();
             } catch (ReflectiveOperationException e) {
                 throw new IllegalStateException(e);
             }

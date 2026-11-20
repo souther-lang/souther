@@ -1,8 +1,7 @@
 package souther.compiler.examples;
 
-import net.unit8.raoh.Ok;
-import net.unit8.raoh.Path;
-import net.unit8.raoh.decode.Decoder;
+import souther.runtime.Result;
+import souther.runtime.boundary.Decoder;
 
 import org.junit.jupiter.api.Test;
 
@@ -83,11 +82,10 @@ class AValueWearsTheEnvelopeThePositionReadsItThroughTest {
         return value(compilation, type, written);
     }
 
-    @SuppressWarnings("unchecked")
     private static Object value(Compilation from, String type, Object written) throws Exception {
-        Decoder<Object, ?> decoder = (Decoder<Object, ?>) from.loader()
+        Decoder<?> decoder = (Decoder<?>) from.loader()
                 .loadClass("demo." + type).getMethod("decoder").invoke(null);
-        return ((Ok<?>) decoder.decode(written, Path.ROOT)).value();
+        return ((Result.Ok<?, ?>) decoder.decode(written)).value();
     }
 
     private Object approved() throws Exception {

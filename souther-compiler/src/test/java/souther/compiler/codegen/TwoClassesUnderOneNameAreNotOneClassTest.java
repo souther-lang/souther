@@ -5,7 +5,6 @@ import souther.compiler.EmittedBytes;
 import org.junit.jupiter.api.Test;
 import souther.compiler.generated.ProbeImage;
 import souther.compiler.jvm.ClassFileImage;
-import souther.compiler.jvm.DecoderKind;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
@@ -143,7 +142,7 @@ class TwoClassesUnderOneNameAreNotOneClassTest {
         Emissions out = new Emissions("demo", new ProbeImage.Uninstrumented());
         out.put(QUOTE_DATA, EmittedBytes.of(QUOTE_DATA, "first"));
         GeneratedClass.Encoder encoder = new GeneratedClass.Encoder(QUOTE_DATA);
-        GeneratedClass.Decoder decoder = new GeneratedClass.Decoder(QUOTE_DATA, DecoderKind.JSON);
+        GeneratedClass.Decoder decoder = new GeneratedClass.Decoder(QUOTE_DATA);
         GeneratedClass.BehaviorInterface price =
                 new GeneratedClass.BehaviorInterface("demo", "price");
         out.putAll(Map.of(encoder, EmittedBytes.of(encoder)));
@@ -151,7 +150,7 @@ class TwoClassesUnderOneNameAreNotOneClassTest {
         out.put(price, EmittedBytes.of(price));
         assertEquals(java.util.Set.of(Emitted.value("demo", "Quote"),
                         Emitted.encoder("demo", "Quote"),
-                        Emitted.decoder("demo", "Quote", DecoderKind.JSON),
+                        Emitted.decoder("demo", "Quote"),
                         Emitted.behaviorInterface("demo", "price")),
                 out.seal().keySet());
     }

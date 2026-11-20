@@ -5,9 +5,6 @@ import net.unit8.raoh.Result;
 
 import org.junit.jupiter.api.Test;
 
-import java.lang.reflect.Method;
-import java.lang.reflect.ParameterizedType;
-import java.lang.reflect.Type;
 import java.util.List;
 import java.util.Map;
 
@@ -115,34 +112,11 @@ class CompileNewtypeTest {
                 getClass().getClassLoader());
     }
 
-    private static Type inputOfTheDecoder(ClassLoader loader, String className) throws Exception {
-        Method factory = loader.loadClass(className).getMethod("decoder");
-        Type in = ((ParameterizedType) factory.getGenericReturnType()).getActualTypeArguments()[0];
-        return in instanceof ParameterizedType p ? p.getRawType() : in;
-    }
-
     private static List<String> issuesOf(Result<?> r) {
         return ((Err<?>) r).issues().asList().stream()
                 .map(i -> i.code() + " at " + i.path().toJsonPointer())
                 .sorted()
                 .toList();
-    }
-
-    @Test
-    void anObjectsAndADiscriminatedSumsDecodersAreHandedAMap() throws Exception {
-        BytesClassLoader loader = overWhatIsHandedAMap();
-
-        assertEquals(List.of(Map.class, Map.class),
-                List.of(inputOfTheDecoder(loader, "demo.Inner"), inputOfTheDecoder(loader, "demo.Shape")));
-    }
-
-    @Test
-    void aNewtypesDecoderIsHandedWhateverArrivesWhateverItWraps() throws Exception {
-        BytesClassLoader loader = overWhatIsHandedAMap();
-
-        assertEquals(List.of(Object.class, Object.class, Object.class),
-                List.of(inputOfTheDecoder(loader, "demo.Wrap"), inputOfTheDecoder(loader, "demo.Rewrap"),
-                        inputOfTheDecoder(loader, "demo.Shaped")));
     }
 
     @Test

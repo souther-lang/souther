@@ -12,7 +12,7 @@ import java.util.List;
  * rows were run: a diagnostic, an outcome per row, and what stopped the observing are what the
  * language asked about, so a caller reading them does not compile against whatever ran them.
  *
- * <p>Not named {@code Result} because {@code net.unit8.raoh.Result} is what a decoder answers with
+ * <p>Not named {@code Result} because {@code souther.runtime.Result} is what a decoder answers with
  * here, and taking that spelling would take it away from it.
  */
 public record Observations(List<Diagnostic> failures, List<RowOutcome> rows,

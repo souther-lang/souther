@@ -1,9 +1,8 @@
 package souther.compiler.check;
 
 import net.unit8.notation199x.pattern.PatternMeaning;
-import net.unit8.raoh.Ok;
-import net.unit8.raoh.Path;
-import net.unit8.raoh.decode.Decoder;
+import souther.runtime.Result;
+import souther.runtime.boundary.Decoder;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.Compiler;
@@ -125,7 +124,7 @@ class WhichArgumentsAStringPredicateNamesAreOnesItsDeclarationHasTest {
     }
 
     /** One compiled module, run on a row's string, answering whether its guard held. */
-    private record Runs(Behavior<Object, Object> behavior, Decoder<Object, ?> decoder) {
+    private record Runs(Behavior<Object, Object> behavior, Decoder<?> decoder) {
 
         @SuppressWarnings("unchecked")
         static Runs of(String module) throws Exception {
@@ -143,12 +142,12 @@ class WhichArgumentsAStringPredicateNamesAreOnesItsDeclarationHasTest {
             };
             return new Runs((Behavior<Object, Object>) Emitted.behavior(loader, "demo", "run")
                     .getConstructor().newInstance(),
-                    (Decoder<Object, ?>) loader.loadClass("demo.In").getMethod("decoder")
+                    (Decoder<?>) loader.loadClass("demo.In").getMethod("decoder")
                             .invoke(null));
         }
 
         boolean holds(String s) {
-            Object in = ((Ok<?>) decoder.decode(Map.of("s", s), Path.ROOT)).value();
+            Object in = ((Result.Ok<?, ?>) decoder.decode(Map.of("s", s))).value();
             return !behavior.apply(in).getClass().getSimpleName().endsWith("Missed");
         }
     }

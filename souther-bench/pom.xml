@@ -32,15 +32,10 @@
         </dependency>
         <!-- souther-runtime is `provided` in souther-compiler. The benchmark needs it present: without
              it the generated classes will not load, every example row is skipped, and the measurement
-             would report a compile that did half the work. Raoh is there for the same reason — a
-             derived decoder is built on it. -->
+             would report a compile that did half the work. -->
         <dependency>
             <groupId>org.souther-lang</groupId>
             <artifactId>souther-runtime</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>net.unit8.raoh</groupId>
-            <artifactId>raoh</artifactId>
         </dependency>
         <!-- Called from here: the report measurement asks the formatter what a source has against
              its canonical form, which is a cost this module times like any other. -->

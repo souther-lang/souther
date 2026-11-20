@@ -4,7 +4,6 @@ import net.unit8.raoh.Err;
 import net.unit8.raoh.Issue;
 import net.unit8.raoh.Ok;
 import net.unit8.raoh.Result;
-import net.unit8.raoh.decode.Decoder;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -17,10 +16,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 /**
- * Per-source decoder generation (spec §codec-generation): each data whose shape supports it gets a
- * {@code jsonDecoder()} (reads a Jackson {@code JsonNode}) and a {@code recordDecoder()}
- * (reads a jOOQ {@code Record}) beside the neutral {@code decoder()}. This exercises the
- * JSON source end-to-end; the jOOQ {@code $DecRecord} is loaded to verify its bytecode.
+ * A derived decoder reading a Jackson tree (spec §codec-generation, §raoh-binding): the one
+ * {@code decoder()} a type has, handed the binding's reader of {@code JsonNode}.
  */
 class CompileJsonSourceTest {
 
@@ -49,7 +46,7 @@ class CompileJsonSourceTest {
     void jsonDecoderReadsAJsonNodeObject() throws Exception {
         BytesClassLoader loader = compile();
         JsonNode node = mapper.readTree("{\"id\":\"acc-1\",\"balance\":100,\"owner\":\"bob\"}");
-        Result<?> r = Codecs.decode(loader, "demo.Account", "jsonDecoder", node);
+        Result<?> r = Codecs.decode(loader, "demo.Account", Codecs.JSON,node);
 
         assertInstanceOf(Ok.class, r, "a valid JSON object decodes to Ok");
     }
@@ -59,7 +56,7 @@ class CompileJsonSourceTest {
         BytesClassLoader loader = compile();
         // id is a number (expected string), balance is a string (expected long), owner is missing.
         JsonNode node = mapper.readTree("{\"id\":5,\"balance\":\"nope\"}");
-        Result<?> r = Codecs.decode(loader, "demo.Account", "jsonDecoder", node);
+        Result<?> r = Codecs.decode(loader, "demo.Account", Codecs.JSON,node);
 
         assertInstanceOf(Err.class, r);
         assertEquals(3, ((Err<?>) r).issues().asList().size(), "all three field errors accumulate");
@@ -67,7 +64,7 @@ class CompileJsonSourceTest {
 
     @Test
     void jsonDecoderDiscriminatesASum() throws Exception {
-        Result<?> r = Codecs.decode(compile(), "demo.Application", "jsonDecoder",
+        Result<?> r = Codecs.decode(compile(), "demo.Application", Codecs.JSON,
                 mapper.readTree("{\"type\":\"Submitted\",\"note\":\"hi\"}"));
 
         assertInstanceOf(Ok.class, r);
@@ -76,8 +73,7 @@ class CompileJsonSourceTest {
 
     @Test
     void jsonDecoderReadsTemporalFields() throws Exception {
-        // A Date/DateTime field is read from a JSON string via Raoh's string().date()/dateTime(),
-        // so a temporal-bearing type is JSON-decodable (previously its jsonDecoder was skipped).
+        // A Date/DateTime field is read from a JSON string.
         String src = """
                 module demo
                 data Event = { name: String, on: Date, at: DateTime }
@@ -85,7 +81,7 @@ class CompileJsonSourceTest {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
         JsonNode node = mapper.readTree(
                 "{\"name\":\"launch\",\"on\":\"2020-01-15\",\"at\":\"2020-01-15T09:30:00\"}");
-        Result<?> r = Codecs.decode(loader, "demo.Event", "jsonDecoder", node);
+        Result<?> r = Codecs.decode(loader, "demo.Event", Codecs.JSON,node);
 
         assertInstanceOf(Ok.class, r, "a JSON temporal string decodes to Ok");
     }
@@ -99,7 +95,7 @@ class CompileJsonSourceTest {
                 data Person = { name: String, born: BornOn }
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
-        Result<?> r = Codecs.decode(loader, "demo.Person", "jsonDecoder",
+        Result<?> r = Codecs.decode(loader, "demo.Person", Codecs.JSON,
                 mapper.readTree("{\"name\":\"amy\",\"born\":\"1990-05-01\"}"));
         assertInstanceOf(Ok.class, r);
     }
@@ -143,7 +139,7 @@ class CompileJsonSourceTest {
         for (Node each : nodes) {
             BytesClassLoader loader = new BytesClassLoader(Compiler.compile(each.module()),
                     getClass().getClassLoader());
-            Result<?> r = Codecs.decode(loader, "demo." + each.type(), "jsonDecoder",
+            Result<?> r = Codecs.decode(loader, "demo." + each.type(), Codecs.JSON,
                     mapper.readTree(each.json()));
 
             assertInstanceOf(Err.class, r, each.why());
@@ -169,16 +165,9 @@ class CompileJsonSourceTest {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
 
         assertInstanceOf(Ok.class,
-                Codecs.decode(loader, "demo.Draft", "jsonDecoder", mapper.readTree("{}")));
+                Codecs.decode(loader, "demo.Draft", Codecs.JSON,mapper.readTree("{}")));
         assertInstanceOf(Err.class,
-                Codecs.decode(loader, "demo.Draft", "jsonDecoder", mapper.readTree("5")));
+                Codecs.decode(loader, "demo.Draft", Codecs.JSON,mapper.readTree("5")));
     }
 
-    @Test
-    void recordDecoderBytecodeLoadsAndVerifies() throws Exception {
-        // Constructing a standalone jOOQ Record needs the full jOOQ runtime, so here we just force
-        // the $DecRecord class to load — that verifies its whole bytecode is valid.
-        Object recordDecoder = Codecs.decoder(compile(), "demo.Account", "recordDecoder");
-        assertInstanceOf(Decoder.class, recordDecoder);
-    }
 }

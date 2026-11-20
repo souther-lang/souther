@@ -45,6 +45,13 @@ final class BuildPlugins {
     /** The runtime the generated code calls, at the version of the Souther that generated it. */
     static final String RUNTIME_ARTIFACT = "souther-runtime";
 
+    /**
+     * The decoder binding a project is given: the generated decoders presented and reported in
+     * Raoh's vocabulary. Written into the build rather than added by a plugin, so a project that
+     * reads through another library's binding, or none, removes the line.
+     */
+    static final String RAOH_ARTIFACT = "souther-raoh";
+
     /** The build protocols the releases named above speak. */
     static final Set<Integer> PROTOCOLS = Set.of(1);
 }

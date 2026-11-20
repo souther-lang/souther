@@ -6,7 +6,6 @@ import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.LinkageRecord;
 import souther.compiler.jvm.LinkageTarget;
-import souther.compiler.jvm.DecoderKind;
 import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
@@ -183,12 +182,8 @@ class EveryClassOfAnotherModuleAClassNamesIsOneItRecordsReadingTest {
             case LinkageTarget.Data data -> {
                 GeneratedClass.Value value =
                         new GeneratedClass.Value(TypeSymbols.declared(data.key()));
-                List<GeneratedClass> out = new ArrayList<>(List.of(value,
-                        new GeneratedClass.Encoder(value), new GeneratedClass.Ctfe(value)));
-                for (DecoderKind kind : DecoderKind.values()) {
-                    out.add(new GeneratedClass.Decoder(value, kind));
-                }
-                yield out;
+                yield List.of(value, new GeneratedClass.Encoder(value),
+                        new GeneratedClass.Ctfe(value), new GeneratedClass.Decoder(value));
             }
             case LinkageTarget.Behavior behavior -> {
                 GeneratedClass.BehaviorInterface declared = new GeneratedClass.BehaviorInterface(

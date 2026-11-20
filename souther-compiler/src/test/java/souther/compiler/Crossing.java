@@ -5,11 +5,15 @@ import souther.compiler.generated.JsonBoundary;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.query.Compilation;
+import souther.raoh.RaohBinding;
 
+import net.unit8.raoh.Issue;
+import net.unit8.raoh.Path;
 import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.util.ArrayList;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
@@ -75,13 +79,18 @@ final class Crossing {
                 reading(source, module, behavior, json), json);
     }
 
-    /** The issues' messages, in the order they were found. */
-    static java.util.List<String> messagesOf(JsonBoundary.Read.Refused refused) {
-        return refused.issues().asList().stream().map(net.unit8.raoh.Issue::message).toList();
+    /** The refusals as the Raoh binding says them, in the order they were found. */
+    private static List<Issue> issuesOf(JsonBoundary.Read.Refused refused) {
+        return RaohBinding.issues(refused.refusals(), Path.ROOT).asList();
     }
 
-    /** The JSON pointers the issues stand at, in the order they were found. */
-    static java.util.List<String> pointersOf(JsonBoundary.Read.Refused refused) {
-        return refused.issues().asList().stream().map(i -> i.path().toJsonPointer()).toList();
+    /** The refusals' messages, in the order they were found. */
+    static List<String> messagesOf(JsonBoundary.Read.Refused refused) {
+        return issuesOf(refused).stream().map(Issue::message).toList();
+    }
+
+    /** The JSON pointers the refusals stand at, in the order they were found. */
+    static List<String> pointersOf(JsonBoundary.Read.Refused refused) {
+        return issuesOf(refused).stream().map(i -> i.path().toJsonPointer()).toList();
     }
 }

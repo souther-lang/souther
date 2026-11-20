@@ -182,10 +182,10 @@ class ATemporalTextIsTheLanguagesAndNotTheParsersTest {
             JsonNode fieldsJson = MAPPER.valueToTree(fields);
             JsonNode keysJson = MAPPER.valueToTree(keys);
             assertEquals(r.readAtBoundary(),
-                    Codecs.decode(loader, "demo.In", "jsonDecoder", fieldsJson).isOk(),
+                    Codecs.decode(loader, "demo.In", Codecs.JSON,fieldsJson).isOk(),
                     where + " at a JSON field");
             assertEquals(r.readAtBoundary(),
-                    Codecs.decode(loader, "demo.Keyed", "jsonDecoder", keysJson).isOk(),
+                    Codecs.decode(loader, "demo.Keyed", Codecs.JSON,keysJson).isOk(),
                     where + " under a JSON key");
 
             assertEquals(r.readAtBoundary(), Codecs.decode(loader, "demo.In", fields).isOk(),

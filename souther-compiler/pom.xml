@@ -45,8 +45,7 @@
         <!-- Compile scope, not `provided`: the compiler folds constant text and reads temporal
              literals by the rules the runtime holds (`Strings`, `TextAdmission`, `Temporals`), so it
              needs this present to run at all, not only for CTFE's generated `$Ctfe.check` class and
-             the `Fn` a lambda-bearing invariant's bytecode references. Raoh stays test-only — CTFE
-             runs the bare invariant, not the Raoh-returning decoder/__construct. -->
+             the `Fn` a lambda-bearing invariant's bytecode references. -->
         <dependency>
             <groupId>org.souther-lang</groupId>
             <artifactId>souther-runtime</artifactId>
@@ -57,36 +56,22 @@
             <groupId>net.unit8.199x</groupId>
             <artifactId>notation-199x</artifactId>
         </dependency>
-        <!-- raoh core: the derived decoders/encoders `souther run` drives through (Runner), and the
-             leaf codecs for primitive-typed inputs/outputs. -->
-        <dependency>
-            <groupId>net.unit8.raoh</groupId>
-            <artifactId>raoh</artifactId>
-        </dependency>
-        <!-- raoh-json: the `souther run` input is JSON, so it decodes with the JSON source: the
-             same decoders the boundary reads JSON with, where a temporal is a parsed string rather
-             than a java.time value (issue #119). -->
-        <dependency>
-            <groupId>net.unit8.raoh</groupId>
-            <artifactId>raoh-json</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>net.unit8.raoh</groupId>
-            <artifactId>raoh-jooq</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <!-- Jackson 3: parses the `souther run` input JSON to plain objects and renders the encoded
-             output back to JSON text (Runner); also exercises a generated jsonDecoder() in tests. -->
+        <!-- Jackson 3: parses the `souther run` input JSON to a tree the boundary reads, and renders
+             the encoded output back to JSON text (Runner). -->
         <dependency>
             <groupId>tools.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
         </dependency>
-        <!-- jOOQ (provided by raoh-jooq) is needed at runtime to load/verify a generated
-             recordDecoder()'s $DecRecord bytecode in tests. -->
+        <!-- The Raoh binding: what the tests read a derived decoder's refusals through, from plain
+             values, a Jackson tree and a jOOQ row, in Raoh's codes. -->
+        <dependency>
+            <groupId>org.souther-lang</groupId>
+            <artifactId>souther-raoh</artifactId>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>org.jooq</groupId>
             <artifactId>jooq</artifactId>
-            <version>3.21.9</version>
             <scope>test</scope>
         </dependency>
         <dependency>

@@ -94,7 +94,7 @@ class CompileUnitOnlySumBoundaryTest {
         // reported differs.
         for (Result<?> read : List.of(
                 Codecs.decode(loader, "demo.In", Map.of("byStage", Map.of("Closed", 1L))),
-                Codecs.decode(loader, "demo.In", "jsonDecoder", node))) {
+                Codecs.decode(loader, "demo.In", Codecs.JSON,node))) {
             List<Issue> issues = assertInstanceOf(Err.class, read).issues().asList();
 
             assertEquals(1, issues.size(), issues.toString());
@@ -189,7 +189,7 @@ class CompileUnitOnlySumBoundaryTest {
                 new BytesClassLoader(Compiler.compile(STAGE_FIELD), getClass().getClassLoader());
         JsonNode node = JsonMapper.builder().build().readTree("{\"stage\":\"Lost\"}");
 
-        assertInstanceOf(Ok.class, Codecs.decode(loader, "demo.In", "jsonDecoder", node));
+        assertInstanceOf(Ok.class, Codecs.decode(loader, "demo.In", Codecs.JSON,node));
     }
 
     @Test

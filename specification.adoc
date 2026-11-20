@@ -104,7 +104,7 @@ The type need not be declared in the same module. A behavior constructs what its
 
 Every invariant declared on a `+data+` MUST be checked on every construction path. A value that violates an invariant MUST NOT be returned.
 
-The destination of a violation differs inside and outside the boundary: in a Decoder it becomes a failure of Raoh's `+Result+`; inside the domain it aborts (<<violation-destination>>).
+The destination of a violation differs inside and outside the boundary: in a Decoder it becomes one of the refusals the decode answers with (<<decoder-error>>); inside the domain it aborts (<<violation-destination>>).
 
 [#separate-representation]
 === External representation and internal data are separated
@@ -700,13 +700,13 @@ What crosses a decoder/encoder boundary is decided by representation, and these 
 * [[a-boundary-carries-the-models-own-vocabulary]]a named type that crosses MUST be one a model declares. The language declares vocabulary of its own — the case a division by zero answers with, the rounding mode a `+Decimal+` operation takes — and those name what an operation can answer or take, not what a behavior publishes. A model that has such a case to report declares its own and names it (`+-> Int | Undivided+`), which is what keeps the behavior's protocol independent of how the language accounts for itself;
 * [[a-collection-member-supports-equality]]a `+Set+`'s element and a `+Map+`'s key MUST support equality. Both ask whether two of them are the same, and a function has no value to compare (<<equality>>).
 
-The external representation handled by Decoders and Encoders is not Souther's own types but the neutral value model of the boundary library Raoh (a tree of scalar / List / Map). Souther owns the domain's types, invariants, and behaviors, and owns which representation is admitted as each scalar (<<a-boundary-scalar-is-read-not-converted>>, <<temporal-text>>, <<string-canonical>>); the rest of the external representation — reading the tree, building the values once a scalar is admitted, and generating the output — is delegated to the peripheral library Raoh (<<separate-representation>>, <<decoder>>).
+The external representation handled by Decoders and Encoders is not Souther's own types but a neutral value model: a tree of scalars, lists and maps. Souther owns the domain's types, invariants, and behaviors; it owns which representation is admitted as each scalar (<<a-boundary-scalar-is-read-not-converted>>, <<temporal-text>>, <<string-canonical>>), what a decode of each data admits and refuses (<<decoder-derivation>>, <<what-a-refusal-says>>), and what an encode writes (<<encoder-derivation>>; <<separate-representation>>). Which tree a decoder is handed, and the vocabulary a refusal is reported in where an application works in a decoder library, are not the model's: a reader gives the tree (<<a-decoder-reads-through-a-reader>>), and a decoder binding reports the refusals (<<decoder-binding>>).
 
 [[an-object-is-a-mapping]]An object in the external representation is a mapping from member names to values. The order its members are held or written in is not part of it; an array's order is. Two objects are one representation when they have the same names and one representation under each name. An object written out in this specification shows which members it has, and the order they appear in there decides nothing. Its names are strings: an input whose map holds a key of another type is refused at the map's path and is not carried into the value, whatever the type the position asks for is (<<collections>>).
 
-From a data's shape, Souther derives the decode side per input source (bare values / Map = raoh-core, JSON `+JsonNode+` = raoh-json, jOOQ `+Record+` = raoh-jooq) and the encode side to a neutral Map (raoh-core). The decode skeleton (fields, keys, discriminator) is common across sources; only the terminal field access varies per source. JSON output serializes the Map at the boundary (`+objectMapper.valueToTree+`, etc.; <<codec-generation>>).
+From a data's shape, Souther derives the decode side and the encode side to a neutral Map. The decode skeleton (fields, keys, discriminator) is one whatever the input source is; only the terminal field access varies per source, through the reader of that source's tree (<<a-decoder-reads-through-a-reader>>). JSON output serializes the Map at the boundary (`+objectMapper.valueToTree+`, etc.; <<codec-generation>>).
 
-An external representation may contain null, but internal data forbids null. null exists only at the boundary (Raoh's input) and MUST NOT pass through a Decoder into the domain.
+An external representation may contain null, but internal data forbids null. null exists only at the boundary (the reader's input) and MUST NOT pass through a Decoder into the domain.
 
 [[a-boundary-scalar-is-read-not-converted]]A scalar that arrives at a boundary MUST determine, from itself alone and without losing any of it, the scalar value the position asks for. A decoder reads a representation as a domain value, and it MUST NOT make up a different value from one that the representation does not determine: it does not truncate, round or wrap it, read it as a scalar of another kind, or look at the state of the machine that runs it. A value made up on the way in is one nothing downstream can tell from the value that was sent (<<a-local-temporal-is-held-to-the-second>>, and the `+Int+` that aborts on overflow rather than wrapping, <<primitives>>). What a type's own specification says is read another way is not made up: a temporal's text names its moment (<<temporal-text>>), and a `+String+` is read as its NFC form (<<string-canonical>>).
 
@@ -938,7 +938,7 @@ If the author wants to return the violation, that is a business judgment and MUS
 
 That judgment MAY be written by *attempting* the construction (<<attempted-construction>>), which states the rule once instead of restating it in the guard. What the attempt answers is a branch, not a value: no failure value reaches the domain, and the name a business failure gets is still the one the author writes in `+else+`.
 
-A decode-side violation does not abort; Raoh's `+Result+` failure carries it (<<decoder-error>>). The same invariant is handled differently inside and outside the boundary.
+A decode-side violation does not abort; the decode answers it as a refusal (<<decoder-error>>). The same invariant is handled differently inside and outside the boundary.
 
 ==== How Option appears
 
@@ -1004,11 +1004,11 @@ Wrapping in `+Some+` and `+None+` are not data construction, so `+constructs+` i
 
 Outside a field, `+?+` is written only in the shipped core (<<algebraic-types>>); a user model marks nothing else with it, and names the type where it reads one.
 
-The Decoder's external type is (Raoh's Decoder):
+The Decoder's external type is:
 
 [,text]
 ----
-Decoder<T> = external representation -> Result<T>    // failure carries Raoh's Issues
+Decoder<T> = external representation -> T or refusals    // each refusal: a path and why
 ----
 
 [#data]
@@ -1437,7 +1437,7 @@ Forbidden: Decoder, Encoder, data construction, `+partial+` recursion, `+unreach
 
 The same invariant is handled differently depending on where it breaks.
 
-* *Decoder (boundary)*: the violation enters a failure (`+Issue+`) of Raoh's `+Result+` (<<decoder-error>>). A value that came from outside was invalid — an *expected result*. Which field broke it can be stated via `+path+` and `+code+`.
+* *Decoder (boundary)*: the violation becomes a refusal the decode answers with (<<decoder-error>>). A value that came from outside was invalid — an *expected result*. Which field broke it, and which rule, can be stated: the refusal carries its path and what it says (<<what-a-refusal-says>>).
 * *behavior (inside the domain)*: it *aborts* (<<algebraic-types>>). A computation among validated values broke a rule — a *model bug*.
 
 [,souther]
@@ -2121,18 +2121,18 @@ When a value's validity is guaranteed *outside* the language — a Java-side or 
 [#decoder-role]
 === Role
 
-A Decoder is the boundary that constructs internal data from external input. It implements the spec DSL's parse-don't-validate (validate raw data at the boundary and construct a domain type only on success). Souther derives a Raoh Decoder from a data's shape. The derived Decoder reads an external representation (<<external-representation>>) and, on success, constructs T; failure is represented by Raoh's `+Result+` (the failure side carrying `+Issues+`).
+A Decoder is the boundary that constructs internal data from external input. It implements the spec DSL's parse-don't-validate (validate raw data at the boundary and construct a domain type only on success). Souther derives a Decoder from a data's shape. The derived Decoder reads an external representation (<<external-representation>>) and, on success, constructs T; on failure it answers the refusals, each saying where the input was refused and why (<<decoder-error>>).
 
 [,text]
 ----
-MemberId.decoder() : Decoder<MemberId>     // external representation -> Result<MemberId> (failure = Raoh Issues)
+MemberId.decoder() : Decoder<MemberId>     // external representation -> MemberId or refusals
 ----
 
-A decode failure is not a Souther domain type. Malformed input is not a business result but a boundary concern (<<unmarked-sum>>), so it is not listed among domain sum cases but placed on the failure side of Raoh's `+Result+`. Decode is not a behavior but the edge of the boundary and is not a `+>->+` stage (<<sequential-composition>>). Composition in the domain world is done only with behaviors and `+>->+`.
+A decode failure is not a Souther domain type. Malformed input is not a business result but a boundary concern (<<unmarked-sum>>), so it is not listed among domain sum cases but answered as a refusal. Decode is not a behavior but the edge of the boundary and is not a `+>->+` stage (<<sequential-composition>>). Composition in the domain world is done only with behaviors and `+>->+`.
 
-A derived Decoder is handed the external representation a reader built, and answers for what it was handed. What the reader could not build is the reader's: a JSON number whose exponent no `+BigDecimal+` keeps never reaches `+jsonDecoder()+`, and a caller that parses its own document gets the failure its own reader gives, which on the JVM is a run short of room and not a refusal of the value (<<jvm-abort>>). A decoder does not recover a precision the reader had already lost, and does not stand in for a reader that threw. A reader MUST NOT keep one of two values written under the same member name and drop the other before the decoder is handed the object, so `souther run` refuses a JSON object that names a member twice (`run.input.duplicate`) and does not read it as the last of them. Spellings that carry the same value — an escape in a string, the case of an exponent — are the reader's to normalise.
+A derived Decoder is handed the external representation a reader built, and answers for what it was handed. What the reader could not build is the reader's: a JSON number whose exponent no `+BigDecimal+` keeps never reaches a decoder of JSON, and a caller that parses its own document gets the failure its own reader gives, which on the JVM is a run short of room and not a refusal of the value (<<jvm-abort>>). A decoder does not recover a precision the reader had already lost, and does not stand in for a reader that threw. A reader MUST NOT keep one of two values written under the same member name and drop the other before the decoder is handed the object, so `souther run` refuses a JSON object that names a member twice (`run.input.duplicate`) and does not read it as the last of them. A decoder binding that reads text into the tree — one that parses a JSON document before decoding it (<<decoder-binding>>) — is a reader in this sense and is held to the same. Spellings that carry the same value — an escape in a string, the case of an exponent — are the reader's to normalise.
 
-A Decoder does not appear in Souther's syntax. A default Decoder is derived from a data's field names and types. A data definition writes only `+data+` / `+invariant+` / `+behavior+`. This keeps the mapping to external representation (key names, normalization, discriminators) out of domain definitions. When the default derivation is insufficient, a custom Decoder is written on the boundary side (Java / Raoh) (<<custom-codec>>).
+A Decoder does not appear in Souther's syntax. A default Decoder is derived from a data's field names and types. A data definition writes only `+data+` / `+invariant+` / `+behavior+`. This keeps the mapping to external representation (key names, normalization, discriminators) out of domain definitions. When the default derivation is insufficient, a custom Decoder is written on the boundary side, in Java (<<custom-codec>>).
 
 [#decoder-derivation]
 === Derivation rules
@@ -2145,8 +2145,8 @@ The default Decoder is derived from a data's shape by the following conventions.
 * A unit data (<<unit-data>>) reads nothing: its Decoder answers the unit's one value and does not look at what it is given. The `+{}+` its Encoder writes therefore reads back as it (<<round-trip>>), and so does anything else. Under a sum it is the discriminator, or the enumeration's name, that decides a unit case was there (<<sum-discrimination>>).
 * `+List<T>+` is read element by element with `+T+`'s derived Decoder.
 * `+T?+` (Option; <<optional>>) at a field is `+None+` if the key is absent or the value is `+null+`, and `+Some+`-wrapped after reading `+T+` if a value is present. Where an optional stands with no key of its own — a `+List+`'s or a `+Set+`'s element, a `+Map+`'s value — `+null+` is the whole of what `+None+` is read from (<<absence-is-written-as-null>>).
-* Invariants are checked on construction; a violation becomes a failure (`+Issue+`) of Raoh's `+Result+`. Because decode always succeeds or fails, the destination of a violation always exists (<<violation-destination>>).
-* Errors of independent fields are accumulated (Applicative; <<case-propagation>>). Accumulation is handled by Raoh combinators.
+* Invariants are checked on construction; a violation becomes a refusal (<<decoder-error>>). Because decode always succeeds or fails, the destination of a violation always exists (<<violation-destination>>).
+* Errors of independent fields are accumulated (Applicative; <<case-propagation>>). Accumulation is the derived decoder's own, whatever reads the input (<<codec-generation>>).
 
 [,souther]
 ----
@@ -2169,7 +2169,7 @@ The invariant check on construction and spread (`+...+`) follow the same semanti
 [#sum-discrimination]
 === Discrimination of sum data
 
-The derived Decoder of a sum data reads the discriminator field `+"type"+` and dispatches to the case's derived Decoder. The tag is the case name. A tag that names no case fails at the discriminator's path with Raoh's `+not_allowed+`, its `+allowed+` the case names in code point order: what Raoh's `+discriminate+` reports.
+The derived Decoder of a sum data reads the discriminator field `+"type"+` and dispatches to the case's derived Decoder. The tag is the case name. A tag that names no case is refused at the discriminator's path as *not one of the names*, carrying the case names in code point order (<<what-a-refusal-says>>).
 
 [,souther]
 ----
@@ -2177,7 +2177,7 @@ data TravelRequest = Drafting | Submitted | AwaitingPreApproval | PreApproved
 // derived Decoder: reads "type" and dispatches "Drafting" -> Drafting, "Submitted" -> Submitted, ...
 ----
 
-A sum every one of whose cases is a unit data (folded to the leaves) is an *enumeration*: it carries nothing but which case it is, so it travels as that case's name — a bare string — and not as an object holding a discriminator alone. The name is the form of the enumeration, written wherever the enumeration is the declared type — a field, an element, a `+Map+`'s key — and not the form of the unit case: a unit declared on its own writes `+{}+` (<<a-unit-writes-an-empty-object>>), and one unit may be a case of several sums, some of them enumerations and some not. That the enumeration writes one form in every such position is what lets it key a `+Map+` at the boundary (<<collections>>): a JSON object's key cannot be an object. A name no case answers to fails the decode at that value's path with `+not_allowed+`, its `+allowed+` the case names in code point order and its `+actual+` the name that was written. That is what Raoh's `+oneOf+` over strings reports, and it is the constraint that states the same rule: a name is compared exactly, case and all. Raoh's `+enum+` is not, since it folds ASCII case and would read `+won+` as `+Won+`. One field-bearing case is enough to make the sum an object with `+"type"+` again.
+A sum every one of whose cases is a unit data (folded to the leaves) is an *enumeration*: it carries nothing but which case it is, so it travels as that case's name — a bare string — and not as an object holding a discriminator alone. The name is the form of the enumeration, written wherever the enumeration is the declared type — a field, an element, a `+Map+`'s key — and not the form of the unit case: a unit declared on its own writes `+{}+` (<<a-unit-writes-an-empty-object>>), and one unit may be a case of several sums, some of them enumerations and some not. That the enumeration writes one form in every such position is what lets it key a `+Map+` at the boundary (<<collections>>): a JSON object's key cannot be an object. A name no case answers to fails the decode at that value's path as *not one of the names*, carrying the case names in code point order and the name that was written (<<what-a-refusal-says>>). A name is compared exactly, case and all: `+won+` is not `+Won+`. One field-bearing case is enough to make the sum an object with `+"type"+` again.
 
 [,souther]
 ----
@@ -2212,7 +2212,7 @@ data Staff // unit
 // derived: Manager -> {"type":"Manager","value":3}, Staff -> {"type":"Staff"}
 ----
 
-This maps directly onto Raoh's `+discriminate("type", …)+`. The discriminator selects `+"Manager"+` and hands that case's decoder what is under `+"value"+` — the bare `+3+` — while a product case is handed the Object itself and reads its fields there. Each case's decoder reads what the case is on its own, and the sum's decoder takes the contents out of where membership put them. A standalone newtype (not a sum case) stays bare (`+3+`); the `+"value"+` wrapping is what membership in a sum adds, so a newtype's own representation does not change when some sum names it.
+The derived decoder of a sum is a dispatch on the discriminator over the decoders of its leaves. The discriminator selects `+"Manager"+` and hands that case's decoder what is under `+"value"+` — the bare `+3+` — while a product case is handed the Object itself and reads its fields there. Each case's decoder reads what the case is on its own, and the sum's decoder takes the contents out of where membership put them. A standalone newtype (not a sum case) stays bare (`+3+`); the `+"value"+` wrapping is what membership in a sum adds, so a newtype's own representation does not change when some sum names it.
 
 Folding to the leaf concerns nested *sums*; a newtype case stops there. A newtype is not a sum, so making `+data InsufficientAuthority = Rank+` (Rank is a sum) a case of `+PreApprovalReason+` yields `+{"type":"InsufficientAuthority","value":{"type":"Manager","value":3}}+`, where the inner Rank is discriminated independently under `+"value"+`.
 
@@ -2225,50 +2225,112 @@ When the discriminator key or tag is business-specific (reading `+"status"+` and
 
 [[a-codec-reached-for-exists]]`+T.decoder+` and `+T.encode+` MAY be written only where `+T+` has one. Every declaration of a program that compiles has one: a product's is derived from its declared shape, a sum's from what its cases are, and a unit is read and written as the single value it is.
 
-When the default derivation is insufficient (a different key name, normalization, default filling, a business-specific discriminator, persistence version branching), write a Decoder on the Java side that assembles the external representation and calls the data's (invariant-checking) construction. The `+JdbcFindMember+` calling `+Member.decoder()+` in <<java-example>> is this form. External-representation conversion stays confined to the boundary and is not brought into domain definitions.
+When the default derivation is insufficient (a different key name, normalization, default filling, a business-specific discriminator, persistence version branching), write a Decoder on the Java side that assembles the external representation and hands it to the data's derived decoder, or calls the data's (invariant-checking) construction. The `+JdbcFindMember+` decoding a row in <<java-example>> is this form. External-representation conversion stays confined to the boundary and is not brought into domain definitions.
 
-A business-specific sum tag does not mean rebuilding the case decoders. Souther generates a public per-case decoder (`+Submitted.decoder()+`) and a sum decoder that is only a `+discriminate("type", …)+` over them (<<sum-discrimination>>). The boundary keeps the per-case decoders and rewrites just that one layer with its own key and tags — reading `+"status"+` and dispatching `+"draft"+` / `+"submitted"+` is `+discriminate("status", variant("draft", Drafting.decoder()), variant("submitted", Submitted.decoder()))+`. Field assembly and invariant checks are reused; only the tag table is written. A newtype case is reached the same way through the key its contents sit under — `+variant("manager", field("value", Manager.decoder()).asDecoder())+` — since its decoder reads what the case is on its own. The encoder side is the mirror of it: a per-case encoder writes what the case is on its own, so a custom sum encoder writes the tag beside it, in the case's own Object where it has one and beside the contents where it does not.
+A business-specific sum tag does not mean rebuilding the case decoders. Souther generates a public per-case decoder (`+Submitted.decoder()+`) and a sum decoder that is only a dispatch on `+"type"+` over them (<<sum-discrimination>>). The boundary keeps the per-case decoders and rewrites just that one layer with its own key and tags — reading `+"status"+` and handing the object to `+Drafting.decoder()+` or `+Submitted.decoder()+` — in Java, or in its decoder library where it works in one (<<raoh-binding>>). Field assembly and invariant checks are reused; only the tag table is written. A newtype case is reached through the key its contents sit under, since its decoder reads what the case is on its own. The encoder side is the mirror of it: a per-case encoder writes what the case is on its own, so a custom sum encoder writes the tag beside it, in the case's own Object where it has one and beside the contents where it does not.
 
 [#decoder-error]
 === Decoder errors
 
-A decode failure is carried by the failure side of Raoh's `+Result+`. An error is a Raoh `+Issue+` (with `+path+` / `+code+` / `+message+`), and failures of independent fields are accumulated (<<case-propagation>>). Souther does not own the *boundary's* failure vocabulary. No domain type such as `+DecodeFailed+` or `+DecodeError+` is introduced; the representation of boundary failure is delegated to the peripheral library Raoh.
+A decode failure is answered as refusals, and the refusals of independent fields are accumulated (<<case-propagation>>). Each refusal is at a path and says why the value there was refused. Why is one of a closed set (<<what-a-refusal-says>>), decided by the derived decoder and not by what read the input. A refusal is a value of the boundary and not of the domain: no domain type such as `+DecodeFailed+` or `+DecodeError+` is introduced, and a model never names one. Nor is a message part of it. How a refusal is said is the reporter's: `+souther run+` says it in Souther's own messages, and a decoder binding in its library's vocabulary — code, message key, message — so that a resolver keyed on that library keeps working (<<decoder-binding>>).
 
-The `+path+` of an error is a JSON Pointer as RFC 6901 writes one, so `+/+` and `+~+` inside a member name are written `+~1+` and `+~0+`: the member `+a/b+` and the member `+b+` of `+a+` are two paths and are not reported as one.
+The path of a refusal is its steps from the root, each a member's name or an element's index, and is written as a JSON Pointer as RFC 6901 writes one, so `+/+` and `+~+` inside a member name are written `+~1+` and `+~0+`: the member `+a/b+` and the member `+b+` of `+a+` are two paths and are not reported as one. A step keeps which of the two it is. The member `+0+` and the element at index 0 are two steps, though a JSON Pointer writes both as `+/0+`, so a reporter whose paths tell a member from an element is handed each as what it is.
 
-This differs from a violation inside the domain (<<algebraic-types>>). A break at the boundary means a value from outside was invalid — an expected result, and which field broke it should be statable (`+path+` and `+code+`), which Raoh holds. A break inside the domain means a computation among validated values broke a rule — a model bug — so it aborts (<<violation-destination>>). The boundary's vocabulary is not brought into the domain, and the domain's vocabulary is not taken out to the boundary.
+This differs from a violation inside the domain (<<algebraic-types>>). A break at the boundary means a value from outside was invalid — an expected result, and which field broke it, and which rule, should be statable. A break inside the domain means a computation among validated values broke a rule — a model bug — so it aborts (<<violation-destination>>). The boundary's vocabulary is not brought into the domain, and the domain's vocabulary is not taken out to the boundary.
 
-At the boundary (HTTP, etc.), the `+Result+` failure is received and mapped to an appropriate response (e.g. 400). The `+MemberController+` branching on the decode `+Result+` in <<java-example>> is this form.
+At the boundary (HTTP, etc.), the refusals are received and mapped to an appropriate response (e.g. 400). The `+JdbcFindMember+` mapping a refused row to a case in <<java-example>> is this form.
 
-==== Codes an invariant produces
+[#what-a-refusal-says]
+==== What a refusal says
 
-A newtype's invariant reaches the boundary as the Raoh constraint that states the same rule, so the failure carries that constraint's `+code+`, its `+messageKey+` and its metadata: `+String.length(value) >= 1+` fails as `+too_short+` with `+min+`, `+String.matches(p, value)+` as `+invalid_format+` with `+pattern+`, the pattern `+p+` evaluates to at compile time (what a carrier's matcher runs is its own and is not what is reported), a numeric bound as `+out_of_range+` with `+min+` / `+max+`, `+List.length(value) >= 1+` as `+too_small+` with `+min+` / `+actual+`, and `+List.allDistinctBy(x -> x, value)+` as `+duplicate_element+` with the duplicates it found. The vocabulary is Raoh's, so a `+MessageResolver+` resolves and localises these without Souther supplying message text. It is keyed on the issue rather than on the code alone: one code covers several constraints — `+out_of_range+` states a lower bound, an upper bound, or both, and `+value > 0+` and `+value >= 0+` carry the same bound — so which constraint rejected the value is what the `+messageKey+` says and the `+code+` cannot. Which type rejected it is told by `+path+`, as for any other decode failure.
+A refusal says one of seven things, and what it carries with it:
 
-`+duplicate_element+` writes the elements it found into its metadata, and Raoh writes there only a value with a message form. So a uniqueness is mapped only where the element has one: a `+String+`, an `+Int+`, a `+Bool+`, a `+Decimal+`, a date or time, a list of those, or a newtype over one of them. A newtype is reported as the value it wraps, which is how the boundary writes it (<<newtype>>) and what its equality reads (<<equality>>): over `+data Sku = String+`, a `+List<Sku>+` names the repeated strings. The elements are still compared as they are; only what the issue holds is unwrapped. Any other element — an optional, a product, a sum, a map, a set, a tuple, a `+Rational+` — has no message form, and its uniqueness is not mapped.
+* *absent* — the position requires a value and the input has none there: the key is missing, or it holds `+null+` where the position is not optional (<<absence-is-written-as-null>>);
+* *not of its kind* — the input holds a value the position does not read: another kind of representation (an array where an object stands, text where a number does), a carrier the language does not admit (<<a-boundary-scalar-is-read-not-converted>>), a number written with a fraction where an `+Int+` stands, an integer past the 64 bits an `+Int+` holds, `+NaN+` or an infinity, an object's key that is not a string (<<an-object-is-a-mapping>>). It carries what the position expected;
+* *not one of the names* — a discriminator's tag, or an enumeration's name, that no case answers to (<<sum-discrimination>>). It carries the case names in code point order and the name that was written;
+* *not in its form* — text the position reads by a form of the language's, which the text is not in: a temporal's text (<<temporal-text>>), a fraction of a second at a `+Time+` or a `+DateTime+` (<<a-local-temporal-is-held-to-the-second>>), text holding half of a surrogate pair (<<a-string-holds-no-half-of-a-surrogate-pair>>), text whose canonical value has no place (<<what-a-string-holds>>);
+* *one key twice* — a map's key that, once decoded, is a key the map already holds: two texts that are one `+String+` once canonical (<<string-canonical>>). It is at the path of the key read after the other, and the map does not keep either value in place of the other;
+* *a constraint* — a newtype's clause the boundary states as a constraint, which the value breaks (<<what-an-invariant-refusal-says>>). It carries the constraint's name and its data;
+* *a clause* — any other clause the value breaks. It carries the rejecting type's declaring module and name and, where the clause was named (<<invariant-clause-name>>), that name — on the JVM, the `+InvariantFailure+` the data's checked construction answers with for the same value (<<jvm-codec>>).
 
-Only a rule with an exact Raoh equivalent is mapped this way. Anything else — a quantifier over a list, a uniqueness under a projection or of elements with no message form, a check across two fields, an object's invariant — runs as the rule it is and fails with the code `+invariant_violation+`, carrying the rejecting type in the metadata — its declaring module as `+module+` and its name as `+type+` — and, where the clause was named (<<invariant-clause-name>>), that name as `+clause+`. The module is its own entry because a type is its module and its name (<<modules>>): two modules may each declare an `+Id+`, and a resolver keyed on the name alone would answer for either. So a boundary failure says which rule was broken and not only that the value was rejected. A clause's name never becomes the `+code+`: the code stays the shared one, so a resolver keyed on Raoh's vocabulary keeps working and the metadata is what it switches on.
+[#what-an-invariant-refusal-says]
+==== What an invariant's refusal says
 
-The clauses are checked in the order they are declared, which is the order construction decides in (<<invariant-mvp>>) — so the boundary and an attempted construction name the same clause for the same value. Whether a clause is mapped is a question about that clause alone: a mapped clause declared after an unmapped one keeps its Raoh code, and is reported by it when it is the first clause the value breaks. Construction re-checks every clause regardless (<<violation-destination>>): the constraints are how a failure is *reported*, not what makes a value valid.
+[[boundary-constraint]]A *constraint* is a bound or a form of the value a newtype wraps, said of that value alone: a `+String+`'s least, greatest or exact length, the whole of a `+String+` matching a pattern, an `+Int+`'s or a `+Decimal+`'s least and greatest value — a bound at nought kept as the positive or the not-negative it was written as —, a `+List+`'s least and greatest size and its elements' distinctness, and a `+Map+`'s least and greatest size. These are the rules a reader of a refusal — a message catalogue, a decoder library's resolver — has a name for, so a refusal of one says the rule and its bound rather than only the type. That a clause *is* a constraint is the checker's claim that the two admit the same values, made once: a constraint weaker than the clause would let through what the clause refuses, and one stronger would refuse at the boundary a value the domain accepts, where it reads as bad input. The derived decoder runs it as the clause it is — a pattern as the machine the class holds (<<a-pattern-runs-as-a-machine-a-class-holds>>) — and only what is reported differs. The set grows as the checker learns to state more clauses exactly, so a constraint's refusal carries its name and its data as plain values — names, numbers, strings, the duplicates found — which can be reported by what does not know that constraint. The data is named and ordered: each value under its name, in the order the constraint states them, its bound before what the value was found to be, so a reporter whose messages take their arguments by position can place them too.
 
-[[a-maps-clauses-are-about-its-decoded-keys]]The clauses are about the value the model declares, so a `+Map+` newtype's are checked once its keys are decoded. A key that does not decode is reported as that key's failure and no clause is asked, since there is no map of the model's yet for a clause to be about; `+Map.size(value) >= 1+` then fails as `+too_small+` under the message key of emptiness, as `+List.length(value) >= 1+` does, `+Map.size(value) >= n+` for a larger `+n+` as `+too_small+` with `+min+` / `+actual+`, and `+<= n+` as `+too_big+` with `+max+` / `+actual+` — the issues Raoh's own constraints on an object's entries report.
+A newtype's clause that says exactly what a constraint on the value it wraps says is refused as that constraint: `+String.length(value) >= 1+` as a least length of one, `+String.matches(p, value)+` as the pattern `+p+` evaluates to at compile time as it was written (what a carrier's matcher runs is its own and is not what is reported), a numeric bound as that bound, `+List.length(value) >= 1+` as a least size of one with the size that was found, and `+List.allDistinctBy(x -> x, value)+` as distinctness, with the duplicates it found. Two constraints that admit different values are two refusals even where they carry the same number: `+value > 0+` and `+value >= 0+` both bound at nought, and what is reported tells which of them rejected the value. Which type rejected it is told by the path, as for any other refusal.
+
+A distinctness constraint carries the elements it found, so it exists only where an element has a scalar form to be carried in: a `+String+`, an `+Int+`, a `+Bool+`, a `+Decimal+`, a date or time, a list of those, or a newtype over one of them. A newtype is carried as the value it wraps, which is how the boundary writes it (<<newtype>>) and what its equality reads (<<equality>>): over `+data Sku = String+`, a `+List<Sku>+` names the repeated strings. The elements are still compared as they are; only what the refusal carries is unwrapped. Any other element — an optional, a product, a sum, a map, a set, a tuple, a `+Rational+` — has no such form, and its uniqueness is a clause.
+
+Only a rule a constraint states exactly is a constraint. Anything else — a quantifier over a list, a uniqueness under a projection or of elements with no scalar form, a check across two fields, an object's invariant — runs as the rule it is and is refused as a clause, carrying the rejecting type's declaring module and name and, where the clause was named, that name. The module is carried apart from the name because a type is its module and its name (<<modules>>): two modules may each declare an `+Id+`, and a resolver keyed on the name alone would answer for either. So a boundary failure says which rule was broken and not only that the value was rejected. A clause's name never becomes the code a decoder binding reports: the code stays its library's shared one, so a resolver keyed on the library's vocabulary keeps working and what the refusal carries is what it switches on.
+
+The clauses are checked in the order they are declared, which is the order construction decides in (<<invariant-mvp>>) — so the boundary and an attempted construction name the same clause for the same value. Whether a clause is a constraint is a question about that clause alone: a constraint declared after a clause that is not one is still a constraint, and is reported as one when it is the first clause the value breaks. Construction re-checks every clause regardless (<<violation-destination>>): the constraints are how a failure is *reported*, not what makes a value valid.
+
+[[a-maps-clauses-are-about-its-decoded-keys]]The clauses are about the value the model declares, so a `+Map+` newtype's are checked once its keys are decoded. A key that does not decode is reported as that key's refusal and no clause is asked, since there is no map of the model's yet for a clause to be about; `+Map.size(value) >= 1+` is then refused as a least size of one, as `+List.length(value) >= 1+` is, `+Map.size(value) >= n+` for a larger `+n+` as a least size of `+n+` with the size that was found, and `+<= n+` as a greatest size of `+n+` with the size that was found.
 
 [#codec-generation]
-=== Generation method and Raoh
+=== Generation method
 
-The derived Decoder, without going through an independent Decoder IR, is generated *directly as bytecode* by the ClassFile backend as a Raoh Decoder (`+net.unit8.raoh.decode.Decoder+` and combinators). The generated decoder reads from the neutral tree of the external representation (<<external-representation>>; Raoh's `+Object+` / `+Map+` input) and returns `+Result<T>+`.
+The derived Decoder and Encoder are generated *directly as bytecode* by the ClassFile backend, against the boundary types of souther-runtime and of no decoder library. Everything a decode decides — what is admitted as each scalar, which clause a value breaks, which case a tag names, where in the input a refusal is, and that independent refusals are all reported — is decided by the derived decoder itself, so it is the same whatever reads the input and whatever reports the refusals.
 
 [,text]
 ----
-Source -> AST -> resolve -> (add decoder/encoder to each data by derivation) -> type check -> ClassFile backend -> .class (emits Raoh Decoders)
+Source -> AST -> resolve -> (add decoder/encoder to each data by derivation) -> type check -> ClassFile backend -> .class
 ----
 
-Souther's runtime (souther-runtime) does not depend on Raoh. Only the generated bytecode and the apps using it depend on Raoh. Building the primitive values, error accumulation (Applicative), and discriminator dispatch (<<sum-discrimination>>) are handled by Raoh combinators; Souther maps a data's shape (keys, types, discriminator, case tags) onto Raoh decoder construction, and states itself which representation is admitted as each scalar (<<a-boundary-scalar-is-read-not-converted>>), asking it before a scalar reaches a Raoh reader wherever the reader would admit more, so that what is admitted does not change with the Raoh release.
+[[a-decoder-reads-through-a-reader]]A decoder reads its input through a *reader* of the tree it is handed: whether a node is absent or `+null+`, an object, an array or a scalar, an object's members and an array's elements, and a scalar as the value its carrier holds. The skeleton (keys, types, discriminator, case tags) is one for every source; only the reader varies. The runtime has the reader of maps, lists and the platform's own values, which is what a decoder reads when it is given no other. A reader of another tree — a JSON document's, a database row's — is a decoder binding's (<<decoder-binding>>) or the application's, and is held to what <<decoder-role>> asks of a reader. A unit reads nothing, so it is read from every source.
 
-Decoders are generated per input source. Bare values / Map use raoh-core combinators, JSON `+JsonNode+` uses raoh-json, and jOOQ `+Record+` uses raoh-jooq. The skeleton (keys, types, discriminator, case tags) is common across sources; only terminal field access is swapped per source. For each exposed data, decoders are generated for the sources its shape supports. Bare values / Map and JSON are always generated. JSON temporal fields are read as strings in the form <<temporal-text>> gives, which is checked before the string reaches the decoder library's parser (`+string().date()+` / `+string().time()+` / `+string().dateTime()+` / `+string().iso8601()+`), so the library builds the value and does not decide which text is one. A bare value or a `+Record+` column that is text is asked the same way before Raoh's own parse, and one that already is a `+java.time+` value goes to Raoh as it is, so a temporal at a map key, at a field of any source and as a behavior's argument is read as one language (<<temporal-text>>). A `+Time+` and a `+DateTime+` are held to the second: text carrying a fraction of one is a decode failure at that field's path, not a value rounded on the way in (<<a-local-temporal-is-held-to-the-second>>). jOOQ `+Record+` decoders are generated only for a flat shape with no nesting, List, or Map (scalar and newtype columns only) — a row is flat, so a nested object does not fit in one column. Unit data ignore input, so they support all sources.
+A temporal that arrives as text is read in the form <<temporal-text>> gives wherever it arrives — at a field of any source, at a map key, as a behavior's argument — and one that already is a `+java.time+` value is read as it is. A `+Time+` and a `+DateTime+` are held to the second: text carrying a fraction of one is refused at that path as not in its form, not a value rounded on the way in (<<a-local-temporal-is-held-to-the-second>>).
 
-What a scalar is read from is stated once for every backend (<<a-boundary-scalar-is-read-not-converted>>), and the JVM binding names the carriers. A `+Byte+`, a `+Short+`, an `+Integer+`, a `+Long+`, a `+BigInteger+` and a `+BigDecimal+` with a scale of nought are integer representations, so an `+Int+` is read from them; a `+Double+`, a `+Float+`, a `+BigDecimal+` with any other scale and every other `+Number+` are not. A `+Decimal+` is read from an exact number: those, and a `+BigDecimal+` of any scale. A `+Double+` and a `+Float+` are not exact, and are refused. A temporal is read from the `+java.time+` value its type names — a `+Date+` from a `+LocalDate+`, a `+Time+` from a `+LocalTime+`, a `+DateTime+` from a `+LocalDateTime+`, an `+Instant+` from a `+java.time.Instant+` — or from its text; no other `+java.time+` type is an admitted carrier. A `+java.sql+` date, time or timestamp is refused: it is not the value, and reading it as one is the JDBC convention this binding does not follow, since `+java.sql.Date+` and `+java.sql.Time+` answer their `+LocalDate+` / `+LocalTime+` only by consulting the machine's default time zone, and a `+java.sql+` value carries no zone of its own for either side to check that against. A refusal is Raoh's `+type_mismatch+` and says what was expected.
+What a scalar is read from is stated once for every platform (<<a-boundary-scalar-is-read-not-converted>>), and the JVM output names the carriers. A `+Byte+`, a `+Short+`, an `+Integer+`, a `+Long+`, a `+BigInteger+` and a `+BigDecimal+` with a scale of nought are integer representations, so an `+Int+` is read from them; a `+Double+`, a `+Float+`, a `+BigDecimal+` with any other scale and every other `+Number+` are not. A `+Decimal+` is read from an exact number: those, and a `+BigDecimal+` of any scale. A `+Double+` and a `+Float+` are not exact, and are refused. A temporal is read from the `+java.time+` value its type names — a `+Date+` from a `+LocalDate+`, a `+Time+` from a `+LocalTime+`, a `+DateTime+` from a `+LocalDateTime+`, an `+Instant+` from a `+java.time.Instant+` — or from its text; no other `+java.time+` type is an admitted carrier. A `+java.sql+` date, time or timestamp is refused: it is not the value, and reading it as one is the JDBC convention the JVM output does not follow, since `+java.sql.Date+` and `+java.sql.Time+` answer their `+LocalDate+` / `+LocalTime+` only by consulting the machine's default time zone, and a `+java.sql+` value carries no zone of its own for either side to check that against. A refusal is *not of its kind* and carries what was expected (<<what-a-refusal-says>>). The derived decoder asks this of the value a reader hands it, so no reader decides what is admitted.
 
-A JSON reader that parses a fraction as a binary floating-point number has rounded it before the decoder is handed the node: `+0.10000000000000001+` arrives as the `+double+` `+0.1+`, and nothing can tell that from a literal that said `+0.1+`. So a `+Decimal+` at a JSON field is read from a node that holds an integer or the decimal that was written (Jackson's `+USE_BIG_DECIMAL_FOR_FLOATS+`), and a `+jsonDecoder()+` handed a node that holds a `+double+` or a `+float+` refuses it. The reader is the caller's, and `+souther run+` reads its input so that a fraction is kept. Another backend names its own carriers and is held to the rule, not to this list.
+A JSON reader that parses a fraction as a binary floating-point number has rounded it before the decoder is handed the node: `+0.10000000000000001+` arrives as the `+double+` `+0.1+`, and nothing can tell that from a literal that said `+0.1+`. So a `+Decimal+` at a JSON field is read from a node that holds an integer or the decimal that was written (Jackson's `+USE_BIG_DECIMAL_FOR_FLOATS+`), and a decoder of JSON handed a node that holds a `+double+` or a `+float+` refuses it. The reader is the caller's, or the decoder binding's where it reads JSON text itself, and `+souther run+` reads its input so that a fraction is kept. Another platform names its own carriers and is held to the rule, not to this list.
+
+[#decoder-binding]
+=== Decoder bindings
+
+A *decoder binding* adapts a decoder library to the derived decoders, for an application that works in that library. It gives readers of the library's trees (<<a-decoder-reads-through-a-reader>>), reports each refusal in the library's vocabulary, and presents a derived decoder as a decoder of the library, so that a custom codec written in the library composes with it (<<custom-codec>>). It decides nothing about what is admitted: a decode answers the same value or the same refusals whichever decoder binding reports them, and a program that uses none decodes all the same.
+
+[[a-decoder-binding-reports-what-a-refusal-says]]A decoder binding MUST report every refusal so that its path, which of the seven it is, and what it carries can be read back from what it reports (<<what-a-refusal-says>>). It MAY say more — a code, a message key, a message — and MAY report two of the seven under one code of its library, so long as what it carries tells them apart. A constraint it does not know is reported from the name and data its refusal carries (<<boundary-constraint>>), so a decoder binding written before a constraint was added still reports it. A decoder binding whose library writes paths another way MUST NOT report as one two paths whose JSON Pointers differ (<<decoder-error>>), and where its library tells a member from an element, MUST report each step as the one it is.
+
+A decoder binding depends on souther-runtime and on its library alone, and a program chooses which, if any, it uses. Souther ships the one for Raoh.
+
+[#raoh-binding]
+==== The Raoh decoder binding
+
+The Raoh decoder binding, `+souther-raoh+`, has readers of a Jackson `+JsonNode+` and of a jOOQ `+Record+`, and reads JSON text with raoh-json's reader, which keeps a number as it was written and refuses a member written twice. A row is read as an object of its columns, so a field whose type a column cannot hold is refused at that field as not of its kind. It presents a derived decoder as a Raoh `+Decoder+`:
+
+[,java]
+----
+Decoder<Map<String, Object>, TravelRequest> decoder = RaohBinding.decoder(TravelRequest.decoder());
+Decoder<JsonNode, TravelRequest> json = RaohBinding.jsonDecoder(TravelRequest.decoder());
+Decoder<Record, TravelRequest> row = RaohBinding.recordDecoder(TravelRequest.decoder());
+----
+
+It reports each refusal as a Raoh `+Issue+` at the refusal's path, and the refusals of one decode as the failure side of Raoh's `+Result+`:
+
+|===
+| Refusal | Raoh code | What it carries, as metadata
+
+| absent | `+required+` |
+| not of its kind | `+type_mismatch+` | `+expected+`
+| not one of the names | `+not_allowed+` | `+allowed+`, `+actual+`
+| not in its form | `+invalid_format+` |
+| one key twice | `+duplicate_key+` |
+| a constraint | the code of the Raoh constraint that states it | that constraint's
+| a clause | `+invariant_violation+` | `+module+`, `+type+`, `+clause+`
+|===
+
+A tag or an enumeration's name no case answers to is reported as Raoh's `+discriminate+` and its `+oneOf+` over strings report one. A constraint is reported with the code, message key and metadata of the Raoh constraint that states it: a least length as `+too_short+` with `+min+`, a pattern as `+invalid_format+` with `+pattern+`, a numeric bound as `+out_of_range+` with `+min+` / `+max+`, a least size as `+too_small+` with `+min+` / `+actual+` — a least size of one under the message key of emptiness —, a greatest size as `+too_big+` with `+max+` / `+actual+`, and distinctness as `+duplicate_element+` with the duplicates found. One code covers several constraints — `+out_of_range+` states a lower bound, an upper bound, or both — so which constraint rejected the value is what the message key says and the code cannot, and a `+MessageResolver+` keyed on the issue resolves and localises them. Raoh writes into an issue's metadata only a value with a message form, which is the scalar form a distinctness carries its duplicates in (<<what-an-invariant-refusal-says>>).
+
+A custom decoder of a sum with business-specific tags (<<custom-codec>>) may be written in Raoh as well, over the per-case decoders:
+
+[,java]
+----
+Decoder<Map<String, Object>, TravelRequest> byStatus = discriminate("status",
+        variant("draft", RaohBinding.decoder(Drafting.decoder())),
+        variant("submitted", RaohBinding.decoder(Submitted.decoder())));
+----
 
 [#encoder]
 == Encoder
@@ -2276,11 +2338,11 @@ A JSON reader that parses a fraction as a binary floating-point number has round
 [#encoder-role]
 === Role
 
-An Encoder is a total function converting internal data to an external representation (<<external-representation>>). Souther derives a Raoh Encoder from a data's shape.
+An Encoder is a total function converting internal data to an external representation (<<external-representation>>). Souther derives an Encoder from a data's shape.
 
 [,text]
 ----
-TravelRequest.encoder() : Encoder<TravelRequest>     // TravelRequest -> external representation (Raoh's neutral tree)
+TravelRequest.encoder() : Encoder<TravelRequest>     // TravelRequest -> external representation (the neutral tree)
 ----
 
 Like a Decoder, an Encoder does not appear in Souther's syntax. A default Encoder is derived from a data's field names and types (<<decoder-role>>). Encode is also an edge of the boundary and is not a `+>->+` stage.
@@ -3356,15 +3418,15 @@ For an internal composition this declaration is optional, and so it is for one p
 
 A behavior's output sum is treated as an open error row; a case the downstream does not consume in a `+>->+` propagates through to the tail (<<type-routing>>). This is the composition style of the domain world.
 
-Decode-side error accumulation is handled by the peripheral library Raoh. A derived Object Decoder reads each field from the key of the same name and collects all failures of independent fields (Applicative).
+Decode-side error accumulation is the derived Decoder's own (<<codec-generation>>). A derived Object Decoder reads each field from the key of the same name and collects all failures of independent fields (Applicative).
 
 [,text]
 ----
 { "name": ..., "email": ..., "age": ... }
-// read name / email / age with each field's derived Decoder and accumulate all independent failures (Raoh)
+// read name / email / age with each field's derived Decoder and accumulate all independent failures
 ----
 
-A derived Decoder's field accesses are mutually independent and collect all failures. Accumulated failures aggregate into Raoh's `+Result+` failure (`+Issues+`). In a custom boundary codec (<<custom-codec>>), one access may depend on a preceding result; from that point it becomes sequential (monadic), and a subsequent access is not run if the preceding one fails.
+A derived Decoder's field accesses are mutually independent and collect all failures. Accumulated failures are answered together as the refusals of the decode (<<decoder-error>>). In a custom boundary codec (<<custom-codec>>), one access may depend on a preceding result; from that point it becomes sequential (monadic), and a subsequent access is not run if the preceding one fails.
 
 Accumulation (applicative) is inside the decode boundary; case propagation is behavior composition. They belong to different layers. Because decode is not a `+>->+` stage, the two never mix on the same sum (<<sequential-composition>>). Accumulation holds because a Decoder's field accesses are mutually independent (do not depend on a prior value).
 
@@ -4616,9 +4678,9 @@ characters  codePoints  toInt  fromDecimal  toDecimal
 
 Ordering counts in the same unit: `+<+` `+<=+` `+>+` `+>=+` compare scalar values (<<a-string-is-ordered-by-scalar-value>>).
 
-[[what-a-string-holds]]A string holds at most `+268435455+` code points (2^28^ − 1), which is the language's bound and not a carrier's: it counts what `+String.length+` counts, so it is the same on every carrier and does not depend on which characters a text holds. A carrier that cannot represent a `+String+` that long is not an implementation of the language; one that could represent longer text still refuses it as a `+String+`. Whether a `+String+` of that length can be allocated is the carrier's resource, refused as any allocation is, and is not this bound. That is a property of every `+String+`, and not only of one an operation answered: text that comes in from outside is a `+String+` only where its canonical value has a place (<<string-canonical>>), so it is that value that is measured, and how long the text arrived is not. A derived decoder refuses text with no place with the issue code `+invalid_format+` at the path, as it refuses half of a surrogate pair (<<a-string-holds-no-half-of-a-surrogate-pair>>); a Java caller handing it to a behavior or a data's constructor, and an injected behavior answering it, abort (<<jvm-abort>>); a string literal holding it is <<e2305>>. Text past the bound is refused at the door and is not kept as a `+String+` that no operation could then build from. An operation that builds a string — `+++++` and `+append+`, `+join+`, `+concat+`, `+replace+`, `+repeat+`, `+padLeft+` / `+padRight+`, `+lowercase+` / `+uppercase+`, `+reverse+`, `+fromDecimal+` — *aborts* where the string it answers is longer than that, and where the text it is defined as canonicalizing is: two strings joined, `+n+` copies, the copies of a pad that cover the width, the case-mapped text (<<an-operation-refuses-only-what-its-own-answer-has-no-place-for>>). Each is measured before it is built. What is bounded is the string an operation builds and not the numbers it is given: `+repeat(n, "")+` is `+""+` for every `+n+`, `+repeat(n, s)+` is `+""+` for `+n+` of 0 or less, and a `+padLeft+` or `+padRight+` whose `+pad+` is empty or whose `+s+` is already `+width+` code points wide gives `+s+` back whatever `+width+` is. Otherwise `+repeat(n, s)+` aborts where `+n+` times the length of `+s+` is past the bound, and `+padLeft+` / `+padRight+` where `+width+` is, on every carrier.
+[[what-a-string-holds]]A string holds at most `+268435455+` code points (2^28^ − 1), which is the language's bound and not a carrier's: it counts what `+String.length+` counts, so it is the same on every carrier and does not depend on which characters a text holds. A carrier that cannot represent a `+String+` that long is not an implementation of the language; one that could represent longer text still refuses it as a `+String+`. Whether a `+String+` of that length can be allocated is the carrier's resource, refused as any allocation is, and is not this bound. That is a property of every `+String+`, and not only of one an operation answered: text that comes in from outside is a `+String+` only where its canonical value has a place (<<string-canonical>>), so it is that value that is measured, and how long the text arrived is not. A derived decoder refuses text with no place at the path as not in its form (<<what-a-refusal-says>>), as it refuses half of a surrogate pair (<<a-string-holds-no-half-of-a-surrogate-pair>>); a Java caller handing it to a behavior or a data's constructor, and an injected behavior answering it, abort (<<jvm-abort>>); a string literal holding it is <<e2305>>. Text past the bound is refused at the door and is not kept as a `+String+` that no operation could then build from. An operation that builds a string — `+++++` and `+append+`, `+join+`, `+concat+`, `+replace+`, `+repeat+`, `+padLeft+` / `+padRight+`, `+lowercase+` / `+uppercase+`, `+reverse+`, `+fromDecimal+` — *aborts* where the string it answers is longer than that, and where the text it is defined as canonicalizing is: two strings joined, `+n+` copies, the copies of a pad that cover the width, the case-mapped text (<<an-operation-refuses-only-what-its-own-answer-has-no-place-for>>). Each is measured before it is built. What is bounded is the string an operation builds and not the numbers it is given: `+repeat(n, "")+` is `+""+` for every `+n+`, `+repeat(n, s)+` is `+""+` for `+n+` of 0 or less, and a `+padLeft+` or `+padRight+` whose `+pad+` is empty or whose `+s+` is already `+width+` code points wide gives `+s+` back whatever `+width+` is. Otherwise `+repeat(n, s)+` aborts where `+n+` times the length of `+s+` is past the bound, and `+padLeft+` / `+padRight+` where `+width+` is, on every carrier.
 
-[[a-string-holds-no-half-of-a-surrogate-pair]]Text holding half of a surrogate pair is not a `+String+`, and every door text comes in by refuses it: a derived decoder with the issue code `+invalid_format+` at the path, the code for text whose content is not of the form its type takes (<<decoder-error>>); a Java caller handing it to a behavior or a data's constructor, and an injected behavior answering it, by aborting (<<jvm-abort>>); a string literal holding it with <<e2305>>; and a `+String.matches+` pattern writing one — `+\uD800+` without its other half, `+\x{DC00}+` — with <<e1323>>. It is refused and not repaired. Replacing the half with U+FFFD would make text that held one and text that held U+FFFD one value, which is the loss two keys collapsing into one is refused for (<<decoder-error>>). A carrier whose text cannot hold half a pair, UTF-8 among them, has nothing to refuse.
+[[a-string-holds-no-half-of-a-surrogate-pair]]Text holding half of a surrogate pair is not a `+String+`, and every door text comes in by refuses it: a derived decoder at the path as not in its form, the refusal of text whose content is not of the form its type takes (<<what-a-refusal-says>>); a Java caller handing it to a behavior or a data's constructor, and an injected behavior answering it, by aborting (<<jvm-abort>>); a string literal holding it with <<e2305>>; and a `+String.matches+` pattern writing one — `+\uD800+` without its other half, `+\x{DC00}+` — with <<e1323>>. It is refused and not repaired. Replacing the half with U+FFFD would make text that held one and text that held U+FFFD one value, which is the loss two keys collapsing into one is refused for (<<decoder-error>>). A carrier whose text cannot hold half a pair, UTF-8 among them, has nothing to refuse.
 
 What the choice buys is that the operations agree with one another, and since no `+String+` holds half a surrogate pair, none of them can answer with one:
 
@@ -4664,7 +4726,7 @@ A pattern is built from these, and from nothing else:
 
 Everything else is refused (<<e1323>>), each for a reason of its own. A back reference, `+\1+`–`+\9+` and `+\k+`, can denote a set no regular language is, so the language does not have it. A group beginning `+(?+` other than `+(?:+` is not in the grammar: a lookaround's sets are often regular, and a named group denotes what the group inside it does, but neither has a spelling here, and a flag group would change what a class or a shorthand means for the rest of the pattern, which the language keeps fixed. A possessive count — `{plus}{plus}`, or any other count followed by `{plus}` — fixes how a matcher walks, and which strings it accepts follows from that walk, which the language does not describe. `+\p+` and `+\P+`, the boundaries `+\b+`, `+\B+`, `+\A+`, `+\z+`, `+\Z+`, `+\G+`, `+\R+`, the quotation `+\Q+`…`+\E+`, a class inside a class and `+&&+`, and a backslash before any letter or decimal digit not named above — `+\é+`, `+\𐌰+`, `+\٣+` — have no spelling in the grammar. Text that is no pattern is refused for that, whatever limit below it also goes past.
 
-[[a-pattern-is-admitted-within-three-limits]]A pattern is admitted only within three limits, each the same number in every implementation of the language and of Raoh and each decided from the text. They are not part of what a pattern means: a pattern past one of them denotes a set of strings like any other, and is refused for the limit and not as text that is no pattern (<<e2110>>). They bound what running a pattern costs, so that no carrier's way of running patterns decides which ones a program may write.
+[[a-pattern-is-admitted-within-three-limits]]A pattern is admitted only within three limits, each the same number in every implementation of the language and each decided from the text. They are not part of what a pattern means: a pattern past one of them denotes a set of strings like any other, and is refused for the limit and not as text that is no pattern (<<e2110>>). They bound what running a pattern costs, so that no carrier's way of running patterns decides which ones a program may write.
 
 [cols="3,1"]
 |===
@@ -4783,7 +4845,7 @@ accepted decides which programs take the `+NotANumber+` arm, so no host decides 
 
 The middle row is the rest of what Souther's types allow, which have no `+Char+`, `+Maybe+` or `+Float+`. `+split(sep, s)+` splits by a separator into `+List<String>+`, keeping empty pieces (`+split(",", "a,,b")+` is `+["a", "", "b"]+`). `+words(s)+` splits by runs of String whitespace (<<string-whitespace>>), dropping empty pieces. `+join(sep, xs)+` joins with a separator. `+replace(target, replacement, s)+` replaces every occurrence of `+target+`. `+fromInt(n)+` makes an `+Int+` a decimal string. `+concat(xs)+` joins a `+List<String>+` with no separator (equal to `+join("", xs)+`). The primary subject string is last (<<pipe>>). There is no `+Char+` type and no general per-character mapping operation — `+lowercase+`/`+uppercase+` (<<string-case>>) are the two fixed exceptions, built into the language rather than taking an arbitrary function.
 
-`+isEmpty(s)+` is `+length(s) == 0+`, the sibling of `+List.isEmpty+` / `+Map.isEmpty+` / `+Set.isEmpty+`. It belongs in a predicate — `+filter(piece -> not(String.isEmpty(piece)))+` — rather than in a newtype invariant: a derived decoder recognises `+String.length(value) >= 1+` and reports a violation as `+too_short+` with its bound, while the helper's inlined form leaves it the generic `+invariant_violation+` (<<decoder-error>>).
+`+isEmpty(s)+` is `+length(s) == 0+`, the sibling of `+List.isEmpty+` / `+Map.isEmpty+` / `+Set.isEmpty+`. It belongs in a predicate — `+filter(piece -> not(String.isEmpty(piece)))+` — rather than in a newtype invariant: a derived decoder recognises `+String.length(value) >= 1+` and reports a violation as a least length with its bound, while the helper's inlined form leaves it a clause (<<what-an-invariant-refusal-says>>).
 
 `+reverse+` / `+repeat+` / `+lines+` / `+padLeft+` / `+padRight+` are the rest of what Souther's types allow. `+reverse+` turns the code points around and canonicalizes the result (<<string-canonical>>): a character outside the basic plane survives the turn, but a combining mark can end up before the base character it now composes with, so the exact code-point permutation is not a law `+reverse+` holds — a caller who wants that writes `+String.codePoints(s) |> List.reverse+` instead, over a `+List<Int>+`, which carries no canonical-form obligation. `+repeat(n, s)+` joins `+n+` copies, canonicalized at each seam the same way `+append+` is (nothing for `+n+` of 0 or less; copies no string could hold *abort* rather than quietly giving fewer copies than asked for, as an `+Int+` overflow does, and nothing for an empty `+s+` however large `+n+` is — <<what-a-string-holds>>). `+lines(s)+` breaks on newlines, accepting both `+\n+` and `+\r\n+`, and keeps empty pieces — a trailing newline leaves an empty last line. `+padLeft(width, pad, s)+` / `+padRight+` widen `+s+` to `+width+` code points with copies of `+pad+` and leave a string already that wide alone. `+pad+` is repeated and cut to the code points still needed, so it need not be one character; the fill and `+s+` are then canonicalized together (<<string-canonical>>), the same seam `+append+` has. The width is still exact: `+String.length(padLeft(width, pad, s))+` is `+Int.max(width, String.length(s))+` for any non-empty `+pad+`. An empty `+pad+` fills nothing and gives `+s+` back, the one input that equation does not hold for. Padding is what *builds* a fixed-width identifier — a bay number becomes `+"03"+` with `+padLeft(2, "0", fromInt(bay))+` — so a code whose shape a newtype invariant states can be produced in the domain and not only checked there.
 
@@ -5190,7 +5252,7 @@ A model still holds one, compares two (<<primitives>>), keys a `+Map+` by one (<
 behavior 地方日時 : (at: Instant) -> DateTime
 ----
 
-Decoders and Encoders do not appear in Souther's syntax. Derived from a data's shape, they are generated by the ClassFile backend as Raoh Decoders / Encoders (<<codec-generation>>, <<encoder>>). Building primitive values, error accumulation, discriminator dispatch, and encoding are handled by Raoh combinators, after the language has admitted the representation a scalar is read from (<<a-boundary-scalar-is-read-not-converted>>); there is no facade on the souther-runtime side. A custom boundary codec (<<custom-codec>>) uses Raoh directly from the Java side.
+Decoders and Encoders do not appear in Souther's syntax. Derived from a data's shape, they are generated by the ClassFile backend (<<codec-generation>>, <<encoder>>). Admitting the representation a scalar is read from (<<a-boundary-scalar-is-read-not-converted>>), building the values, error accumulation, discriminator dispatch and encoding are all theirs. A custom boundary codec (<<custom-codec>>) is written in Java over the derived ones, or in a decoder library through a decoder binding (<<decoder-binding>>).
 
 [#jvm-output]
 == JVM output
@@ -5232,7 +5294,7 @@ A record's component accessor is the exception. Kotlin types it from the record 
 
 It rides on each class rather than on a `+package-info+` of the module's package. That package is where a consumer's own `+package-info.java+` sits, and a generated class of the same name would lose to that declaration — the marking would then reach only the modules that own no Java of their own.
 
-A generated method whose descriptor names a generic type carries the `+Signature+` for it, so the type argument survives to a reader. `+__construct+` returns `+Result<T, String>+`; a raw `+Result+` would be a platform type again on the Kotlin side, where the class carrying it says everything else is not.
+A generated method whose descriptor names a generic type carries the `+Signature+` for it, so the type argument survives to a reader. `+__construct+` returns `+Result<T, InvariantFailure>+`, whose failure names the type and the clause that did not hold; a raw `+Result+` would be a platform type again on the Kotlin side, where the class carrying it says everything else is not.
 
 The few places that do admit a null are annotated one by one — a `+java.util.Map+` implementation's `+get+`, which returns null for an absent key because that interface says so.
 
@@ -5291,18 +5353,22 @@ A case may itself be a sum (<<sum-data>>), and then its interface extends the ou
 [#jvm-codec]
 === Decoder / Encoder
 
-An exposed data gets a per-source acquisition API. What is returned is a Raoh Decoder / Encoder (`+Decoder<I, T>+` is `+I -> Result<T>+`).
+An exposed data gets its Decoder and its Encoder:
 
 [,text]
 ----
-public static Decoder<Map<String,Object>, TravelRequest> decoder()      // Map (raoh-core; a newtype is Decoder<Object,T>)
-public static Decoder<JsonNode, TravelRequest> jsonDecoder()            // JSON (raoh-json)
-public static Decoder<Record, TravelRequest> recordDecoder()            // DB row (raoh-jooq)
-public static Encoder<TravelRequest, Map<String,Object>> encoder()      // object/sum -> Map (JSON via valueToTree at the boundary)
+public static Decoder<TravelRequest> decoder()                       // a map, or another tree through its reader -> TravelRequest or refusals
+public static Encoder<TravelRequest, Map<String,Object>> encoder()   // object/sum -> Map (JSON via valueToTree at the boundary)
 // newtype encodes to a bare scalar. e.g. MemberId.encoder() : Encoder<MemberId, String>
 ----
 
-The concrete implementation is generated directly as bytecode by the ClassFile backend from Raoh combinators (<<codec-generation>>). Nothing in souther-runtime calls Raoh — the dependency is the generated code's — and souther-runtime declares it, because that is where a project and everything downstream of it resolve it from without being asked to name a version. `+jsonDecoder()+` / `+recordDecoder()+` are generated only when the data's shape supports it (<<codec-generation>>; JSON for a shape without temporal, `+Record+` for a flat shape). `+decoder()+` (bare values / Map) is always generated.
+[,java]
+----
+Result<TravelRequest, Refusals> fromMap = TravelRequest.decoder().decode(map);              // maps, lists and the JDK's values
+Result<TravelRequest, Refusals> fromJson = TravelRequest.decoder().decode(node, jsonReader); // another tree, through its TreeReader
+----
+
+`+Decoder+`, `+Encoder+`, `+Refusals+`, `+Refusal+` and `+TreeReader+` are souther-runtime's (`+souther.runtime.boundary+`), and `+Result+` is the one `+__construct+` answers with, so a generated class names no decoder library and loads with none on the class path; souther-runtime depends on none either. `+Refusal+` is a sealed interface whose seven records are the seven things a refusal says (<<what-a-refusal-says>>), so a Java `+switch+` over them is exhaustive, and the one that is a clause carries the `+InvariantFailure+` `+__construct+` answers with for the same value. A decoder binding (<<decoder-binding>>) is the application's dependency and brings its library with it.
 
 [#jvm-behavior]
 === behavior
@@ -5323,7 +5389,7 @@ The generated names are derived from the behavior name (first letter capitalized
 
 A data's constructor is non-public (package-private): nothing reaches the fields without the invariant. The checked entry `+__construct+` is public for an exposed data and non-public otherwise, so a construction declared in another module (<<closed-construction>>) has the path its declaration names, and a data a module keeps to itself has none. The Java implementation of a behavior with no implementation extends the generated abstract base class (<<java-base-class>>) and constructs failure cases via the base's `+protected+` factories; it may be placed outside the generated package.
 
-What is guaranteed to Java is that no unvalidated value can be created — not that no value can be created. `+decoder()+` is public API (<<jvm-codec>>) and `+__construct+` is public for an exposed data, so Java may build one at any time; the invariant is checked on both paths (<<invariant-on-construct>>), a decode violation becoming a `+Result+` failure. A unit data ignores input and decodes (<<codec-generation>>), so its `+decoder()+` lets anyone construct it — but a unit data has nothing to validate.
+What is guaranteed to Java is that no unvalidated value can be created — not that no value can be created. `+decoder()+` is public API (<<jvm-codec>>) and `+__construct+` is public for an exposed data, so Java may build one at any time; the invariant is checked on both paths (<<invariant-on-construct>>), a decode violation becoming a refusal. A unit data ignores input and decodes (<<codec-generation>>), so its `+decoder()+` lets anyone construct it — but a unit data has nothing to validate.
 
 Reflection, Unsafe, and bytecode manipulation are out of scope for guarantees.
 
@@ -5334,11 +5400,11 @@ An invariant violation inside the domain (<<algebraic-types>>, <<violation-desti
 
 Souther code cannot catch this. There is no catching syntax, so it cannot control business flow (<<out-of-scope>>). The boundary Java can catch it, but handles it as distinct from a business failure. A business failure arrives as an output case (<<unmarked-sum>>) and maps to 400; an abort is a model bug and maps to 500.
 
-A decode violation is not this; it returns as a Raoh `+Result+` failure (<<decoder-error>>).
+A decode violation is not this; it returns as a refusal (<<decoder-error>>).
 
 Running out of room is not this either. Where an operation is defined for a value and the runtime finds it cannot obtain what computing the answer takes — the case the exact order over `+Rational+` states (<<stdlib-rational>>) — or has no place to write the answer it computed — a `+Decimal+` past the scales a `+BigDecimal+` keeps, a `+Rational+` past the width of its exponents (<<a-decimal-is-any-finite-decimal>>) — that arrives as `+souther.runtime.OutOfRoom+` and not as a `+ConstraintViolation+`, because it says nothing about the model or about any value: what the operands are owed is an answer, and a platform that supplies what the computation wanted gives them one. What it takes is not memory alone — how large a whole number the platform's arithmetic builds, and how wide an exponent its representation keeps, are things a computation can want more of, and more memory does not answer that. The analysis of a model reads no operation as ending a run for it, as it reads none as ending one for want of memory. Souther code cannot catch it, as it cannot catch the other aborts; the boundary can, and handles it as the platform failing rather than as anything the request asked for.
 
-The same holds where a value arrives. A JSON number is a `+Decimal+` whatever its exponent, and a reader on the JVM that has no scale to hold it in — a `+BigDecimal+` keeps one in 32 bits, so `+1E-2147483648+` and `+0E-3000000000+` have none — is a run short of room, reported as the platform failing and not as input that is not JSON, nor as a decoder's `+type_mismatch+` or `+invalid_format+`: it is the reader that cannot write the number, before any decoder is handed it. `souther run` says so for `--input` (`run.input.outofroom`) and names where in the input the number stands. Reading the number at another scale that does hold its value, nought among them, is not asked of the reader; a reader that does it answers where this one is short. A limit the reader holds of its own — digits in a number, the length of a name or of the document — refuses text that is as much JSON, and is said as that limit (`run.input.limit`) and never as malformed input. The decoder is held to the same: a derived decoder refuses an input as issues, so what it throws says nothing about the input. An invariant's arithmetic past what a `+BigDecimal+` keeps is `+OutOfRoom+` there too, and `souther run` says it as the run having no room (`run.decode.outofroom`), neither as an input that is not shaped like its type nor as a refusal of the value.
+The same holds where a value arrives. A JSON number is a `+Decimal+` whatever its exponent, and a reader on the JVM that has no scale to hold it in — a `+BigDecimal+` keeps one in 32 bits, so `+1E-2147483648+` and `+0E-3000000000+` have none — is a run short of room, reported as the platform failing and not as input that is not JSON, nor as a decoder's refusal of a value not of its kind or not in its form: it is the reader that cannot write the number, before any decoder is handed it. `souther run` says so for `--input` (`run.input.outofroom`) and names where in the input the number stands. Reading the number at another scale that does hold its value, nought among them, is not asked of the reader; a reader that does it answers where this one is short. A limit the reader holds of its own — digits in a number, the length of a name or of the document — refuses text that is as much JSON, and is said as that limit (`run.input.limit`) and never as malformed input. The decoder is held to the same: a derived decoder answers an input it does not admit with refusals, so what it throws says nothing about the input. An invariant's arithmetic past what a `+BigDecimal+` keeps is `+OutOfRoom+` there too, and `souther run` says it as the run having no room (`run.decode.outofroom`), neither as an input that is not shaped like its type nor as a refusal of the value.
 
 A failure of the virtual machine itself is not renamed to this. Running out of memory is already the platform failing, in the platform's own terms, and a runtime MUST NOT catch it to report it as something of its own: what `+OutOfRoom+` carries is a shortage the runtime itself detected and can say what was being computed when it did.
 
@@ -7896,7 +7962,7 @@ Reported where a pattern is lowered to the machine a class runs (<<a-pattern-run
 implementation holds a pattern to. Write it with fewer groups around each other.
 ----
 
-Reported where a `+String.matches+` pattern is read, at the pattern (<<a-pattern-is-admitted-within-three-limits>>). Each limit is said as itself: a count past the most a count may be, quoting the count; groups nested past the deepest, quoting the group opened past it; and a pattern that comes to more states than a pattern may, quoting the pattern, with the hint <<e2109>> gives. Text that is no pattern is <<e1323>> whatever limit it also goes past, so a limit is said only of a pattern the language has. The limits are the same numbers in every implementation of the language and of Raoh, so a pattern refused here is refused by each of them, and one admitted here has a machine on every carrier.
+Reported where a `+String.matches+` pattern is read, at the pattern (<<a-pattern-is-admitted-within-three-limits>>). Each limit is said as itself: a count past the most a count may be, quoting the count; groups nested past the deepest, quoting the group opened past it; and a pattern that comes to more states than a pattern may, quoting the pattern, with the hint <<e2109>> gives. Text that is no pattern is <<e1323>> whatever limit it also goes past, so a limit is said only of a pattern the language has. The limits are the same numbers in every implementation of the language, so a pattern refused here is refused by each of them, and one admitted here has a machine on every carrier.
 
 [#e2301]
 === A declaration is not written in its form
@@ -8158,10 +8224,10 @@ public final class JdbcFindMember extends FindMember {
                     "Mail", resultSet.getString("email"),
                     "displayName", resultSet.getString("display_name"));
 
-                // decode is a Raoh Result<Member>. An invariant violation maps to the CorruptStoredData case
-                return switch (Member.decoder().decode(raw, Path.ROOT)) {
-                    case Ok<Member> ok   -> ok.value();              // Member (mainline)
-                    case Err<Member> err -> CorruptStoredData();          // inherited protected factory
+                // decode answers the Member or its refusals. A refused row maps to the CorruptStoredData case
+                return switch (Member.decoder().decode(raw)) {
+                    case Result.Ok<Member, Refusals> ok   -> ok.value();          // Member (mainline)
+                    case Result.Err<Member, Refusals> err -> CorruptStoredData(); // inherited protected factory
                 };
             }
         } catch (SQLException e) {
@@ -8195,7 +8261,7 @@ The language core is implemented. The following are future extensions — distin
 * compile errors are rendered from structured data — a code, a source region, a message, and hints; the human form quotes the source with a caret, a JSON form (`+--format json+`) is available for tools, and messages are localized, the language being selected as <<compile-errors>> states
 * the generated `+.class+` passes standard verification and is usable straightforwardly from the Java version <<target-jdk>> names
 * each compiler stage is independently testable
-* nothing in souther-runtime calls Raoh; the dependency is the generated code's, and souther-runtime declares it so that a project holding generated code resolves it without naming it (<<codec-generation>>)
+* neither souther-runtime nor the generated code names a decoder library; the derived codecs are Souther's own, and a decoder binding, which an application may choose, depends on souther-runtime and on its library (<<decoder-binding>>)
 * the language core does not depend on the Java class model
 * the requirement set is tracked statically; how it is reconciled and inferred is <<requirement-propagation>>
 * generated code exposes no unvalidated value, on the terms <<jvm-construction-privacy>> states

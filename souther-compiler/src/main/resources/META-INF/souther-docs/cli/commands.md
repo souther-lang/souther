@@ -59,7 +59,14 @@ souther {
 }
 ```
 
-Adding to a Gradle build writes the same block at the end of the script. One that already applies the
+Both also declare `souther-raoh`, the Raoh decoder binding, at that version: the generated decoders
+read through souther-runtime alone, and the binding presents them as Raoh decoders and their refusals
+as Raoh issues. A project that uses another library's binding, or none, removes that dependency.
+Adding to a Maven build declares it beside the runtime it adds, and not in a pom that already names
+the runtime.
+
+Adding to a Gradle build writes the same block at the end of the script, followed by a
+`dependencies` block declaring the binding. One that already applies the
 plugin and does not say `southerVersion` is refused before anything is written, and told the block
 to write: the model would not build without it, and writing it could override a version a convention
 plugin gives. A script this command cannot read through — in Groovy, a `/` that is not a comment's,

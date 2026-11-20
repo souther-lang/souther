@@ -184,11 +184,7 @@ public final class SoutherJvmAbi {
             case GeneratedClass.BehaviorResult b -> b.module() + "." + capitalized(b.behavior()) + "Result";
             case GeneratedClass.BridgeCase c -> c.emittingModule() + "." + c.member().name() + "Case";
             case GeneratedClass.Encoder e -> nameOf(e.of()).binaryName() + "$Enc";
-            case GeneratedClass.Decoder d -> nameOf(d.of()).binaryName() + switch (d.kind()) {
-                case VALUE -> "$Dec";
-                case JSON -> "$DecJson";
-                case RECORD -> "$DecRecord";
-            };
+            case GeneratedClass.Decoder d -> nameOf(d.of()).binaryName() + "$Dec";
             case GeneratedClass.Ctfe c -> nameOf(c.of()).binaryName() + "$Ctfe";
             case GeneratedClass.ExampleFake f -> nameOf(f.of()).binaryName() + "$Fake";
             case GeneratedClass.Ensures e -> nameOf(e.of()).binaryName() + "$Ensures";

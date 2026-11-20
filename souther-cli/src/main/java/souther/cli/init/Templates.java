@@ -211,6 +211,14 @@ final class Templates {
                             <artifactId>%s</artifactId>
                             <version>${souther.version}</version>
                         </dependency>
+                        <!-- The Raoh decoder binding: the generated decoders as Raoh decoders, their
+                             refusals as Raoh issues. Remove it to use another library's binding, or
+                             none. -->
+                        <dependency>
+                            <groupId>%s</groupId>
+                            <artifactId>%s</artifactId>
+                            <version>${souther.version}</version>
+                        </dependency>
                 %s    </dependencies>
 
                     <build>
@@ -232,7 +240,8 @@ final class Templates {
                 </project>
                 """.formatted(project.coordinate().groupId(), project.coordinate().artifactId(),
                 JAVA_RELEASE, project.southerVersion(), BuildPlugins.MAVEN_VERSION, junitVersion,
-                BuildPlugins.GROUP, BuildPlugins.RUNTIME_ARTIFACT, tests,
+                BuildPlugins.GROUP, BuildPlugins.RUNTIME_ARTIFACT,
+                BuildPlugins.GROUP, BuildPlugins.RAOH_ARTIFACT, tests,
                 BuildPlugins.GROUP, BuildPlugins.MAVEN_ARTIFACT, surefire);
     }
 
@@ -242,22 +251,21 @@ final class Templates {
      * <p>The Souther version, in the plugin's extension, and no runtime dependency. On Gradle a
      * dependency the plugin adds is in the metadata this project publishes, so the plugin adds the
      * runtime at the version it compiles the model with. The plugin has no default version, so the
-     * one that generated the project is written down.
+     * one that generated the project is written down. The decoder binding is declared here rather
+     * than added by the plugin, so that removing it is removing a line.
      */
     static String buildScript(Project project) {
         // Where the project starts with a behavior to drive, so a test the reader writes has
-        // somewhere to run. A project that starts with a module header gets no dependencies block and
+        // somewhere to run. A project that starts with a module header gets no test dependencies and
         // no test task: an empty one says a project has something to declare and left it out.
         String tests = project.model() == Model.FULL ? """
-
-                dependencies {
                     testImplementation(platform("org.junit:junit-bom:%s"))
                     testImplementation("org.junit.jupiter:junit-jupiter")
                     // Gradle runs the tests through the platform launcher, and the aggregate above
                     // does not bring it.
                     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
-                }
                 """.formatted(Versions.junit()) : "";
+        String dependencies = "\n" + GradleBuild.dependencies(project.southerVersion(), true, tests);
         String platform = project.model() == Model.FULL ? """
 
                 tasks.test {
@@ -287,7 +295,7 @@ final class Templates {
                 }
                 %s""".formatted(BuildPlugins.GRADLE_ID, BuildPlugins.GRADLE_VERSION,
                 project.coordinate().groupId(),
-                GradleBuild.extension(project.southerVersion(), true), tests, JAVA_RELEASE,
+                GradleBuild.extension(project.southerVersion(), true), dependencies, JAVA_RELEASE,
                 platform);
     }
 

@@ -22,8 +22,36 @@ final class GradleBuild {
      * property.
      */
     static String extension(String southerVersion, boolean kotlin) {
+        return "souther {\n    southerVersion = " + quoted(southerVersion, kotlin) + "\n}\n";
+    }
+
+    /**
+     * {@code value} as a string in the script's language. Written as it is: what goes here is a
+     * Souther version, or a coordinate made of one, which holds no quote, backslash or {@code $}.
+     */
+    private static String quoted(String value, boolean kotlin) {
         String quote = kotlin ? "\"" : "'";
-        return "souther {\n    southerVersion = " + quote + southerVersion + quote + "\n}\n";
+        return quote + value + quote;
+    }
+
+    /**
+     * A {@code dependencies} block declaring the Raoh decoder binding, followed by {@code more},
+     * lines already indented into the block.
+     *
+     * <p>At the Souther the extension names, which is the runtime the plugin adds: a binding is
+     * built against one runtime, so the two are the same version.
+     */
+    static String dependencies(String southerVersion, boolean kotlin, String more) {
+        String coordinate = BuildPlugins.GROUP + ":" + BuildPlugins.RAOH_ARTIFACT + ":"
+                + southerVersion;
+        String binding = kotlin ? "implementation(" + quoted(coordinate, kotlin) + ")"
+                : "implementation " + quoted(coordinate, kotlin);
+        return "dependencies {\n"
+                + "    // The Raoh decoder binding: the generated decoders as Raoh decoders, their\n"
+                + "    // refusals as Raoh issues. Remove it to use another library's binding, or none.\n"
+                + "    " + binding + "\n"
+                + (more.isEmpty() ? "" : "\n" + more)
+                + "}\n";
     }
 
     /** How Kotlin and Groovy each write a plugin in a {@code plugins} block. */
@@ -465,15 +493,18 @@ final class GradleBuild {
     }
 
     /**
-     * The script with the plugin applied and told which Souther to compile with.
+     * The script with the plugin applied, told which Souther to compile with, and given the
+     * decoder binding a new project is given.
      *
-     * <p>The extension goes at the end, after everything the script already says: a script that did
-     * not apply the plugin has no {@code souther} block to add to.
+     * <p>Both blocks go at the end, after everything the script already says: a script that did not
+     * apply the plugin has no {@code souther} block to add to, and a second {@code dependencies}
+     * block is one Gradle adds to the first rather than refuses.
      */
     static String withThePluginApplied(String script, boolean kotlin, String southerVersion) {
         String applied = withThePluginLine(script, kotlin);
         String separator = applied.endsWith("\n") ? "\n" : "\n\n";
-        return applied + separator + extension(southerVersion, kotlin);
+        return applied + separator + extension(southerVersion, kotlin) + "\n"
+                + dependencies(southerVersion, kotlin, "");
     }
 
     /**

@@ -23,9 +23,9 @@
     </properties>
 
     <dependencies>
-        <!-- The compiler pulls raoh + Jackson transitively (both compile-scope), and it declares
-             souther-runtime as provided; this module adds it back at runtime so the uber jar is
-             self-contained (the compiler's own published POM stays unchanged). -->
+        <!-- The compiler pulls Jackson transitively, and it declares souther-runtime as provided;
+             this module adds it back at runtime so the uber jar is self-contained (the compiler's
+             own published POM stays unchanged). -->
         <dependency>
             <groupId>org.souther-lang</groupId>
             <artifactId>souther-compiler</artifactId>
@@ -33,6 +33,12 @@
         <dependency>
             <groupId>org.souther-lang</groupId>
             <artifactId>souther-runtime</artifactId>
+        </dependency>
+        <!-- `souther run` reports what a decoder refused through the Raoh binding, in Raoh's codes
+             and against Raoh's message catalog, which carries the languages a reader picks. -->
+        <dependency>
+            <groupId>org.souther-lang</groupId>
+            <artifactId>souther-raoh</artifactId>
         </dependency>
         <!-- `souther lsp` serves the language server from this command line rather than from a
              second launcher, so an editor that has the compiler has the server. The plain jar, not
@@ -76,7 +82,7 @@
         <!-- The uber jar is `souther.jar` and the prepended launcher is `souther`. -->
         <finalName>souther</finalName>
         <resources>
-            <!-- `souther init` writes a build file naming Raoh, JUnit and Surefire, and what it
+            <!-- `souther init` writes a build file naming JUnit and Surefire, and what it
                  names is what this build uses. Filtered rather than written out in the code, so the
                  two cannot drift apart. -->
             <resource>

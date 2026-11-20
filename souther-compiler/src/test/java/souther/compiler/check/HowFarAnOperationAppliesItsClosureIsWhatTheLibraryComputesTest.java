@@ -1,8 +1,7 @@
 package souther.compiler.check;
 
-import net.unit8.raoh.Ok;
-import net.unit8.raoh.Path;
-import net.unit8.raoh.decode.Decoder;
+import souther.runtime.Result;
+import souther.runtime.boundary.Decoder;
 import org.junit.jupiter.api.Test;
 import souther.compiler.Compiler;
 import souther.compiler.DefaultStdlib;
@@ -215,10 +214,9 @@ class HowFarAnOperationAppliesItsClosureIsWhatTheLibraryComputesTest {
                 return defineClass(className, bytes, 0, bytes.length);
             }
         };
-        @SuppressWarnings("unchecked")
-        Decoder<Object, ?> decoder = (Decoder<Object, ?>) loader.loadClass("demo.In")
+        Decoder<?> decoder = (Decoder<?>) loader.loadClass("demo.In")
                 .getMethod("decoder").invoke(null);
-        Object in = ((Ok<?>) decoder.decode(Map.of("n", 0L), Path.ROOT)).value();
+        Object in = ((Result.Ok<?, ?>) decoder.decode(Map.of("n", 0L))).value();
         @SuppressWarnings("unchecked")
         Behavior<Object, Object> behavior = (Behavior<Object, Object>)
                 Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();

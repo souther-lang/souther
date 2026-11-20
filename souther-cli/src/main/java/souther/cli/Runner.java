@@ -23,6 +23,7 @@ import souther.compiler.types.ValueName;
 import souther.runtime.OutOfRoom;
 import net.unit8.raoh.Issues;
 import net.unit8.raoh.ResourceBundleMessageResolver;
+import souther.raoh.RaohBinding;
 
 
 import tools.jackson.core.JsonGenerator;
@@ -594,10 +595,11 @@ public final class Runner {
         };
     }
 
-    /** A decoder's refusal of the input at {@code index}, as the message a reader gets. */
+    /** A decoder's refusal of the input at {@code index}, as the message a reader gets: said through
+     *  the Raoh binding, whose catalog the reader's language is chosen from. */
     private static RunException refusal(JsonBoundary.Read.Refused refused, int index) {
-        return new RunException("run.decode.failed", 1, refused.issues(), index + 1,
-                detail(refused.issues()));
+        Issues issues = RaohBinding.issues(refused.refusals(), net.unit8.raoh.Path.ROOT);
+        return new RunException("run.decode.failed", 1, issues, index + 1, detail(issues));
     }
 
     /**
