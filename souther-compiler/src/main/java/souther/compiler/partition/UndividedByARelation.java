@@ -2424,7 +2424,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private Optional<Map<NumericTerm, EachWayItComesOut>> comingOutOn(InputReading read,
                                                                       SidesAsDeclared declared,
                                                                       Reachability.Reaching way) {
-        List<OnAWay> written = conditionsOf(way, remainder);
+        List<OnAWay> written = conditionsOf(way, remainder, read.quantities().region());
         if (leavesNoRow(WhatStatementsOfOneFormDecide.of(
                 written.stream().map(OnAWay::affine).toList(), askedAsAStatement()), written,
                 datesTheWayStates(written, read), read)) {
@@ -2553,8 +2553,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 out = out == null ? none : out.alongBoth(none);
                 continue;
             }
-            List<OnAWay> conditions = withoutWhatTheDeclarationsSettle(
-                    conditionsOf(each, remainder), read.quantities().region());
+            List<OnAWay> conditions = conditionsOf(each, remainder, read.quantities().region());
             boolean heldWhole = nothingUnreadBearsOnIt(each);
             Optional<Set<String>> declined = parametersDeclined(each);
             DemandReading.Answered past = each.gotPastAsAsked();
@@ -3450,10 +3449,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * What a way states, as what each statement turns on: what it took in, each as the demand it
-     * is, and each case it requires.
+     * What a way states beside what {@code declared} leaves, as what each statement turns on: what
+     * it took in, each as the demand it is, and each case it requires.
+     *
+     * <p>A relation of numbers that every row {@code declared} leaves meets is no statement of the
+     * way: it keeps no row off the relation asked of it. Kept, it ties the numbers it names to one
+     * another, so that no value of either is shown to be reached whatever the other holds.
      */
-    private static List<OnAWay> conditionsOf(Reachability.Reaching way, RemainderSide remainder) {
+    private static List<OnAWay> conditionsOf(Reachability.Reaching way, RemainderSide remainder,
+                                             SearchRegion declared) {
         List<OnAWay> out = new ArrayList<>();
         way.boundedOnTheWay().forEach(taken -> {
             // Where the relation's remainder lies, which is read apart ({@link
@@ -3464,6 +3468,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             TakenConstraint relation = taken.demand() instanceof RowDemand.Relational(
                     TakenConstraint constraint) ? constraint : null;
+            if (relation instanceof TakenConstraint.Affine affine
+                    && leavesNoRowOff(declared, affine)) {
+                return;
+            }
             out.add(new OnAWay(positionsADemandTurnsOn(taken.demand()),
                     relation instanceof TakenConstraint.Affine(var form, var rel, var _)
                             && rel != Rel.NE && form.coefs().size() == 1
@@ -3489,22 +3497,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * {@code conditions} but for the relations of numbers that every row the declarations leave
-     * meets: a condition that keeps no row off the relation asked of the way narrows nothing, and
-     * kept it ties the numbers it names to one another, so that no value of either is shown to be
-     * reached whatever the other holds.
-     *
-     * <p>Only a statement that is no more than that relation, shown by the declarations taking
-     * its denial in and leaving no row. What the operations in it may stop a run at is said where
-     * the ways' ends are, not by the conditions.
+     * Whether {@code declared} taking the denial of {@code relation} in leaves no row: a region
+     * that refuses it, or that cannot be shown empty, shows nothing. What the operations in the
+     * relation may stop a run at is said where the ways' ends are, and not by this.
      */
-    private static List<OnAWay> withoutWhatTheDeclarationsSettle(List<OnAWay> conditions,
-                                                                SearchRegion declared) {
-        return conditions.stream().filter(each -> !(each.relation()
-                instanceof TakenConstraint.Affine affine && each.isNoMoreThanItsRelation()
-                && declared.assuming(affine.form(), affine.rel().denied())
-                        instanceof SearchRegion.Assumption.Taken(SearchRegion off)
-                && off.emptiness().isPresent())).toList();
+    private static boolean leavesNoRowOff(SearchRegion declared, TakenConstraint.Affine relation) {
+        return declared.assuming(relation.form(), relation.rel().denied())
+                instanceof SearchRegion.Assumption.Taken(SearchRegion off)
+                && off.emptiness().isPresent();
     }
 
     /**
@@ -3599,13 +3599,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         OnAWay(Set<TermPath> positions, boolean whatStands, TakenConstraint relation,
                TermPath elementsOf, RowDemand.AnElementMeets bySome, PartsLeftAlone leavesAlone) {
             this(positions, whatStands, relation, elementsOf, bySome, leavesAlone, null, null);
-        }
-
-        /** Whether this states a relation of numbers and nothing else of the rows. */
-        boolean isNoMoreThanItsRelation() {
-            return elementsOf == null && bySome == null && leavesAlone == PartsLeftAlone.NONE
-                    && ofThePieces == null && onARemainder == null && statedOfTheRun == null
-                    && byEvery == null && truth == null;
         }
 
         OnAWay leavingAlone(PartsLeftAlone parts) {
