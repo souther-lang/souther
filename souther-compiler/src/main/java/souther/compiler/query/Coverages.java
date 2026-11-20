@@ -459,7 +459,8 @@ final class Coverages {
         return new PartitionEvidence(
                 PartitionDerivation.of(axes, partitioning.partitionClosure(),
                         partitioning.inputIsEmpty()),
-                pairsOf(subject.behavior(), readings, observed.rowsWereRead(), budget, body),
+                pairsOf(subject.behavior(), readings, observed.rowsWereRead(), budget, body,
+                        subject.quantities().region()),
                 partitioning.undivided(), partitioning.rulesWithoutALine(),
                 partitioning.rulesWhereARunMayStop(), partitioning.blocked(),
                 // What the model asked and nothing answered, taken whole and not gathered as the
@@ -693,7 +694,8 @@ final class Coverages {
                                                       Readings readings, boolean asked,
                                                       souther.compiler.partition.AdequacyPolicy
                                                               .OfTheMeasures budget,
-                                                      BodyInputReading body) {
+                                                      BodyInputReading body,
+                                                      SearchRegion declared) {
         // Every measure a row is placed at, which is the locations above flattened rather than a
         // list somebody gathered beside them. A pair is between two positions, so this question is
         // the one that reads across them.
@@ -727,7 +729,7 @@ final class Coverages {
         // Listed while there are no more of them than this compilation counts off the rows, and
         // counted past that: the number is exact either way, and a list nobody walks is not kept.
         List<OwedBetween> owed = new ArrayList<>();
-        ClassCoexistence among = ClassCoexistence.among(axes);
+        ClassCoexistence among = ClassCoexistence.among(axes, declared);
         long total = 0;
         for (int i = 0; i < axes.size(); i++) {
             if (!combining[i]) {
