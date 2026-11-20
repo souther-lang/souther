@@ -100,6 +100,24 @@ class ANumberIsReadBesideOthersOnlyOfOneKnownElementTest {
         assertTrue(met.crowded());
     }
 
+    /**
+     * Inside a container nested in another, an element is told by the innermost container it
+     * stands in, which is the place two numbers are put in one form at: a part of an item read
+     * through no name is refused beside a part a name stands for, whichever item each is of, and a
+     * number of the item itself stands at another place and is taken beside either.
+     */
+    @Test
+    void anElementOfANestedContainerIsToldByTheInnermostContainer() {
+        ElementsNamed.Slot aPart = ElementsNamed.Slot.innermostOf(
+                TermPath.of("x").then("items").element().then("parts").element());
+        ElementsMet met = new ElementsMet();
+        assertTrue(met.admits(ElementsNamed.of(List.of(new ElementsNamed.Named(aPart, A))),
+                Set.of(aPart)));
+        assertTrue(admitsThroughNoName(met, AN_ITEM));
+        assertFalse(admitsThroughNoName(met, aPart));
+        assertTrue(met.crowded());
+    }
+
     /** An element of another container is another element, whatever it was read through. */
     @Test
     void anElementOfAnotherContainerIsTakenBesideIt() {
