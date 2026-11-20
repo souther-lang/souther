@@ -147,10 +147,12 @@ final class ConstructionStopAssessment {
                               InputReading read) {
         List<AConstructionOnTheWay> onTheWay = each.onTheWay();
         List<ConstructionAsk> asks = new ArrayList<>();
+        Map<Core, List<OnTheWay>> waysTo = new IdentityHashMap<>();
         for (AConstructionOnTheWay one : onTheWay) {
             if (one.asked() instanceof AConstructionOnTheWay.Asked.Read(ConstructionAsk ask)) {
                 asks.add(ask);
             }
+            one.way().ifPresent(way -> waysTo.put(one.made(), way));
         }
         // Whether the way holds a part is asked of each part once, however many times it is read.
         Predicate<Proposition> toTheComparison = heldOnEvery(ways, read);
@@ -164,16 +166,18 @@ final class ConstructionStopAssessment {
                                 WhyAConstructionStopIsNotShown.ASKS_NOT_READ),
                         new WhatAConstructionAsks.OnEveryRule());
                 case AConstructionOnTheWay.Asked.Read(ConstructionAsk ask) ->
-                        judged(each, one, ask, asks, toTheComparison, read);
+                        judged(each, one, ask, asks, waysTo, toTheComparison, read);
             });
         }
         return out;
     }
 
     /** What is shown of {@code one}, which asks {@code ask}, among constructions that ask
-     *  {@code asks}, where the way to the comparison holds what {@code toTheComparison} says. */
+     *  {@code asks} and are met on the ways {@code waysTo} holds, where the way to the comparison
+     *  holds what {@code toTheComparison} says. */
     private static Judgement judged(ComparisonReadings.Reading each, AConstructionOnTheWay one,
                                     ConstructionAsk ask, List<ConstructionAsk> asks,
+                                    Map<Core, List<OnTheWay>> waysTo,
                                     Predicate<Proposition> toTheComparison, InputReading read) {
         // What asks nothing, or nothing the way to the comparison does not hold, is safe whatever
         // the tree says, and the tree is walked only for what is left.
@@ -216,7 +220,7 @@ final class ConstructionStopAssessment {
         if (told.isEmpty()) {
             return new Judgement.Safe(one.made());
         }
-        Found found = aStopAt(ask, told.get(), before.get(), both, asks, read);
+        Found found = aStopAt(ask, told.get(), before.get(), both, asks, waysTo, read);
         return switch (found) {
             case Found.AStop(Shown shown) -> new Judgement.Stops(one.made(), shown);
             case Found.None(WhyAConstructionStopIsNotShown why) -> unresolved(one, ask, told, why);
@@ -347,18 +351,71 @@ final class ConstructionStopAssessment {
     }
 
     /**
+     * A construction a run may work out before the one judged, and the runs it is worked out on:
+     * every run that takes the way to the one judged, or, where {@code onlyWhere} holds some
+     * condition, only those of them that meet every one of those as well — the conditions of the
+     * way to it that are not on the way to the one judged, as an arm it stands on puts there.
+     *
+     * <p>A run it is not worked out on is no run it ends, so what it asks is asked of a value only
+     * where the value meets {@code onlyWhere}. Asked of every value where a condition of the way to
+     * it is not read, which asks more of a value and never less.
+     */
+    private record Before(ConstructionAsk ask, List<TakenConstraint.Affine> onlyWhere) {
+
+        Before {
+            onlyWhere = List.copyOf(onlyWhere);
+        }
+
+        /** {@code ask}'s construction, met on {@code itsWay} — none where the walk did not meet
+         *  it on one way — before one met on {@code way}. */
+        static Before of(ConstructionAsk ask, List<OnTheWay> itsWay, List<OnTheWay> way) {
+            if (itsWay == null) {
+                return new Before(ask, List.of());
+            }
+            List<TakenConstraint.Affine> only = new ArrayList<>();
+            for (OnTheWay entry : itsWay) {
+                if (way.contains(entry)) {
+                    continue;
+                }
+                if (entry instanceof OnTheWay.TakenIn(var _,
+                        RowDemand.Relational(TakenConstraint.Affine affine), var _, var _)
+                        && numbersOf(affine.form(), new LinkedHashSet<>())) {
+                    only.add(affine);
+                } else if (!(entry instanceof OnTheWay.Settled(var _, var _, boolean thisWay)
+                        && thisWay)) {
+                    return new Before(ask, List.of());
+                }
+            }
+            return new Before(ask, only);
+        }
+
+        /** Whether a run with the input's numbers at {@code at} works it out: false only where a
+         *  condition of {@code onlyWhere} is worked out exactly and does not hold there. */
+        boolean workedOutAt(Map<NumericTerm, ExactRatio> at) {
+            for (TakenConstraint.Affine condition : onlyWhere) {
+                ExactRatio comes = valueOf(condition.form(), at);
+                if (comes != null && !condition.rel().holds(comes.signum())) {
+                    return false;
+                }
+            }
+            return true;
+        }
+    }
+
+    /**
      * Whether a run taking {@code way}, the way to the comparison and to {@code ask}'s
      * construction, stops at the construction: everything a run may work out first is asked
-     * whether it may end the run, among constructions that ask {@code asks}, the way whether it is
-     * read, and only where all of that is answered is a value looked for.
+     * whether it may end the run, among constructions that ask {@code asks} and are met on the
+     * ways {@code waysTo} holds, the way whether it is read, and only where all of that is answered
+     * is a value looked for.
      */
     private static Found aStopAt(ConstructionAsk ask, WhatAConstructionAsks told,
                                  WhatARunWorksOutBeforeACount.BeforeAConstruction before,
                                  List<OnTheWay> way, List<ConstructionAsk> asks,
-                                 InputReading read) {
-        List<ConstructionAsk> first = new ArrayList<>();
+                                 Map<Core, List<OnTheWay>> waysTo, InputReading read) {
+        List<ConstructionAsk> passed = new ArrayList<>();
         for (Core part : before.onSomeRun()) {
-            if (!getsPast(part, asks, first)) {
+            if (!getsPast(part, asks, passed)) {
                 return new Found.None(WhyAConstructionStopIsNotShown.SOMETHING_BEFORE_IT_MAY_STOP);
             }
         }
@@ -372,10 +429,15 @@ final class ConstructionStopAssessment {
                 return new Found.None(WhyAConstructionStopIsNotShown.A_CONDITION_NOT_READ);
             }
         }
+        List<Before> first = new ArrayList<>();
+        for (ConstructionAsk one : passed) {
+            first.add(Before.of(one, waysTo.get(one.made()), way));
+        }
         List<LinearForm<NumericTerm>> forms = new ArrayList<>();
         taken.forEach(it -> forms.add(it.form()));
-        for (ConstructionAsk one : first) {
-            formsOf(one.requirement(), forms);
+        for (Before one : first) {
+            formsOf(one.ask().requirement(), forms);
+            one.onlyWhere().forEach(it -> forms.add(it.form()));
         }
         formsOf(ask.requirement(), forms);
         Set<NumericTerm> numbers = new LinkedHashSet<>();
@@ -485,20 +547,20 @@ final class ConstructionStopAssessment {
 
     /**
      * Whether a run with the input's numbers at {@code at} takes {@code way}, meets what each of
-     * {@code first} asks, and does not meet what {@code ask} asks: each worked out exactly, and
-     * none of it shown where the arithmetic cannot say.
+     * {@code first} it works out asks, and does not meet what {@code ask} asks: each worked out
+     * exactly, and none of it shown where the arithmetic cannot say.
      */
     private static boolean stopsAt(Map<NumericTerm, ExactRatio> at,
                                    List<TakenConstraint.Affine> way,
-                                   List<ConstructionAsk> first, ConstructionAsk ask) {
+                                   List<Before> first, ConstructionAsk ask) {
         for (TakenConstraint.Affine condition : way) {
             ExactRatio comes = valueOf(condition.form(), at);
             if (comes == null || !condition.rel().holds(comes.signum())) {
                 return false;
             }
         }
-        for (ConstructionAsk one : first) {
-            if (met(one.requirement(), at) != Met.HOLDS) {
+        for (Before one : first) {
+            if (one.workedOutAt(at) && met(one.ask().requirement(), at) != Met.HOLDS) {
                 return false;
             }
         }
@@ -601,15 +663,15 @@ final class ConstructionStopAssessment {
     /**
      * The values {@code number} is tried at: nought and one either side, the ends of its place, and
      * on both sides of where each condition over it alone turns — of the way, of what the
-     * constructions before ask, and of what {@code ask} asks — each once, and none past the ends of
-     * its place. None at which a condition of the way over it alone does not hold, which no value
+     * constructions before ask and of the way to them, and of what {@code ask} asks — each once,
+     * and none past the ends of its place. None at which a condition of the way over it alone does not hold, which no value
      * taking the way has, so the budget is not spent on it. Those at which a part of what
      * {@code ask} asks over it alone is not met come first, so that a value taking each number to
      * the side the construction refuses is tried before the budget is spent on the others.
      */
     private static List<ExactRatio> valuesToTry(NumericTerm number,
                                                 List<TakenConstraint.Affine> way,
-                                                List<ConstructionAsk> first,
+                                                List<Before> first,
                                                 ConstructionAsk ask, InputReading read) {
         Set<ExactRatio> out = new LinkedHashSet<>();
         FormRange ends = FormRange.endsOf(number, read);
@@ -623,8 +685,13 @@ final class ConstructionStopAssessment {
         for (TakenConstraint.Affine condition : way) {
             turnsAt(number, condition.form(), ExactRatio.ZERO, out);
         }
+        for (Before one : first) {
+            for (TakenConstraint.Affine condition : one.onlyWhere()) {
+                turnsAt(number, condition.form(), ExactRatio.ZERO, out);
+            }
+        }
         List<ConstructionAsk.Requirement> asked = new ArrayList<>();
-        first.forEach(one -> asked.add(one.requirement()));
+        first.forEach(one -> asked.add(one.ask().requirement()));
         asked.add(ask.requirement());
         for (ConstructionAsk.Requirement requirement : asked) {
             for (ConstructionAsk.Requirement.Is is : everyFormOf(requirement)) {

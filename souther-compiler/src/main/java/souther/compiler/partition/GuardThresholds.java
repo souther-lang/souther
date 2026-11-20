@@ -446,10 +446,15 @@ public final class GuardThresholds {
                                     && !(arrived instanceof ComparisonAssessment.AnswersNowhere)
                                     && somethingWorkedOutIsNotAllTold(each, toItsValue, read);
                             // And what is shown of a run on the way stopping at each construction
-                            // it may work out first, which no run that does not get there does.
-                            List<ConstructionStopAssessment.Judgement> made = aRowGetsThere
-                                    ? ConstructionStopAssessment.of(each, before, read)
-                                    : List.of();
+                            // it may work out first. Asked where a row takes the way, and not
+                            // where one arrives: what arrives is what got past every construction
+                            // on the way, and a run a construction stops takes the way and does
+                            // not arrive. Each construction is asked whether a run gets to it on
+                            // its own way ({@link ConstructionStopAssessment}).
+                            List<ConstructionStopAssessment.Judgement> made =
+                                    toItself.toIt().leavesARow()
+                                            ? ConstructionStopAssessment.of(each, before, read)
+                                            : List.of();
                             reached(cuts, stated, each, readingsOf(arrived), aCase, aPart);
                             RuleCitation.Written rule = lineAt(behavior, stated, at,
                                     each.occurrence().origin(), each.at(),
