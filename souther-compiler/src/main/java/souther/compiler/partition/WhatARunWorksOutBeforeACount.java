@@ -346,13 +346,31 @@ final class WhatARunWorksOutBeforeACount {
      */
     static ToAConstruction toAConstruction(Core root, Core comparison, Core.Construct made) {
         List<Core> toIt = root == null ? null : wayDownTo(root, made);
-        if (toIt != null && toIt.size() >= 2
-                && toIt.get(toIt.size() - 2) instanceof Core.IfConstructed attempt
-                && attempt.construct() == made) {
+        if (toIt != null && testedByAnAttempt(toIt, made)) {
             return new ToAConstruction.Attempted();
         }
         BeforeAConstruction before = workedOutBeforeAConstruction(root, comparison, made);
         return before == null ? new ToAConstruction.NotShown() : before;
+    }
+
+    /** Whether {@code made}, the last of {@code toIt}, is the construction an attempt tests: the
+     *  first node above it that is no value standing as a wider type is the attempt, and tests
+     *  it. */
+    private static boolean testedByAnAttempt(List<Core> toIt, Core.Construct made) {
+        for (int at = toIt.size() - 2; at >= 0; at--) {
+            switch (toIt.get(at)) {
+                // Standing as a wider type works nothing out of its own, and the attempt the
+                // construction is tested by stands above it.
+                case Core.Widen _ -> { }
+                case Core.IfConstructed attempt -> {
+                    return Core.withoutStanding(attempt.construct()) == made;
+                }
+                default -> {
+                    return false;
+                }
+            }
+        }
+        return false;
     }
 
     /** What is known of a run getting to a construction ({@link #toAConstruction}). */
@@ -399,7 +417,7 @@ final class WhatARunWorksOutBeforeACount {
             return null;
         }
         for (Core above : toIt.subList(0, parting + 1)) {
-            if (above instanceof Core.Block) {
+            if (Evaluated.makesAFunction(above)) {
                 return null;
             }
         }
@@ -448,22 +466,23 @@ final class WhatARunWorksOutBeforeACount {
     /** Whether {@code node} works {@code first} out on every run it runs on, before it enters
      *  {@code then}. */
     private static boolean firstOnEveryRun(Core node, Core first, Core then) {
-        if (node instanceof Core.LetIn let) {
-            return first == let.value() && then == let.body();
-        }
-        if (node instanceof Core.Block) {
-            return false;
-        }
-        List<Evaluated.Step> steps = Evaluated.inOrder(node);
-        for (Evaluated.Step step : steps) {
-            if (step.expression() == then) {
-                return false;
+        return switch (node) {
+            case Core.LetIn let -> first == let.value() && then == let.body();
+            // A value standing as a wider type holds one, and two ways do not part at it; a
+            // function value's body runs where it is applied, and not here.
+            case Core.Widen _, Core.Block _ -> false;
+            default -> {
+                for (Evaluated.Step step : Evaluated.inOrder(node)) {
+                    if (step.expression() == then) {
+                        yield false;
+                    }
+                    if (step.expression() == first) {
+                        yield step instanceof Evaluated.Step.Always;
+                    }
+                }
+                yield false;
             }
-            if (step.expression() == first) {
-                return step instanceof Evaluated.Step.Always;
-            }
-        }
-        return false;
+        };
     }
 
     /** Whether {@code node} enters {@code child} whenever it runs. */
