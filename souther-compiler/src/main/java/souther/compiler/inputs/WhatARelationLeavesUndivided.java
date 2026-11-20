@@ -1437,8 +1437,7 @@ public final class WhatARelationLeavesUndivided {
             ExactRatio far = end.plus(inward).orNull();
             WholeRun whole = WholeRun.ofTheValues(slice);
             BigInteger row = whole == null ? null : low ? whole.low() : whole.high();
-            ExactRatio other = (low ? slice.max() : slice.min()) instanceof Endpoint opposite
-                    && opposite.at() instanceof Count count ? count.exactly() : null;
+            ExactRatio other = endOf(slice, !low);
             return far != null && row != null && other != null
                     && (low ? far.compareTo(other) <= 0 : far.compareTo(other) >= 0)
                     && rel.holds(signOf(ExactRatio.of(value), end))
@@ -1473,7 +1472,7 @@ public final class WhatARelationLeavesUndivided {
         /** The end of {@code slice} as a number, or null where it has none. */
         private static ExactRatio endOf(NumericDomain.Bounds slice, boolean low) {
             Endpoint end = low ? slice.min() : slice.max();
-            return end != null && end.at() instanceof Count count ? count.exactly() : null;
+            return (end != null && end.at() instanceof Count count) ? count.exactly() : null;
         }
 
         /** Whether {@code ends}, at the values {@code asked}, lie on one line: the last as far
