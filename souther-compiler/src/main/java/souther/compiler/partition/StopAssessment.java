@@ -236,14 +236,16 @@ final class StopAssessment {
                                      List<TakenConstraint.Affine> within, InputReading read) {
         UndividedByARelation.Working working = place.worked().stops().operations();
         UndividedByARelation.IntOperation operation = working.operations().get(at);
-        if (place.worked().madeWhere() != null) {
-            return new Judgement.Unresolved(operation, WhyAStopIsNotShown.ON_AN_APPLICATION);
-        }
-        // On an arm, a run gets there only where taking it holds, which is on the way only where
-        // the comparison is stated as a condition: then the value tried is asked to meet it with
-        // the rest of the way.
-        if (each.statedAsACondition().isEmpty() && place.worked().onAnArm() != null) {
-            return new Judgement.Unresolved(operation, WhyAStopIsNotShown.ON_AN_ARM);
+        // On an arm or an application, a run gets there only where taking the arm or making the
+        // application holds, which is on the way only where the comparison is stated as a
+        // condition: then the value tried is asked to meet it with the rest of the way.
+        if (each.statedAsACondition().isEmpty()) {
+            if (place.worked().madeWhere() != null) {
+                return new Judgement.Unresolved(operation, WhyAStopIsNotShown.ON_AN_APPLICATION);
+            }
+            if (place.worked().onAnArm() != null) {
+                return new Judgement.Unresolved(operation, WhyAStopIsNotShown.ON_AN_ARM);
+            }
         }
         if (!working.exact() || working.aStopUntold() || !working.onEveryRun()) {
             return new Judgement.Unresolved(operation, WhyAStopIsNotShown.NOT_EVERY_OPERATION_TOLD);
