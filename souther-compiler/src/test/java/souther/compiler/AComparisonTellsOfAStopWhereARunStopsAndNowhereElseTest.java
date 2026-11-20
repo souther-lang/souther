@@ -360,10 +360,6 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
                 "sumOfAChoiceStep", "sumCarriedInATuple");
         notShown("a product of two numbers of the input, which is no form a value is put to",
                 "productOfTwoNumbers");
-        notShown("beside a call whose own stop no reading tells as an operation, here the least "
-                + "Int having no absolute value", "absOfASum", "absInALetBody");
-        notShown("a construction on the way refused at some q, which asks something of a run "
-                + "that no run is shown not to meet", "fieldBesideARefusedPart");
     }
 
     /** Each of {@code names} as a stop a run comes to that is said as not resolved, for

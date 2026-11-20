@@ -37,11 +37,17 @@ import java.util.Set;
  * <p>A stop is shown only where every part of that is answered whole by an owner of it, and is
  * left unresolved otherwise: a value of the input only where its types state nothing of their
  * values ({@link AValueOfTheInput}), the way only where every condition on it is a relation of
- * whole numbers of the input or settled, what comes before the comparison only where none of it
- * ends a run whatever the input ({@link ComparisonReadings.Reading#nothingBeforeItEndsARun}), and
- * the operation only where it is worked out wherever the comparison is, and it and every other
- * operation the comparison may work out before it are forms of those numbers. Showing more moves an
- * answer from unresolved to one of the others, and changes what neither of them means.
+ * whole numbers of the input or settled, what comes before the comparison only where every
+ * operation of what may end a run there is told ({@link ComparisonReadings.Reading#workedOutBeforeIt}),
+ * and the operation only where it is worked out wherever the comparison is. It and every other
+ * operation a run may work out before it, there or before the comparison, are forms of those
+ * numbers, but for one every value on the way keeps within its ends: the value looked for is one
+ * of those, and gets past it. Showing more moves an answer from unresolved to one of the others,
+ * and changes what neither of them means.
+ *
+ * <p>A value shown to stop a run is held against every operation judged kept within its ends on
+ * the way it is on: one it takes past them is the two answers contradicting each other, and is
+ * refused, never settled by taking one of them.
  */
 final class StopAssessment {
 
@@ -164,11 +170,10 @@ final class StopAssessment {
                 UndividedByARelation.IntOperation operation = operations.get(at);
                 if (left == null) {
                     out.add(new Judgement.Safe(operation, WhyNone.NOT_WORKED_OUT));
-                } else if (left.keepsWithinItsType(operation)
-                        || left.noRowTakesItPastItsEnds(operation)) {
+                } else if (keptWithinItsEnds(left, operation)) {
                     out.add(new Judgement.Safe(operation, WhyNone.WITHIN_ITS_ENDS));
                 } else {
-                    out.add(aStopIn(each, place, at, within, read));
+                    out.add(aStopIn(each, place, left, at, within, read));
                 }
             }
         }
@@ -213,13 +218,21 @@ final class StopAssessment {
         return out;
     }
 
+    /** Whether every value the way {@code left} is of leaves keeps {@code operation} within its
+     *  ends: no run along it stops there, the value a stop is shown at among them. */
+    private static boolean keptWithinItsEnds(WhatAWayLeavesOfAValue left,
+                                             UndividedByARelation.IntOperation operation) {
+        return left.keepsWithinItsType(operation) || left.noRowTakesItPastItsEnds(operation);
+    }
+
     /**
      * That a run stops in the operation at {@code at} of what {@code place} works out, or why that
      * is not shown. Where it is worked out, how the way gets there and what is worked out before it
      * are asked first, and a value is looked for only where all of them are answered. The value
-     * meets {@code within} as it meets the way.
+     * meets {@code within} as it meets the way, which {@code left} is what is left of.
      */
-    private static Judgement aStopIn(ComparisonReadings.Reading each, Place place, int at,
+    private static Judgement aStopIn(ComparisonReadings.Reading each, Place place,
+                                     WhatAWayLeavesOfAValue left, int at,
                                      List<TakenConstraint.Affine> within, InputReading read) {
         UndividedByARelation.Working working = place.worked().stops().operations();
         UndividedByARelation.IntOperation operation = working.operations().get(at);
@@ -235,7 +248,8 @@ final class StopAssessment {
         if (!working.exact() || working.aStopUntold() || !working.onEveryRun()) {
             return new Judgement.Unresolved(operation, WhyAStopIsNotShown.NOT_EVERY_OPERATION_TOLD);
         }
-        if (!each.nothingBeforeItEndsARun()) {
+        Optional<UndividedByARelation.Working> before = each.workedOutBeforeIt();
+        if (before.isEmpty()) {
             return new Judgement.Unresolved(operation,
                     WhyAStopIsNotShown.SOMETHING_BEFORE_IT_MAY_STOP);
         }
@@ -254,15 +268,25 @@ final class StopAssessment {
         }
         way.addAll(within);
         LinearForm<NumericTerm> form = operation.overTheInput();
-        // Every other operation a run may work out before this one: those this one is not worked
-        // out before. One worked out of this one comes after it, and is not got to where it stops.
-        List<UndividedByARelation.IntOperation> others = new ArrayList<>();
+        // Every other operation a run may work out before this one: what it works out before the
+        // comparison, and those of the comparison this one is not worked out before. One worked
+        // out of this one comes after it, and is not got to where it stops. One of the comparison
+        // written as this one is is this operation told again: a run past its ends there stops in
+        // this operation as written all the same.
+        List<UndividedByARelation.IntOperation> others =
+                new ArrayList<>(before.get().operations());
         for (int other = 0; other < working.operations().size(); other++) {
             UndividedByARelation.IntOperation it = working.operations().get(other);
-            if (other != at && !it.after().contains(at)) {
+            if (other != at && !it.after().contains(at) && !it.form().equals(operation.form())) {
                 others.add(it);
             }
         }
+        // One every value on the way keeps within its ends is got past by the value looked for,
+        // which is one of them, and is not asked of it. That it is got past is held against the
+        // value once one is found.
+        List<UndividedByARelation.IntOperation> kept = others.stream()
+                .filter(it -> keptWithinItsEnds(left, it)).toList();
+        others.removeAll(kept);
         Set<NumericTerm> numbers = new LinkedHashSet<>();
         List<LinearForm<NumericTerm>> forms = new ArrayList<>();
         forms.add(form);
@@ -284,15 +308,35 @@ final class StopAssessment {
         if (!AValueOfTheInput.holdsAnyWholeNumbersAt(read, places)) {
             return new Judgement.Unresolved(operation, WhyAStopIsNotShown.NO_VALUE_SHOWN);
         }
-        int[] left = {MOST_VALUES_TRIED};
-        Shown shown = aValueItStopsAt(operation, others, way, List.copyOf(numbers), read, left);
+        int[] tries = {MOST_VALUES_TRIED};
+        Shown shown = aValueItStopsAt(operation, others, way, List.copyOf(numbers), read, tries);
         if (shown != null) {
-            return new Judgement.Stops(shown);
+            return new Judgement.Stops(againstWhatIsKept(shown, kept));
         }
         // Where the values ran out with the figure, more may be left untried, and that is said.
-        return new Judgement.Unresolved(operation, left[0] <= 0
+        return new Judgement.Unresolved(operation, tries[0] <= 0
                 ? WhyAStopIsNotShown.NO_VALUE_FOUND_WITHIN_WHAT_IS_TRIED
                 : WhyAStopIsNotShown.NO_VALUE_FOUND);
+    }
+
+    /**
+     * {@code shown}, held against {@code kept}, the operations judged to be kept within their ends
+     * by every value on the way it is one of: each that the value works out comes out within them.
+     * One that does not is the two judgements contradicting each other, which no answer here may
+     * stand on, and is refused rather than one of them being taken.
+     */
+    private static Shown againstWhatIsKept(Shown shown,
+                                           List<UndividedByARelation.IntOperation> kept) {
+        for (UndividedByARelation.IntOperation each : kept) {
+            ExactRatio comes = each.overTheInput() == null ? null
+                    : WholeValuesMeeting.valueOf(each.overTheInput(), shown.at());
+            if (comes != null && !withinItsEnds(comes, each)) {
+                throw new IllegalStateException("a value shown to stop a run, " + shown
+                        + ", takes " + each.form() + ", judged kept within its ends on the way,"
+                        + " past them");
+            }
+        }
+        return shown;
     }
 
     /**

@@ -105,6 +105,76 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
         assertEquals(List.of(), suggested(report), report);
     }
 
+    /** A helper's argument is worked out before its body takes any arm, so a move handed to it is
+     *  got to on every run, whichever arm the body takes after: the value it is shown to stop at
+     *  needs to meet no arm's condition, and the bound is as far out as it can be. A name the
+     *  helper gives what it was handed is read as that, and the move it names, told once more
+     *  where the name is read, is the one move. */
+    @Test
+    void aMoveHandedToAHelperIsGotToBeforeAnyArmOfItsBody() {
+        String report = report("""
+                module m
+
+                data P = { birthday: Date, on: Date }
+
+                let ageOn (b: Date, on: Date): Int =
+                    Date.year(on) - Date.year(b)
+                        - (if Date.month(on) * 100 + Date.day(on) < Date.month(b) * 100 + Date.day(b)
+                           then 1 else 0)
+
+                let attainedAgeOn (b: Date, on: Date): Int = ageOn(Date.addDays(0 - 1, b), on)
+
+                behavior f : (p: P) -> Bool
+                let f (p) = attainedAgeOn(p.birthday, p.on) >= 75
+                """);
+
+        assertTrue(suggested(report).contains("· declaring `invariant birthday >="
+                + " Date(\"-999999999-01-02\")` on P keeps every run from stopping there; a bound one"
+                + " step further out lets in a run that stops there, and the value to declare is the"
+                + " one the domain has"), report);
+    }
+
+    /** What a run works out before the comparison is asked at the value the stop is shown at, as
+     *  what the comparison works out before the move is: where it keeps within its ends there, the
+     *  run gets to the move and stops in it. */
+    @Test
+    void whatIsWorkedOutBeforeTheComparisonIsAskedAtTheValue() {
+        String report = report("""
+                module m
+
+                data P = { birthday: Date }
+
+                behavior f : (p: P) -> Bool
+                let f (p) = Date.addDays(0 - 1, p.birthday) > Date("2000-01-01")
+                    || Date.addDays(0 - 2, p.birthday) > Date("2000-01-01")
+                """);
+
+        assertTrue(suggested(report).contains("· declaring `invariant birthday >="
+                + " Date(\"-999999999-01-03\")` on P keeps every run from stopping there; a bound one"
+                + " step further out lets in a run that stops there, and the value to declare is the"
+                + " one the domain has"), report);
+    }
+
+    /** Where every value past the bound stops a run in what is worked out before the comparison,
+     *  no run gets to the move past its ends: the bound keeps every run from it, and is not said
+     *  to be as far out as it can be. */
+    @Test
+    void aMoveARunStopsBeforeAtEveryValuePastItIsNoStopShown() {
+        String report = report("""
+                module m
+
+                data P = { birthday: Date }
+
+                behavior f : (p: P) -> Bool
+                let f (p) = Date.addDays(0 - 3, p.birthday) > Date("2000-01-01")
+                    || Date.addDays(0 - 2, p.birthday) > Date("2000-01-01")
+                """);
+
+        assertTrue(suggested(report).contains("· declaring `invariant birthday >="
+                + " Date(\"-999999999-01-03\")` on P keeps every run from stopping there, and the"
+                + " value to declare is the one the domain has"), report);
+    }
+
     /** The year of a date shifted by days is a number of the date it is shifted from, which a run
      *  works out only where the shifts get there. */
     private static final String THE_YEAR_OF_A_SHIFT = """

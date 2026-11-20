@@ -306,23 +306,15 @@ final class WhatARunWorksOutBeforeACount {
     }
 
     /**
-     * Whether nothing a run works out before {@code comparison}, a node of {@code root}'s tree,
-     * ends it, whatever the input: every part counted as running on some run, the comparison
-     * itself left out ({@link #workedOutUpTo}), is one {@link WhatARunMayEndFor} says ends none.
-     * False where it is not in the tree, stands in a closure, or some part ends a run for what
-     * nothing says ({@link WhatARunMayEndFor.Endings.NotKnown}): that is not that it ends none.
+     * What a run may work out before {@code comparison}, a node of {@code root}'s tree, that may
+     * end it: every part counted as running on some run, the comparison itself left out
+     * ({@link #workedOutUpTo}), but those {@link WhatARunMayEndFor} says end none. Null where it is
+     * not in the tree.
      */
-    static boolean nothingBeforeItEndsARun(Core root, Core comparison) {
+    static List<Core> whatMayEndARunBefore(Core root, Core comparison) {
         List<Core> worked = root == null ? null : workedOutUpTo(root, comparison, false);
-        if (worked == null) {
-            return false;
-        }
-        for (Core part : worked.subList(0, worked.size() - 1)) {
-            if (!WhatARunMayEndFor.of(part).endsNone()) {
-                return false;
-            }
-        }
-        return true;
+        return worked == null ? null : worked.subList(0, worked.size() - 1).stream()
+                .filter(part -> !WhatARunMayEndFor.of(part).endsNone()).toList();
     }
 
     /**
@@ -391,7 +383,7 @@ final class WhatARunWorksOutBeforeACount {
      * as two questions ask it.
      *
      * @param onSomeRun  every part a run getting to it may work out first, a part that runs only
-     *                   on some runs counted as running, as {@link #nothingBeforeItEndsARun} counts
+     *                   on some runs counted as running, as {@link #whatMayEndARunBefore} counts
      *                   them, and what it is made of: what may end a run before it is in these
      * @param onEveryRun the parts every run getting to it works out first, and what it is made
      *                   of: what a run that gets to it has got past is in these
