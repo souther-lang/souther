@@ -2601,6 +2601,10 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         private final Set<UndividedByARelation.IntOperation> toldOnce = new HashSet<>();
         /** The node each of {@link #operations} was told at, by where it is among them. */
         private final List<Core> at = new ArrayList<>();
+        /** Where among {@link #operations} each node of {@link #at} was last told, by the node
+         *  itself and not by what it is written as: a node is asked of by what object it is.
+         *  Written where {@link #at} is and nowhere else ({@link #add}). */
+        private final Map<Core, Integer> lastToldAt = new IdentityHashMap<>();
         /** The operations over a stopped value that are told of nowhere, to be asked of the form
          *  of the comparison. */
         private final List<SumOverTheStop> sumsOverTheStop = new ArrayList<>();
@@ -2641,6 +2645,12 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         /** Every operation of the groups kept for where a run stops, asked whether one is
          *  among them without going through each group. */
         private final Set<UndividedByARelation.IntOperation> keptOnce = new HashSet<>();
+        /** Every node the groups kept for where a run stops told an operation at, by what object
+         *  it is, asked the same way ({@link #toldAt}). */
+        private final Set<Core> keptAt = Collections.newSetFromMap(new IdentityHashMap<>());
+        /** Whether this is a group kept for where a run stops by another reading, which took what
+         *  it told when it kept it ({@link #kept}): it is told nothing more. */
+        private boolean keptElsewhere;
 
         /** What reading values as numbers to tell their stops has met, shared with every reading
          *  tried apart from this one ({@link #tellingOnce}). */
@@ -2675,9 +2685,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          */
         boolean toldAt(Core node) {
             Core here = Core.withoutStanding(node);
-            return at.stream().anyMatch(each -> each == here)
-                    || leftToTheWitness.stream().anyMatch(group -> group.toldAt(here))
-                    || besideTheRows.stream().anyMatch(group -> group.toldAt(here));
+            return lastToldAt.containsKey(here) || keptAt.contains(here);
         }
 
         /**
@@ -2817,7 +2825,10 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         }
 
         void add(Core node, UndividedByARelation.IntOperation operation) {
-            at.add(Core.withoutStanding(node));
+            toldMore();
+            Core bare = Core.withoutStanding(node);
+            lastToldAt.put(bare, at.size());
+            at.add(bare);
             operations.add(operation);
             toldOnce.add(operation);
         }
@@ -2840,6 +2851,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          * forms it knows the operation or the place of carried over to where they now stand.
          */
         void absorb(WhatWasTold apart) {
+            toldMore();
             int ofWholeNumbers = operations.size();
             for (int i = 0; i < apart.operations.size(); i++) {
                 add(apart.at.get(i), apart.operations.get(i).shifted(ofWholeNumbers));
@@ -2852,6 +2864,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             leftToTheWitness.addAll(apart.leftToTheWitness);
             besideTheRows.addAll(apart.besideTheRows);
             keptOnce.addAll(apart.keptOnce);
+            keptAt.addAll(apart.keptAt);
             exact &= apart.exact;
             partials.addAll(apart.partials);
         }
@@ -2863,9 +2876,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          */
         void leftToTheWitness(WhatWasTold apart) {
             leftToTheWitness.add(apart);
-            aStopUntold |= apart.aStopUntold;
-            keptOnce.addAll(apart.toldOnce);
-            keptOnce.addAll(apart.keptOnce);
+            kept(apart);
         }
 
         /**
@@ -2876,9 +2887,28 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          */
         void besideTheRows(WhatWasTold apart) {
             besideTheRows.add(apart);
+            kept(apart);
+        }
+
+        /** What {@code apart}, a group kept for where a run stops, told, asked here without going
+         *  through the group: it is told nothing once it is kept. */
+        private void kept(WhatWasTold apart) {
+            toldMore();
+            apart.keptElsewhere = true;
             aStopUntold |= apart.aStopUntold;
             keptOnce.addAll(apart.toldOnce);
             keptOnce.addAll(apart.keptOnce);
+            keptAt.addAll(apart.lastToldAt.keySet());
+            keptAt.addAll(apart.keptAt);
+        }
+
+        /** That this is told more, which a group kept elsewhere is not: what it told was taken
+         *  when it was kept, and more would not be asked of it. */
+        private void toldMore() {
+            if (keptElsewhere) {
+                throw new IllegalStateException("a group kept for where a run stops is told no"
+                        + " more: the reading that kept it took what it told");
+            }
         }
 
         /**
@@ -3059,11 +3089,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     given.reversed().forEach(each -> include(out, each));
                     continue;
                 }
-                for (int i = at.size() - 1; i >= 0; i--) {
-                    if (at.get(i) == bare) {
-                        include(out, i);
-                        break;
-                    }
+                Integer told = lastToldAt.get(bare);
+                if (told != null) {
+                    include(out, told);
                 }
             }
             return List.copyOf(out);
