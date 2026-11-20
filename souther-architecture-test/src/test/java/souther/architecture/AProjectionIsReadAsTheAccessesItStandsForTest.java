@@ -715,6 +715,11 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "partition/WorkedOutToReachIt", "valuesItMayBe", "(L" + c
                         + "inputs/Denotation;)Ljava/util/List;",
                 Reading.NAMES, READS_THE_NAMES);
+        row(out, c + "partition/WorkedOutToReachIt", "theNameTheAccessesAreReadOff",
+                "(" + core + ")L" + CORE + "$Read;",
+                Reading.STRUCTURE,
+                "goes down a run of accesses to the name they are read off: a projection's one"
+                        + " part is its base");
         row(out, c + "partition/Pullback", "underItsAccesses", "(L" + c + "inputs/Denotation;)L"
                 + c + "inputs/Denotation;", Reading.NAMES, READS_THE_NAMES);
         row(out, c + "partition/Pullback", "aWayIntoAfresh", "(L" + c + "inputs/Denotation;L" + c

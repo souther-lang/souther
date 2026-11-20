@@ -3,12 +3,15 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ACompiledModel;
+import souther.compiler.UnreadBesideItsStops;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -69,14 +72,21 @@ class AnAverageOfAmountsBoundedOnePlaceEachIsReadWhereItIsLookedUpTest {
                 Yen(Rational.toInt(DOWN,
                     List.sum(List.map(p -> totalOf(p).value, records)) / List.length(records)))""";
 
+    /** What each model was measured to, by what it is made of: a test that asks both which places
+     *  are unread and where the borders are asks one model once. */
+    private static final Map<List<String>, List<String>> REPORTS = new ConcurrentHashMap<>();
+
     /** The report of the model, line by line. */
     private static List<String> report(String bounds, String helpers, String looked) {
-        Compilation compilation = Compilation.ofSource(
-                SOURCE.formatted(bounds, helpers, looked), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        ACompiledModel.compiles(compilation);
-        return AdequacyReport.of(compilation)
-                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines().toList();
+        return REPORTS.computeIfAbsent(List.of(bounds, helpers, looked), _ -> {
+            Compilation compilation = Compilation.ofSource(
+                    SOURCE.formatted(bounds, helpers, looked), "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            ACompiledModel.compiles(compilation);
+            return AdequacyReport.of(compilation)
+                    .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
+                    .toList();
+        });
     }
 
     /** The places the report says nothing is read of. */
@@ -203,6 +213,66 @@ class AnAverageOfAmountsBoundedOnePlaceEachIsReadWhereItIsLookedUpTest {
     void anAverageAHelperTakesTheListOfAnotherHelperToIsRead() {
         assertEquals(List.of(), unread(BOUNDS, MONTHS_HELPER + "\n" + AVERAGE_HELPER,
                 "averageOf(monthsOf(w))"));
+    }
+
+    private static final String THE_MONTHS_ARE_FILTERED_AFTER_A_GUARD = """
+            module demo
+
+            data Yen = Int
+                invariant value >= 0
+            data Pay = { base: Yen, extra: Yen }
+                %1$s
+            data Month = { pay: Pay, days: Int }
+            data Window = { first: Month, second: Month, third: Month }
+            data Done = { n: Int }
+            data NoMonth = { n: Int }
+            let totalOf (p: Pay): Yen = p.base + p.extra
+            let monthsOf (w: Window): List<Month> = [ w.first, w.second, w.third ]
+            let payableOf (w: Window): List<Month> =
+                List.filter(r -> r.days >= 17, monthsOf(w))
+            let averageOf (records: List<Month>): Yen =
+                Yen(Rational.toInt(DOWN,
+                    List.sum(List.map(r -> totalOf(r.pay).value, records))
+                        / List.length(records)))
+
+            behavior f : (w: Window) -> Done | NoMonth
+                constructs Done, Yen, NoMonth
+            let f (w) = {
+                let payable = payableOf(w)
+                guard List.length(payable) >= 1 else NoMonth { n = 0 }
+                guard averageOf(payable) >= Yen(100) else NoMonth { n = 1 }
+                Done { n = 1 }
+            }
+            """;
+
+    /** Whether the reading of that model leaves a comparison unread for a run that may stop where
+     *  nothing says, the months' amounts held by {@code bounds}. */
+    private static boolean someStopIsLeftUntold(String bounds) {
+        Compilation compilation = Compilation.ofSource(
+                THE_MONTHS_ARE_FILTERED_AFTER_A_GUARD.formatted(bounds), "Main");
+        compilation.measure(new Adequacy.Asked(Adequacy.Level.OFF, false));
+        ACompiledModel.compiles(compilation);
+        return AdequacyReport.of(compilation)
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
+                .anyMatch(line -> line.contains("not read")
+                        && line.contains(UnreadBesideItsStops.STOPS_NOT_ALL_TOLD));
+    }
+
+    /**
+     * The months reach the average through a helper that is handed what another helper answered,
+     * which the inliner leaves as a {@code let} around the filter: each month is still one of the
+     * three written, and the total of them is within an {@code Int}.
+     */
+    @Test
+    void anAverageOfTheMonthsAFilterKeptAfterAGuardLeavesNoStopUntold() {
+        assertFalse(someStopIsLeftUntold("""
+                invariant base.value <= 1000000000000
+                    invariant extra.value <= 1000000000000"""));
+    }
+
+    @Test
+    void theSameAverageWithNoBoundLeavesAStopUntold() {
+        assertTrue(someStopIsLeftUntold(""));
     }
 
     /** Control: without a bound on each amount the total of two can pass the greatest
