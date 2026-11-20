@@ -335,8 +335,6 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "check/SidesBalanced", "stepsFrom",
                 "(" + core + "L" + c + "types/BindingId;)Ljava/util/List;", Reading.STRUCTURE,
                 "reads the run of fields taken off one binding, which the base answers");
-        row(out, c + "partition/WhatARunWorksOutBeforeACount", "addWorkedOut",
-                "(Ljava/util/List;" + core + core + ")V", Reading.STRUCTURE, EVALUATION);
         row(out, c + "partition/WhatARunWorksOutBeforeACount", "offTheParameter",
                 "(" + core + "L" + c + "types/BindingId;)Z", Reading.STRUCTURE,
                 "asks whether a value is a parameter or a run of fields read off one, which the"
@@ -346,6 +344,10 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "finds the way down to one node by identity, which a projection's base is on");
         row(out, c + "partition/WhatARunWorksOutBeforeACount$Within", "letsThrough",
                 "(" + core + ")Z", Reading.EACH_SUBEXPRESSION, ASKS_EACH);
+        row(out, c + "partition/ConstructionStopAssessment", "getsPast",
+                "(" + core + "Ljava/util/List;Ljava/util/List;)Z", Reading.EACH_SUBEXPRESSION,
+                "asks each node whether working it out may end a run, or is a construction whose"
+                        + " condition is read, which no field access is");
         row(out, c + "partition/StopPastTheRepresentation", "collect",
                 "(" + core + "Ljava/util/Set;)V", Reading.EACH_SUBEXPRESSION,
                 "asks each node whether it is an operation that ends a run only past what the"

@@ -106,6 +106,7 @@ import souther.compiler.diag.msg.ReportMessage;
 
 import java.math.BigInteger;
 import souther.compiler.inputs.ABoundThatKeepsEveryRunGoing;
+import souther.compiler.inputs.AConstructionStopShown;
 import souther.compiler.inputs.AStopNotShown;
 import souther.compiler.inputs.AuthoredOrder;
 import souther.compiler.inputs.BlockReason;
@@ -4525,8 +4526,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 }
             }
             if (f.about() instanceof About.ARuleThatMayStopARun(var it)) {
+                Message how = it.constructions().isEmpty() ? new ReportMessage.StopsInAnOperation()
+                        : it.shown().isEmpty()
+                        ? new ReportMessage.StopsAtAConstruction(constructionsAsk(
+                                constructionsAsked(it.constructions()), page, rendering,
+                                declaredIn))
+                        : new ReportMessage.StopsInAnOperationAndAtAConstruction(
+                                constructionsAsk(constructionsAsked(it.constructions()), page,
+                                        rendering, declaredIn));
                 marked(out, f, page, new ReportMessage.MayStopARun(
-                        cited(it.cited(), page, declaredIn, places),
+                        cited(it.cited(), page, declaredIn, places), how,
                         everyRunStopsAt(it.everyRunStops(), page),
                         inCopies(it.readAt(), behavior.conditionPlaces().copies(),
                                 page, declaredIn)));
@@ -7224,6 +7233,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                             askedSaid(one.asks(), page))));
         }
         return new ReportMessage.Verbatim(String.join("", each));
+    }
+
+    /** What each construction a run on the way is shown to stop at asks, as a finding that it is
+     *  not resolved would say it. */
+    private static List<WhatAConstructionAsks> constructionsAsked(
+            List<AConstructionStopShown> shown) {
+        return shown.stream().map(AConstructionStopShown::asks).toList();
     }
 
     /** What is asked, in the page's words: the parts of a conjunction said together and of a
@@ -11388,6 +11404,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         }
     }
 
+    /** Each of {@code asks} into {@code into}: the type made, where it is written and what it
+     *  asks. */
+    private static void constructionsWritten(ArrayNode into, List<WhatAConstructionAsks> asks,
+                                             DocumentSources sources) {
+        for (WhatAConstructionAsks each : asks) {
+            ObjectNode one = into.addObject();
+            one.put("construction", each.construction());
+            PublishedAt.of(Citation.of(each.at())).ifPresent(place -> at(one, place, sources));
+            askedWritten(one.putObject("asked"), each.asks());
+        }
+    }
+
     /** What a construction asks of a run as a document writes it: a form and how it stands to a
      *  number, or the parts of a conjunction or of a disjunction. */
     private static void askedWritten(ObjectNode into, WhatAConstructionAsks.Asked asked) {
@@ -11531,13 +11559,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         }
         if (finding.about() instanceof About.ARuleWhoseStopIsNotShown(var it)
                 && !it.asks().isEmpty()) {
-            ArrayNode asks = f.putArray("asks");
-            for (WhatAConstructionAsks each : it.asks()) {
-                ObjectNode one = asks.addObject();
-                one.put("construction", each.construction());
-                PublishedAt.of(Citation.of(each.at())).ifPresent(place -> at(one, place, sources));
-                askedWritten(one.putObject("asked"), each.asks());
-            }
+            constructionsWritten(f.putArray("asks"), it.asks(), sources);
+        }
+        // And, of a rule a run on the way to is shown to stop at a construction, what each such
+        // construction asks that the run does not meet, as the words beside the rule say it.
+        if (finding.about() instanceof About.ARuleThatMayStopARun(var it)
+                && !it.constructions().isEmpty()) {
+            constructionsWritten(f.putArray("constructions"),
+                    constructionsAsked(it.constructions()), sources);
         }
         // Present where the kind has one. A finding a build is not told about under any code is
         // not one with an empty code, and a consumer joining these to the diagnostics a build

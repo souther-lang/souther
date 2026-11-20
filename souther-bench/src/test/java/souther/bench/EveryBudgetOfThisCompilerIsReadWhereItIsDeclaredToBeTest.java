@@ -689,6 +689,10 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.partition.StopAssessment#<clinit>()V",
                     "how many values of the input are put to the proof of a stop, which, spent,"
                             + " leaves it unresolved and says so as why"),
+            Map.entry("souther.compiler.partition.ConstructionStopAssessment#<clinit>()V",
+                    "how many values of the input are put to the proof of a stop at a"
+                            + " construction, which, spent, leaves what the construction asks"
+                            + " said as not resolved"),
             Map.entry("souther.compiler.partition.NumericWitness#<clinit>()V",
                     "how many values a position on the way is tried at, and how many places of its"
                             + " run are looked at to find them"),

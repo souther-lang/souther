@@ -9907,6 +9907,7 @@ final class Pullback {
                         RoundedToAWholeNumber.heldBetween(way, run.least(), run.greatest());
             };
             if (held instanceof ConstantComparison.Settled settled && settled.holds()) {
+                askedOf(asked, each.operation(), ConstructionAsk.Requirement.ALWAYS, List.of());
                 continue;
             }
             if (held != null && form.coefs().isEmpty()) {
@@ -9914,6 +9915,9 @@ final class Pullback {
                     operators.beginGroup();
                     operators.leaveUnsaidOverUnreadOperands();
                     askedOf(asked, each.operation(), ConstructionAsk.Requirement.NEVER,
+                            List.of());
+                } else {
+                    askedOf(asked, each.operation(), ConstructionAsk.Requirement.ALWAYS,
                             List.of());
                 }
                 continue;
@@ -9935,6 +9939,9 @@ final class Pullback {
             } else if (!comesOnlyToWhereItAnswers(over)) {
                 operators.beginGroup();
                 operators.leaveUnsaid(form.coefs().keySet(), null);
+            } else {
+                askedOf(asked, each.operation(), ConstructionAsk.Requirement.ALWAYS,
+                        form.coefs().keySet());
             }
         }
         return out;
@@ -9952,14 +9959,14 @@ final class Pullback {
     /**
      * What {@code operation}, where it is a construction, asks of a run, as the condition it asks
      * was read ({@code asks}): the same condition that narrows the run, kept from the one place it
-     * is read. Nothing where it asks nothing the declarations do not hold.
+     * is read. Kept where it asks nothing the declarations do not hold too, as a construction every
+     * run gets past.
      */
     private static void askedOf(List<ConstructionAsk> asked, Core operation,
                                 ConstructionAsk.Requirement asks,
                                 Collection<? extends Quantity> numbers) {
-        if (!(asks instanceof ConstructionAsk.Requirement.Always)
-                && Core.withoutStanding(operation) instanceof Core.Construct construct) {
-            asked.add(new ConstructionAsk(construct.typeName().name(), construct.pos(),
+        if (Core.withoutStanding(operation) instanceof Core.Construct construct) {
+            asked.add(new ConstructionAsk(construct, construct.typeName().name(), construct.pos(),
                     bearingOf(numbers), asks));
         }
     }
@@ -10021,11 +10028,14 @@ final class Pullback {
                             + " " + rel + " " + against);
                 }
                 Proposition stated = pulled(leaf).proposition();
+                LinearForm<NumericTerm> overTheInput = WhatTheDeclarationsLeave.ofTheInput(form);
                 yield DemandReading.heldByTheDeclarations(stated, read)
                         ? ConstructionAsk.Requirement.ALWAYS
                         : new ConstructionAsk.Requirement.Is(new WhatAConstructionAsks.Is(
                                 UndividedByARelation.written(form), rel, against.spelled()),
-                                stated);
+                                stated, overTheInput == null ? null
+                                        : new ConstructionAsk.Requirement.OverTheInput(
+                                                overTheInput, rel, against));
             }
             case ConstantComparison.Settled(boolean holds) -> holds
                     ? ConstructionAsk.Requirement.ALWAYS : ConstructionAsk.Requirement.NEVER;

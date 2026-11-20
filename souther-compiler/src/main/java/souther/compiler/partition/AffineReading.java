@@ -3302,14 +3302,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                                                              WhatTheAnalysisAnswersFor answersFor) {
         UndividedByARelation.Working together = new UndividedByARelation.Working(List.of(),
                 WhatARelationLeavesUndivided.Told.EVERY);
-        // An attempt decides by building: what it works out is the values of the fields, and the
-        // building itself ends no run, a value it refuses taking the other arm.
-        List<Evaluated.Step> steps = Core.withoutStanding(choice) instanceof Core.IfConstructed
-                attempt ? attempt.construct().values().stream()
-                        .<Evaluated.Step>map(field -> new Evaluated.Step.Always(field.value()))
-                        .toList()
-                : Evaluated.inOrder(choice);
-        for (Evaluated.Step step : steps) {
+        // An attempt decides by building, and what it works out is the values of the fields: the
+        // building itself is no step of it ({@link Evaluated#inOrder}).
+        for (Evaluated.Step step : Evaluated.inOrder(Core.withoutStanding(choice))) {
             UndividedByARelation.Working here = switch (step) {
                 case Evaluated.Step.Always always ->
                         toldEvaluating(always.expression(), at, ofTheInput, answersFor).working();

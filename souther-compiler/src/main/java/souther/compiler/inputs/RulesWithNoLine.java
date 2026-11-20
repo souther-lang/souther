@@ -208,13 +208,17 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
             costly.merge(one.key(), one, CasesAtARule::mergedWith);
         }
 
-        /** A rule some run reaching it is shown to stop in, as {@code shown} shows it, with the
-         *  values at which every run getting to the rule stops, and the region of the input that
-         *  keeps every run from stopping in it ({@link RuleWhereARunMayStop}). */
+        /** A rule some run on its way is shown to stop in, as {@code shown} and
+         *  {@code constructions} show it, with the values at which every run getting to the rule
+         *  stops, and the region of the input that keeps every run from stopping in it
+         *  ({@link RuleWhereARunMayStop}). */
         public void mayStopARun(RuleCitation cited, ModelOccurrences readAt,
-                                List<AStopShown> shown, List<EveryRunStops> everyRunStops,
+                                List<AStopShown> shown,
+                                List<AConstructionStopShown> constructions,
+                                List<EveryRunStops> everyRunStops,
                                 Optional<WhatKeepsEveryRunGoing> keeping) {
-            stopped(RuleWhereARunMayStop.of(cited, readAt, shown, everyRunStops, keeping));
+            stopped(RuleWhereARunMayStop.of(cited, readAt, shown, constructions, everyRunStops,
+                    keeping));
         }
 
         /** A rule where whether a run stops is not resolved, why, what each construction on the

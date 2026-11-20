@@ -40,11 +40,13 @@ final class AValueOfTheInput {
     /**
      * Whether a value of the input {@code read} reads exists holding any whole number at each of
      * {@code places}, within the ends of what the place holds: every position of the input is of
-     * a type that states nothing of its values, and each place is a whole number, a date or a
-     * case of an enumeration wearing no name, reached from a parameter through fields alone. A
-     * date is the count of its days, and every count between the calendar's first day and its
-     * last is a day there is; a case of an enumeration is where it stands on the order its cases
-     * are declared in, and every place on that order is a case.
+     * a type that states nothing of its values, and each place is a number, a date or a case of an
+     * enumeration wearing no name, reached from a parameter through fields alone. An {@code Int}
+     * holds every whole number between its ends, which a caller keeps a value within, and a
+     * {@code Decimal} is any finite decimal number, which every whole number is. A date is the
+     * count of its days, and every count between the calendar's first day and its last is a day
+     * there is; a case of an enumeration is where it stands on the order its cases are declared
+     * in, and every place on that order is a case.
      */
     static boolean holdsAnyWholeNumbersAt(InputReading read, Collection<TermPath> places) {
         InputDomain domain = read.domain();
@@ -62,7 +64,8 @@ final class AValueOfTheInput {
             }
             TypeView view = viewOf(at.type(), rules);
             boolean aNumber = view.shape() instanceof Shape.Scalar(Type.Prim prim)
-                    && (prim == Type.Prim.INT || prim == Type.Prim.DATE);
+                    && (prim == Type.Prim.INT || prim == Type.Prim.DECIMAL
+                            || prim == Type.Prim.DATE);
             if (!view.wrappers().isEmpty() || !(aNumber || anEnumeration(view))) {
                 return false;
             }
