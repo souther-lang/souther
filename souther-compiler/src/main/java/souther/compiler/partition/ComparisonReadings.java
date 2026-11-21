@@ -351,6 +351,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * @param quotients  the quotients evaluating the comparison always works out, in the order
      *                   it works them out ({@link QuotientsEveryRunWorksOut}): none for an
      *                   application, which states no comparison to evaluate
+     * @param places     where each node the comparison always works out stands in the order it
+     *                   works them out, the quotients among them ({@link EvaluationPlaces})
      */
     record Reading(ConstructOccurrence occurrence, Stated statement, Citation at,
                    InputReads reads,
@@ -367,9 +369,10 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                            Optional<WhatARunWorksOutBeforeACount.BeforeAConstruction>>
                            beforeAConstruction,
                    Supplier<List<AConstructionOnTheWay>> constructionsOnTheWay,
-                   List<Core.Binary> quotients) {
+                   List<Core.Binary> quotients, EvaluationPlaces places) {
 
         Reading {
+            Objects.requireNonNull(places, "where the comparison's parts stand in its order");
             if (occurrence == null || statement == null || at == null
                     || statedAsACondition == null || stopsWhere == null || worksOutOnEach == null
                     || stopsIn == null || onTheArms == null || applying == null || runsAs == null
@@ -1403,7 +1406,9 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                             : Optional.empty(),
                     new Pullback.Once<>(() -> constructionsOnTheWay(e, past.asks(), in)),
                     stated.statement() instanceof Stated.AComparison
-                            ? QuotientsEveryRunWorksOut.in(e) : List.of()));
+                            ? QuotientsEveryRunWorksOut.in(e) : List.of(),
+                    stated.statement() instanceof Stated.AComparison
+                            ? EvaluationPlaces.of(e) : EvaluationPlaces.none()));
         }
         // A fork the reading of the runs takes a way out of, under the closures the walk is in. A
         // value standing as a wider type is no fork, and a fork under it is met one step down.

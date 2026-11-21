@@ -1250,7 +1250,13 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 if (!(here instanceof Core.Call call
                         && call.fn() instanceof Core.Reached.OfDeclaration)) {
                     if (reached.leavesItsOwnStopUntold(worked)) {
-                        told.passedOverWhatMayEndARun();
+                        // The stop of a quotient by a value is its own, which the quotients a
+                        // comparison always works out are each asked of.
+                        if (isAQuotientByAValue(here)) {
+                            told.ownStopOfAQuotientByAValueUntold((Core.Binary) here);
+                        } else {
+                            told.passedOverWhatMayEndARun();
+                        }
                     } else if (!reached.ownWorkingEndsNoRun(worked)) {
                         told.toldOnlyForWhereARunStops();
                     }
@@ -2487,19 +2493,26 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              * is not told.
              */
             private void operandsOfTheQuotient(Core node, InputReads at) {
-                if (!(Core.withoutStanding(node) instanceof Core.Binary quotient)
-                        || quotient.op() != BinOp.DIV
-                        || !(WhereAnOperatorAnswers.ofAnOperator(quotient.op(), quotient.type())
-                                instanceof WhereAnOperatorAnswers.WhereTheDivisorIsNotNought)) {
+                if (!isAQuotientByAValue(node)) {
                     passedOver(new Denotation(node, at));
                     return;
                 }
+                Core.Binary quotient = (Core.Binary) Core.withoutStanding(node);
                 for (Core operand : List.of(quotient.left(), quotient.right())) {
                     if (AffineForms.outcome(operand, at, this)
                             instanceof AffineForms.Outcome.StoppedAt<NumericTerm, InputReads>) {
                         passedOver(new Denotation(operand, at));
                     }
                 }
+            }
+
+            /** Whether {@code node} is a quotient whose divisor the analysis that owns it keeps
+             *  away from nought, which {@link #operandsOfTheQuotient} reads the operands of. */
+            private static boolean isAQuotientByAValue(Core node) {
+                return Core.withoutStanding(node) instanceof Core.Binary quotient
+                        && quotient.op() == BinOp.DIV
+                        && WhereAnOperatorAnswers.ofAnOperator(quotient.op(), quotient.type())
+                                instanceof WhereAnOperatorAnswers.WhereTheDivisorIsNotNought;
             }
 
             @Override
@@ -2695,6 +2708,12 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          *  every reading tried apart from it ({@link #apart}). */
         private final int[] elementsRead;
         private boolean exact = true;
+        /** Whether nothing but quotients by a value has been passed over where {@link #exact} is
+         *  false ({@link UndividedByARelation.Working#quotientsUntold}). */
+        private boolean onlyQuotientsPassedOver = true;
+        /** The quotients by a value passed over, by the node they are
+         *  ({@link UndividedByARelation.Working#quotientsUntold}). */
+        private final List<Core.Binary> quotientsPassedOver = new ArrayList<>();
         /** Whether a run may stop where an answer read here has no place, which no operation
          *  told and no row of a line is at ({@link UndividedByARelation.Working#aStopUntold}). */
         private boolean aStopUntold;
@@ -2896,7 +2915,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             Core bare = Core.withoutStanding(node);
             lastToldAt.put(bare, at.size());
             at.add(bare);
-            operations.add(operation);
+            operations.add(operation.workedOutAt(bare));
             toldOnce.add(operation);
         }
 
@@ -2937,6 +2956,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             keptOnce.addAll(apart.keptOnce);
             keptAt.addAll(apart.keptAt);
             exact &= apart.exact;
+            onlyQuotientsPassedOver &= apart.onlyQuotientsPassedOver;
+            quotientsPassedOver.addAll(apart.quotientsPassedOver);
             partials.addAll(apart.partials);
         }
 
@@ -3031,7 +3052,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             if (reached.endsNoRunWhereItWasPassedOver(skipped)) {
                 return;
             }
-            exact = false;
+            leavingSomethingUntold();
             if (tells == null || !reached.besideWhatIsTold(value -> toldAt(value.value()))
                     .endsNoRunUntoldWhereItWasPassedOver(skipped, tells)) {
                 aStopUntold = true;
@@ -3040,7 +3061,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
 
         /** That something a run works out, and which may end it, was passed over unread. */
         void passedOverWhatMayEndARun() {
-            exact = false;
+            leavingSomethingUntold();
             aStopUntold = true;
         }
 
@@ -3049,7 +3070,23 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          * out ends no run: not every operation is read, and no stop is left untold.
          */
         void passedOverWhatEndsNoRun() {
+            leavingSomethingUntold();
+        }
+
+        /**
+         * That the stop of {@code quotient}, a quotient by a value, was left untold where it was
+         * met as a part of something held aside: a stop no operation told, which is the
+         * quotient's own and nothing else's.
+         */
+        void ownStopOfAQuotientByAValueUntold(Core.Binary quotient) {
             exact = false;
+            aStopUntold = true;
+            quotientsPassedOver.add(quotient);
+        }
+
+        private void leavingSomethingUntold() {
+            exact = false;
+            onlyQuotientsPassedOver = false;
         }
 
         /**
@@ -3057,7 +3094,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          * line gets past: the stops are told, and a row is not shown to get past every one.
          */
         void toldOnlyForWhereARunStops() {
-            exact = false;
+            leavingSomethingUntold();
         }
 
         /**
@@ -3074,7 +3111,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          * answers for, is asked once the comparison has been read ({@link #askedOfTheComparison}).
          */
         private void overTheStopValue(OverTheStop operation) {
-            exact = false;
+            leavingSomethingUntold();
             operationsOverTheStopValue.add(operation);
         }
 
@@ -3194,15 +3231,28 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         /** What a row of a line gets past: not every operation where some were told beside the
          *  rows, since nothing says a row is made where those are worked out. */
         UndividedByARelation.Working working() {
-            return working(operations, exact && partials.isEmpty() && besideTheRows.isEmpty());
+            return working(operations, exact && partials.isEmpty() && besideTheRows.isEmpty(),
+                    besideTheRows.isEmpty());
         }
 
         private UndividedByARelation.Working working(
                 List<UndividedByARelation.IntOperation> told, boolean everyOne) {
+            return working(told, everyOne, true);
+        }
+
+        /** {@code told} as the working: every operation is told where {@code everyOne}, and
+         *  where not, only quotients are left untold if the walk left no more untold than
+         *  those and {@code quotientsAreAllThatIsLeft}. */
+        private UndividedByARelation.Working working(
+                List<UndividedByARelation.IntOperation> told, boolean everyOne,
+                boolean quotientsAreAllThatIsLeft) {
             return new UndividedByARelation.Working(told, everyOne
                     ? WhatARelationLeavesUndivided.Told.EVERY
                     : WhatARelationLeavesUndivided.Told.SOME,
-                    true, exact ? partials : List.of(), aStopUntold);
+                    true, exact ? partials : List.of(), aStopUntold,
+                    new UndividedByARelation.Working.QuotientsUntold(
+                            !everyOne && quotientsAreAllThatIsLeft && onlyQuotientsPassedOver
+                                    && partials.isEmpty(), quotientsPassedOver));
         }
     }
 

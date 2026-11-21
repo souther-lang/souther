@@ -318,16 +318,16 @@ class ATiedWayIsReadAsTheProgramRunSaysTest {
     }
 
     /**
-     * Of two divisions one in the other, the quotient of the first is no number the comparison is
-     * read through, so what a run works out is not all told, and a stop at either is left
-     * unresolved: none is shown at the second where the way holds the first's divisor at nought,
-     * which no run gets past, and none at the first, which the second does not come before.
+     * Of two divisions one in the other, a run stops at the first where its divisor is nought,
+     * and has not got to the second: the stop is shown at the first, and the second is left
+     * unresolved, where the way holds the first's divisor at nought.
      */
     @Test
-    void noStopIsShownAtADivisionWhereWhatARunWorksOutAroundItIsNotAllTold() {
+    void aStopIsShownAtTheFirstOfTwoDivisionsOneInTheOtherAndNotAtTheSecond() {
         String said = reportOf(quotientOfAQuotient("p == 0"));
-        assertFalse(said.contains("· may stop a run: comparison"), said);
-        assertTrue(said.contains("stop not resolved"), said);
+        assertTrue(said.contains("· may stop a run: comparison"), said);
+        assertTrue(said.contains("whether a run stops in division by q is not determined"), said);
+        assertFalse(said.contains("whether a run stops in division by p"), said);
     }
 
     /** {@code (e / p) / q} compared, on the way where {@code way} holds. */

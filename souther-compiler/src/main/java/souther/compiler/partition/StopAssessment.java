@@ -172,7 +172,7 @@ final class StopAssessment {
             UndividedByARelation.Working working = place.worked().stops().operations();
             WhatAWayLeavesOfAValue left = place.aRowArrives()
                     ? WhatAWayLeavesOfAValue.along(read, place.way()) : null;
-            if (left != null && working.aStopUntold()) {
+            if (left != null && working.aStopUntoldBeyond(each.quotients())) {
                 out.add(new Judgement.Unresolved(null, WhyAStopIsNotShown.NO_OPERATION_TOLD));
             }
             List<UndividedByARelation.IntOperation> operations = working.operations();
@@ -184,7 +184,8 @@ final class StopAssessment {
                         || left.noRowTakesItPastItsEnds(operations.get(at))) {
                     out.add(new Judgement.Safe(site, WhyNone.WITHIN_ITS_ENDS));
                 } else {
-                    out.add(aStopIn(each, place, site, known, read));
+                    out.add(aStopIn(each, place, site, operations.get(at).origin().node(), known,
+                            read));
                 }
             }
         }
@@ -251,7 +252,8 @@ final class StopAssessment {
                         ? WhyAStopIsNotShown.NOT_OVER_THE_INPUT
                         : WhyAStopIsNotShown.NOT_EVERY_OPERATION_TOLD));
             } else {
-                out.add(aStopIn(each, comparison.getFirst(), site, before, read));
+                out.add(aStopIn(each, comparison.getFirst(), site, each.quotients().get(at),
+                        before, read));
             }
         }
         return out;
@@ -309,7 +311,8 @@ final class StopAssessment {
      * asked first, and a value is looked for only where all of them are answered.
      */
     private static Judgement aStopIn(ComparisonReadings.Reading each, Place place, Site site,
-                                     List<LinearForm<NumericTerm>> quotients, InputReading read) {
+                                     Core siteNode, List<LinearForm<NumericTerm>> quotients,
+                                     InputReading read) {
         UndividedByARelation.Working working = place.worked().stops().operations();
         if (place.worked().madeWhere() != null) {
             return new Judgement.Unresolved(site, WhyAStopIsNotShown.ON_AN_APPLICATION);
@@ -320,8 +323,10 @@ final class StopAssessment {
         // A working is not on every run where the expression the comparison was stopped at may
         // end a run before the operations it tells. A quotient is worked out wherever the
         // comparison is ({@link QuotientsEveryRunWorksOut}), so only an operation is asked of the
-        // rest being worked out on every run.
-        if (!working.exact() || working.aStopUntold()
+        // rest being worked out on every run. A quotient left untold by the walk is one of those
+        // asked here, so it does not leave what is worked out untold.
+        if (!working.exactButForAmong(each.quotients())
+                || working.aStopUntoldBeyond(each.quotients())
                 || (site instanceof Site.PastItsEnds && !working.onEveryRun())) {
             return new Judgement.Unresolved(site, WhyAStopIsNotShown.NOT_EVERY_OPERATION_TOLD);
         }
@@ -339,14 +344,16 @@ final class StopAssessment {
             }
         }
         // Everything else a run may work out before this: what this is not worked out before.
-        // One worked out of this comes after it, and is not got to where it stops. Where this is a
-        // quotient, what is worked out after it is not told, so every operation is asked.
+        // One worked out of this comes after it, and so does one the comparison works out past
+        // everything of this; neither is got to where it stops. One whose place is not known is
+        // asked.
         int at = site instanceof Site.PastItsEnds(var operation)
                 ? indexOf(working.operations(), operation) : -1;
         List<UndividedByARelation.IntOperation> others = new ArrayList<>();
         for (int other = 0; other < working.operations().size(); other++) {
             UndividedByARelation.IntOperation it = working.operations().get(other);
-            if (other != at && !it.after().contains(at)) {
+            if (other != at && !it.after().contains(at)
+                    && !each.places().comesAfter(it.origin().node(), siteNode)) {
                 others.add(it);
             }
         }

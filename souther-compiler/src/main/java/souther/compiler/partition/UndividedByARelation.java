@@ -242,12 +242,21 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * @param ofTheRepresentation whether {@code least} and {@code greatest} are where the type
      *              the number is worked out in stops — an {@code Int}, the calendar — and not where
      *              the clauses of a type a construction makes leave it, which the model states
+     * @param origin where the expression the comparison is read from works it out, which says
+     *              what else is worked out before and after it wherever that is known
      */
     record IntOperation(LinearForm<IntOperand> form, BigInteger least, BigInteger greatest,
-                        List<Integer> after, boolean ofTheRepresentation) {
+                        List<Integer> after, boolean ofTheRepresentation, Origin origin) {
 
         IntOperation {
             after = isAscending(after) ? List.copyOf(after) : List.copyOf(new TreeSet<>(after));
+            Objects.requireNonNull(origin, "where it is worked out, or that that is not known");
+        }
+
+        /** An operation told with no node it is worked out at. */
+        IntOperation(LinearForm<IntOperand> form, BigInteger least, BigInteger greatest,
+                     List<Integer> after, boolean ofTheRepresentation) {
+            this(form, least, greatest, after, ofTheRepresentation, Origin.NOT_KNOWN);
         }
 
         /** An operation whose ends are where the type it is worked out in stops, which is every
@@ -255,6 +264,45 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         IntOperation(LinearForm<IntOperand> form, BigInteger least, BigInteger greatest,
                      List<Integer> after) {
             this(form, least, greatest, after, true);
+        }
+
+        /**
+         * The node of the expression a run works an operation out at, which says where it stands
+         * among everything else the expression works out ({@link EvaluationPlaces}). It is no part
+         * of what the operation is: any two origins are equal, so that two readings of the same
+         * operation are one whichever node each was read at.
+         */
+        static final class Origin {
+
+            /** The operation is worked out at no node that is known. */
+            static final Origin NOT_KNOWN = new Origin(null);
+
+            private final Core node;
+
+            Origin(Core node) {
+                this.node = node;
+            }
+
+            /** The node, or null where it is not known. */
+            Core node() {
+                return node;
+            }
+
+            @Override
+            public boolean equals(Object other) {
+                return other instanceof Origin;
+            }
+
+            @Override
+            public int hashCode() {
+                return 0;
+            }
+        }
+
+        /** The same operation, worked out at {@code node}. */
+        IntOperation workedOutAt(Core node) {
+            return new IntOperation(form, least, greatest, after, ofTheRepresentation,
+                    new Origin(node));
         }
 
         /** Whether every index comes after the one before it, which is what the set of them
@@ -328,7 +376,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         /** The same operation, worked out after the operations moved {@code by} on. */
         IntOperation shifted(int by) {
             return new IntOperation(form, least, greatest,
-                    after.stream().map(at -> at + by).toList(), ofTheRepresentation);
+                    after.stream().map(at -> at + by).toList(), ofTheRepresentation, origin);
         }
     }
 
@@ -493,9 +541,81 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *                    place, which no row of a line is at. Told only of what a run works out
      *                    ({@link StopEvidence}), and carried wherever the working is, so that a
      *                    reading that stands in for another does not leave it behind
+     * @param quotientsUntold whether what is left untold is quotients by a value and nothing
+     *                    else, and which they are: their operands are told, and the stop of each
+     *                    is its own ({@link QuotientsEveryRunWorksOut}), asked where the
+     *                    quotients the comparison always works out are
      */
     record Working(List<IntOperation> operations, WhatARelationLeavesUndivided.Told told,
-                   boolean onEveryRun, List<NumericTerm> partials, boolean aStopUntold) {
+                   boolean onEveryRun, List<NumericTerm> partials, boolean aStopUntold,
+                   QuotientsUntold quotientsUntold) {
+
+        Working(List<IntOperation> operations, WhatARelationLeavesUndivided.Told told,
+                boolean onEveryRun, List<NumericTerm> partials, boolean aStopUntold) {
+            this(operations, told, onEveryRun, partials, aStopUntold, QuotientsUntold.NONE);
+        }
+
+        /**
+         * The quotients by a value a reading left untold, where it left no other operation and no
+         * other stop untold. Where it left more, or nothing, none are said to be the whole of
+         * it. Which quotient is which is the node of the expression, by identity, and is no part
+         * of what a working is: any two are equal.
+         */
+        static final class QuotientsUntold {
+
+            /** Nothing is left untold but what is untold otherwise. */
+            static final QuotientsUntold NONE = new QuotientsUntold(false, List.of());
+
+            private final boolean only;
+            private final List<Core.Binary> nodes;
+
+            QuotientsUntold(boolean only, List<Core.Binary> nodes) {
+                this.only = only;
+                this.nodes = only ? List.copyOf(nodes) : List.of();
+            }
+
+            /** Whether what is left untold is these quotients and nothing else. */
+            boolean only() {
+                return only;
+            }
+
+            /** The same, beside {@code other}, where the quotients are what is untold of both. */
+            QuotientsUntold beside(QuotientsUntold other, boolean bothOnly) {
+                if (!bothOnly) {
+                    return NONE;
+                }
+                List<Core.Binary> both = new ArrayList<>(nodes);
+                both.addAll(other.nodes);
+                return new QuotientsUntold(true, both);
+            }
+
+            /** Whether each is one of {@code quotients}, which is asked by the node it is. */
+            boolean areAmong(List<Core.Binary> quotients) {
+                return nodes.stream().allMatch(each -> quotients.stream()
+                        .anyMatch(one -> one == each));
+            }
+
+            @Override
+            public boolean equals(Object other) {
+                return other instanceof QuotientsUntold;
+            }
+
+            @Override
+            public int hashCode() {
+                return 0;
+            }
+        }
+
+        /** Whether every operation that can stop a run is told but for quotients among
+         *  {@code quotients}, whose stop each is asked of for itself. */
+        boolean exactButForAmong(List<Core.Binary> quotients) {
+            return exact() || (quotientsUntold.only() && quotientsUntold.areAmong(quotients));
+        }
+
+        /** Whether a stop is left untold that is none of the stops of {@code quotients}. */
+        boolean aStopUntoldBeyond(List<Core.Binary> quotients) {
+            return aStopUntold && !(quotientsUntold.only() && quotientsUntold.areAmong(quotients));
+        }
 
         Working(List<IntOperation> operations, WhatARelationLeavesUndivided.Told told) {
             this(operations, told, true);
@@ -557,13 +677,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         /** The same, with {@code untold} as whether a stop is left that no reading tells. */
         private Working leavingAStopUntold(boolean untold) {
             return untold == aStopUntold ? this
-                    : new Working(operations, told, onEveryRun, partials, untold);
+                    : new Working(operations, told, onEveryRun, partials, untold,
+                            quotientsUntold);
         }
 
         /** Whether this tells the operations {@code other} does, each once or more, and as much
          *  of what can stop a run. */
         private boolean tellsWhat(Working other) {
             return told == other.told && partials.equals(other.partials)
+                    && quotientsUntold.only() == other.quotientsUntold.only()
                     && operationsWorkedOut().equals(other.operationsWorkedOut());
         }
 
@@ -623,21 +745,32 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 partials.stream().filter(each -> !bothPartials.contains(each))
                         .forEach(bothPartials::add);
             }
-            return new Working(both, earlier.exact() && exact()
+            boolean everyOne = earlier.exact() && exact();
+            return new Working(both, everyOne
                     ? WhatARelationLeavesUndivided.Told.EVERY
                     : WhatARelationLeavesUndivided.Told.SOME,
                     earlier.onEveryRun && onEveryRun, bothPartials,
-                    earlier.aStopUntold || aStopUntold);
+                    earlier.aStopUntold || aStopUntold,
+                    quotientsUntold.beside(earlier.quotientsUntold,
+                            !everyOne && earlier.exactButForQuotients()
+                                    && exactButForQuotients()));
         }
 
         /** The same operations, for a relation not every run that gets to the comparison reaches. */
         Working notOnEveryRun() {
-            return new Working(operations, told, false, partials, aStopUntold);
+            return new Working(operations, told, false, partials, aStopUntold,
+                    quotientsUntold);
         }
 
         /** Whether every operation that can stop a run is told. */
         boolean exact() {
             return told == WhatARelationLeavesUndivided.Told.EVERY;
+        }
+
+        /** Whether every operation that can stop a run is told, but for quotients by a value
+         *  whose stop each quotient states for itself ({@link #quotientsUntold}). */
+        private boolean exactButForQuotients() {
+            return exact() || quotientsUntold.only();
         }
 
     }
