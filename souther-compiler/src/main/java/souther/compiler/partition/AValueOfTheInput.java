@@ -141,7 +141,7 @@ final class AValueOfTheInput {
         greatest = run.greatest() == null
                 || (greatest != null && greatest.compareTo(run.greatest()) < 0)
                 ? greatest : run.greatest();
-        return least != null && greatest != null && least.compareTo(greatest) > 0 ? null
+        return (least != null && greatest != null && least.compareTo(greatest) > 0) ? null
                 : new WholeRun(least, greatest);
     }
 
