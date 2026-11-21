@@ -100,14 +100,18 @@ record FormRange(ExactRatio least, ExactRatio greatest) {
 
     /**
      * The numbers {@code term} comes to as a run works it out: a product, what its two factors
-     * come to multiplied, since the type it is answered in is what is being asked of it; a total,
-     * not known, for the same reason ({@link #aTotal}); anything else, the ends of its place
-     * ({@link #endsOf}), which a value there is held to. Null where the reading answers nothing
-     * of the term ({@link Quantities#answersFor}).
+     * come to multiplied, since the type it is answered in is what is being asked of it, each
+     * factor held to what the rules say of it as a place is, since a value there meets them; a
+     * total, not known, for the same reason ({@link #aTotal}); anything else, the ends of its
+     * place ({@link #endsOf}), which a value there is held to. Null where the reading answers
+     * nothing of the term ({@link Quantities#answersFor}).
      */
     static FormRange asWorkedOut(NumericTerm term, InputReading read) {
         if (term instanceof NumericTerm.ProductOf product) {
-            Function<NumericTerm, FormRange> factor = each -> asWorkedOut(each, read);
+            Function<NumericTerm, FormRange> factor = each -> {
+                FormRange worked = asWorkedOut(each, read);
+                return worked == null ? null : worked.within(LinearForm.atom(each), read, Map.of());
+            };
             return combined(BinOp.MUL, of(product.one(), factor), of(product.other(), factor));
         }
         if (aTotal(term)) {

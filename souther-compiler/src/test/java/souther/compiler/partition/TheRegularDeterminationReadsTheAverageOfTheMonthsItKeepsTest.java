@@ -4,6 +4,8 @@ import org.junit.jupiter.api.Test;
 
 import souther.test.Nightly;
 import souther.compiler.ACompiledModel;
+import souther.compiler.NotRead;
+import souther.compiler.StopsTheReportSays;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -189,32 +191,34 @@ class TheRegularDeterminationReadsTheAverageOfTheMonthsItKeepsTest {
                 invariant excludedAllowances.value <= 1000000000000
                 invariant variableAllowances.value <= 1000000000000""";
 
-    /** The report of the model, the amounts held by {@code bounds}, line by line. */
-    private static List<String> report(String bounds) {
+    /** The model, the amounts held by {@code bounds}, measured. */
+    private static Compilation measured(String bounds) {
         Compilation compilation = Compilation.ofSource(MODEL.replace("BOUNDS", bounds), "Main");
         // The readings of the lookup and of the total, and no row looked for, which nothing here
         // asks about.
         compilation.measure(new Adequacy.Asked(Adequacy.Level.OFF, false));
         ACompiledModel.compiles(compilation);
-        return AdequacyReport.of(compilation)
-                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
-                .toList();
+        return compilation;
     }
 
-    /** The lines that say a run may stop in what the months' remuneration comes to. */
-    private static List<String> stopsInTheTotal(List<String> report) {
-        return report.stream().filter(line -> line.contains("· stop")
-                && line.contains("remuneration")).toList();
+    /** The operations over the months' remuneration a stop is said of, as written. */
+    private static List<String> stopsInTheTotal(Compilation compilation) {
+        return StopsTheReportSays.of(compilation).stops().stream()
+                .flatMap(stop -> stop.operations().stream())
+                .map(StopsTheReportSays.Operation::written)
+                .filter(written -> written != null && written.contains("remuneration"))
+                .toList();
     }
 
     /** No comparison is left unread, and nothing is said to stop in the total; the control,
      *  with each amount unbounded above, is said to. */
     @Test
     void theLookupOfTheAverageIsRead() {
-        List<String> bounded = report(BOUNDED);
-        assertEquals(List.of(), bounded.stream().filter(line -> line.contains("not read:"))
-                .toList());
+        Compilation bounded = measured(BOUNDED);
+        assertEquals(List.of(), AdequacyReport.of(bounded)
+                .humanInEnglish(SourceRendering.namedByIdentity(bounded.texts())).lines()
+                .filter(NotRead::isOne).toList());
         assertEquals(List.of(), stopsInTheTotal(bounded));
-        assertFalse(stopsInTheTotal(report("")).isEmpty(), "control");
+        assertFalse(stopsInTheTotal(measured("")).isEmpty(), "control");
     }
 }

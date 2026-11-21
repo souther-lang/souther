@@ -5,6 +5,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import souther.compiler.ACompiledModel;
+import souther.compiler.StopsTheReportSays;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -68,25 +69,29 @@ class ATotalOfWhatAFilterKeepsIsHeldToTheListItKeepsFromTest {
                 .toList();
     }
 
+    /** What the report of the same model says of its stops and of what it leaves unread, as its
+     *  findings say it. */
+    private static StopsTheReportSays.Said said(String bound, String kept, String compared) {
+        Compilation compilation = Compilation.ofSource(SOURCE.formatted(bound, kept, compared),
+                "Main");
+        compilation.measure(READ);
+        ACompiledModel.compiles(compilation);
+        return StopsTheReportSays.of(compilation);
+    }
+
+    /** Whether a comparison is left unread for a run that may stop where nothing says. */
+    private static boolean unreadForAStop(StopsTheReportSays.Said said) {
+        return said.unread().stream()
+                .anyMatch(each -> each.because().equals("evaluation_stops_not_fully_read"));
+    }
+
     private static List<String> unread(List<String> report) {
         return report.stream().filter(line -> line.contains("not read:")).toList();
     }
 
-    /** The lines that say a run may stop, resolved or not. */
-    private static List<String> stops(List<String> report) {
-        return report.stream().filter(line -> line.contains("· stop")).toList();
-    }
 
     private static final String FOLDED = "List.fold((acc, m) -> acc + m.pay.value, 0, ms)"
             + " / List.length(ms)";
-
-    /** A walk carrying a total over the kept list takes as many steps as the list it keeps from,
-     *  so no step of it passes an {@code Int}. What the walk answers is no form the comparison
-     *  reads, which is another matter than whether it stops. */
-    @Test
-    void aWalkOverTheFilteredListIsShownToStopNowhere() {
-        assertEquals(List.of(), stops(report(BOUNDED, FILTERED_HERE, FOLDED)));
-    }
 
     /** The kept list is what a helper answers, or a map of it. */
     @ParameterizedTest
@@ -171,13 +176,18 @@ class ATotalOfWhatAFilterKeepsIsHeldToTheListItKeepsFromTest {
             }
             """;
 
-    /** The report of the model where a helper works each month's amount out, as {@code helper}
-     *  declares and answers it and {@code read} reads it off what it answers. */
-    private static List<String> reportOfTheHelper(String helper, String read) {
+    /** The model where a helper works each month's amount out, as {@code helper} declares and
+     *  answers it and {@code read} reads it off what it answers, measured. */
+    private static Compilation compiledWithTheHelper(String helper, String read) {
         Compilation compilation = Compilation.ofSource(
                 BUILT_BY_A_HELPER.formatted(helper, read), "Main");
         compilation.measure(READ);
         ACompiledModel.compiles(compilation);
+        return compilation;
+    }
+
+    /** The report of {@code compilation} in English, line by line. */
+    private static List<String> humanOf(Compilation compilation) {
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
                 .toList();
@@ -198,19 +208,37 @@ class ATotalOfWhatAFilterKeepsIsHeldToTheListItKeepsFromTest {
      */
     @Test
     void aBuildThatMayBeRefusedKeepsTheModelFromBeingComplete() {
-        List<String> built = reportOfTheHelper("Yen = p.base + p.extra", ".value");
-        assertFalse(complete(built, "k5"), () -> String.join("\n", built));
-        assertFalse(unread(built).isEmpty() && stops(built).isEmpty(),
-                () -> String.join("\n", built));
-        List<String> worked = reportOfTheHelper("Int = p.base.value + p.extra.value", "");
-        assertTrue(complete(worked, "k5"), () -> "control\n" + String.join("\n", worked));
+        Compilation built = compiledWithTheHelper("Yen = p.base + p.extra", ".value");
+        StopsTheReportSays.Said ofTheBuild = StopsTheReportSays.of(built);
+        assertFalse(complete(humanOf(built), "k5"), ofTheBuild::toString);
+        assertTrue(ofTheBuild.stops().stream().anyMatch(stop -> stop.operations().contains(
+                new StopsTheReportSays.Operation(null, "no_operation_told"))),
+                ofTheBuild::toString);
+        assertTrue(unreadForAStop(ofTheBuild), ofTheBuild::toString);
+
+        Compilation worked = compiledWithTheHelper("Int = p.base.value + p.extra.value", "");
+        StopsTheReportSays.Said ofTheSum = StopsTheReportSays.of(worked);
+        assertTrue(complete(humanOf(worked), "k5"), () -> "control " + ofTheSum);
+        assertEquals(List.of(), ofTheSum.stops(), "control");
     }
 
     /** Control: with each amount unbounded above the total of three passes an {@code Int}, and
-     *  the run that gets there is said to stop. */
-    @ParameterizedTest
-    @ValueSource(strings = {TOTAL + " / List.length(ms)", FOLDED})
-    void withTheAmountsUnboundedTheTotalIsSaidToStop(String compared) {
-        assertFalse(stops(report("", FILTERED_HERE, compared)).isEmpty());
+     *  the run that gets there is said to stop in the sum of the three amounts. */
+    @Test
+    void withTheAmountsUnboundedTheTotalIsSaidToStopInTheSumOfTheAmounts() {
+        StopsTheReportSays.Said unbounded = said("", FILTERED_HERE, TOTAL + " / List.length(ms)");
+        assertTrue(unbounded.stops().stream().flatMap(stop -> stop.operations().stream())
+                .anyMatch(each -> "a.pay + b.pay + c.pay".equals(each.written())),
+                unbounded::toString);
+    }
+
+    /** The same of a walk carrying the total, which takes as many steps as the list it keeps
+     *  from: said to stop with the amounts unbounded, and with them bounded, where no step of it
+     *  passes an {@code Int}, not. What the walk carries is told of no element, and the two
+     *  differ in nothing but how far the amounts reach. */
+    @Test
+    void withTheAmountsUnboundedTheWalkIsSaidToStopAndBoundedNot() {
+        assertFalse(said("", FILTERED_HERE, FOLDED).stops().isEmpty());
+        assertEquals(List.of(), said(BOUNDED, FILTERED_HERE, FOLDED).stops(), "control");
     }
 }
