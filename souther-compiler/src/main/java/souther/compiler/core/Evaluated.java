@@ -3,6 +3,8 @@ package souther.compiler.core;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * What an expression evaluates, in the order it evaluates them.
@@ -140,14 +142,38 @@ public final class Evaluated {
      * others. Asked by identity, so one node written twice is asked about where it stands.
      */
     public static boolean runsWhenever(Core root, Core part) {
-        if (Core.withoutStanding(root) == Core.withoutStanding(part)) {
+        Core sought = Core.withoutStanding(part);
+        return eachRunningWhenever(root, node -> node == sought);
+    }
+
+    /**
+     * Every node of {@code root}'s tree that runs on every evaluation of it
+     * ({@link #runsWhenever}), as it stands bare, into {@code into}: for a reader asking the same
+     * of many parts, which a walk for each would go down the tree as many times.
+     */
+    public static void runningWhenever(Core root, Set<Core> into) {
+        eachRunningWhenever(root, node -> {
+            into.add(node);
+            return false;
+        });
+    }
+
+    /**
+     * Hands {@code visit} each node of {@code root}'s tree that runs whenever {@code root} does,
+     * bare, until it answers true, and says whether it did: the one account of which parts those
+     * are, for both questions above.
+     */
+    private static boolean eachRunningWhenever(Core root, Predicate<Core> visit) {
+        Core bare = Core.withoutStanding(root);
+        if (visit.test(bare)) {
             return true;
         }
-        if (Core.withoutStanding(root) instanceof Core.LetIn let && runsWhenever(let.body(), part)) {
+        if (bare instanceof Core.LetIn let && eachRunningWhenever(let.body(), visit)) {
             return true;
         }
         for (Step each : inOrder(root)) {
-            if (each instanceof Step.Always(Core expression) && runsWhenever(expression, part)) {
+            if (each instanceof Step.Always(Core expression)
+                    && eachRunningWhenever(expression, visit)) {
                 return true;
             }
         }

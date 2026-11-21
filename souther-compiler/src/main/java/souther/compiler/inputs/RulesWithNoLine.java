@@ -221,12 +221,12 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
                     keeping));
         }
 
-        /** A rule where whether a run stops is not resolved, why, what each construction on the
-         *  way to it asks of a run, and the values at which every run getting there stops
-         *  ({@link RuleWhereAStopIsNotShown}). */
+        /** A rule where whether a run stops is not resolved, why, each construction on the way to
+         *  it of which neither is shown and why, and the values at which every run getting there
+         *  stops ({@link RuleWhereAStopIsNotShown}). */
         public void stopNotShown(RuleCitation cited, ModelOccurrences readAt,
                                  List<AStopNotShown> notShown,
-                                 List<WhatAConstructionAsks> asks,
+                                 List<AConstructionStopNotShown> asks,
                                  List<EveryRunStops> everyRunStops,
                                  Optional<WhatKeepsEveryRunGoing> keeping) {
             stopped(RuleWhereAStopIsNotShown.of(cited, readAt, notShown, asks, everyRunStops,

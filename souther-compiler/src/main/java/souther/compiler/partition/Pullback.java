@@ -9888,6 +9888,12 @@ final class Pullback {
                 }
                 continue;
             }
+            // A construction no run is refused by asks nothing, and is kept as one every run gets
+            // past.
+            if (each.where() instanceof Answers.Anywhere) {
+                askedOf(asked, each.operation(), ConstructionAsk.Requirement.ALWAYS, List.of());
+                continue;
+            }
             if (!(each.where() instanceof Answers.ByTheFormOfANumber over)) {
                 continue;
             }

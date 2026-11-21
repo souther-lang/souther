@@ -62,6 +62,7 @@ import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.TraversalDirection;
+import souther.compiler.inputs.WhyAConstructionStopIsNotShown;
 import souther.compiler.inputs.WhyAStopIsNotShown;
 import souther.compiler.reading.PathAccess;
 import souther.compiler.reading.WhyNotJoined;
@@ -510,6 +511,11 @@ class EverySchemaWordIsAccountedForTest {
                     List.of("$defs", "findings", "items", "properties", "unresolved", "items",
                             "properties", "reason"),
                     WhyAStopIsNotShown.class),
+            // Why whether a run on the way to a rule stops at a construction is not resolved.
+            new Vocabulary("findings[].asks[].reason",
+                    List.of("$defs", "findings", "items", "properties", "asks", "items",
+                            "properties", "reason"),
+                    WhyAConstructionStopIsNotShown.class),
             // What a construct's copy was made by, and how a build's region is named: which of the
             // two a step is, which way its region is told, and which of a construct's regions it is.
             new Vocabulary("through[].kind",

@@ -107,6 +107,7 @@ import souther.compiler.diag.msg.ReportMessage;
 
 import java.math.BigInteger;
 import souther.compiler.inputs.ABoundThatKeepsEveryRunGoing;
+import souther.compiler.inputs.AConstructionStopNotShown;
 import souther.compiler.inputs.AConstructionStopShown;
 import souther.compiler.inputs.AStopNotShown;
 import souther.compiler.inputs.AuthoredOrder;
@@ -4518,8 +4519,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         stopsNotShownSaid(it.notShown(), page),
                         aRunGettingThereStopsAt(it.everyRunStops(), page),
                         it.asks().isEmpty() ? new ReportMessage.Nothing()
-                                : new ReportMessage.WhatTheConstructionsOnTheWayAskIsNotDetermined(
-                                        constructionsAsk(it.asks(), page, rendering, declaredIn)),
+                                : new ReportMessage.AStopAtAConstructionOnTheWayIsNotDetermined(
+                                        constructionsNotShownSaid(it.asks(), page, rendering,
+                                                declaredIn)),
                         inCopies(it.readAt(), behavior.conditionPlaces().copies(),
                                 page, declaredIn)));
                 if (!aStopShown.contains(it.rule())) {
@@ -7234,6 +7236,42 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                             askedSaid(one.asks(), page))));
         }
         return new ReportMessage.Verbatim(String.join("", each));
+    }
+
+    /**
+     * Each construction on the way to a rule of which neither that a run stops there nor that none
+     * does is shown, as the human report says it after the rule: where it is written, what the
+     * numbers it is made of have to be where that is read, and why neither is shown. Told from the
+     * finding and nothing else, so the words and the document say one thing.
+     */
+    private static Message constructionsNotShownSaid(List<AConstructionStopNotShown> notShown,
+                                                     Page page, SourceRendering rendering,
+                                                     SourceId declaredIn) {
+        StringBuilder out = new StringBuilder();
+        for (AConstructionStopNotShown one : notShown) {
+            String at = writtenAtSaid(one.at(), rendering, declaredIn);
+            Message why = switch (one.why()) {
+                case REACH_NOT_SHOWN -> new ReportMessage.NoRunIsShownToGetToIt();
+                case ASKS_NOT_READ -> new ReportMessage.WhatItsTypeAsksIsNotRead();
+                case SOMETHING_BEFORE_IT_MAY_STOP ->
+                        new ReportMessage.SomethingBeforeTheConstructionMayStopARun();
+                case A_CONDITION_NOT_READ -> new ReportMessage.AConditionOnTheWayIsNotRead();
+                case NOT_OVER_THE_INPUT -> new ReportMessage.ItIsOverAValueTheBodyWorksOut();
+                case NO_VALUE_SHOWN -> new ReportMessage.NoInputMeetingTheTypesIsBuilt();
+                case NO_VALUE_FOUND -> new ReportMessage.NoInputTriedIsRefusedByIt();
+                case NO_VALUE_FOUND_WITHIN_WHAT_IS_TRIED ->
+                        new ReportMessage.TheInputsTriedRanOutBeforeOneWasRefused();
+            };
+            out.append(page.say(one.asked()
+                    .<Message>map(asked -> asked instanceof WhatAConstructionAsks.Never
+                            ? new ReportMessage.ConstructionNeverPassedAndNotShown(
+                                    one.construction(), at, why)
+                            : new ReportMessage.ConstructionAsksAndNotShown(one.construction(),
+                                    at, askedSaid(asked, page), why))
+                    .orElseGet(() -> new ReportMessage.ConstructionNotShown(one.construction(), at,
+                            why))));
+        }
+        return new ReportMessage.Verbatim(out.toString());
     }
 
     /** What each construction a run on the way is shown to stop at asks, as a finding that it is
@@ -11419,6 +11457,20 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         }
     }
 
+    /** Each of {@code notShown} into {@code into}: the type made, where it is written, what it
+     *  asks where that is read, and why neither is shown. */
+    private static void constructionsNotShownWritten(ArrayNode into,
+                                                     List<AConstructionStopNotShown> notShown,
+                                                     DocumentSources sources) {
+        for (AConstructionStopNotShown each : notShown) {
+            ObjectNode one = into.addObject();
+            one.put("construction", each.construction());
+            PublishedAt.of(Citation.of(each.at())).ifPresent(place -> at(one, place, sources));
+            each.asked().ifPresent(asked -> askedWritten(one.putObject("asked"), asked));
+            one.put("reason", word(each.why()));
+        }
+    }
+
     /** What a construction asks of a run as a document writes it: a form and how it stands to a
      *  number, or the parts of a conjunction or of a disjunction. */
     private static void askedWritten(ObjectNode into, WhatAConstructionAsks.Asked asked) {
@@ -11562,7 +11614,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         }
         if (finding.about() instanceof About.ARuleWhoseStopIsNotShown(var it)
                 && !it.asks().isEmpty()) {
-            constructionsWritten(f.putArray("asks"), it.asks(), sources);
+            constructionsNotShownWritten(f.putArray("asks"), it.asks(), sources);
         }
         // And, of a rule a run on the way to is shown to stop at a construction, what each such
         // construction asks that the run does not meet, as the words beside the rule say it.

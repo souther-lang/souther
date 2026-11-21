@@ -2,16 +2,19 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 import souther.compiler.diag.PhysicalPos;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.inputs.AConstructionStopNotShown;
 import souther.compiler.inputs.AConstructionStopShown;
 import souther.compiler.inputs.AStopShown;
 import souther.compiler.inputs.RuleWhereARunMayStop;
+import souther.compiler.inputs.RuleWhereAStopIsNotShown;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.WhatIsShownOfAStop;
+import souther.compiler.inputs.WhyAConstructionStopIsNotShown;
 import souther.compiler.partition.Partitions;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
-import souther.compiler.report.AdequacyReport;
 import souther.runtime.ConstraintViolation;
 import souther.runtime.InvariantFailure;
 
@@ -20,9 +23,9 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
 import java.util.TreeSet;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -32,17 +35,22 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * a run that stops is never left unsaid.
  *
  * <p>The truth is the program run: each behavior is compiled and run on every input of a small
- * grid, and a run that stops is a {@code ConstraintViolation}. What the report says is held to that
- * and not to what the reading of the constructions came to, so a stop it tells where no run stops,
- * or one it says nothing of, is found by the program.
+ * grid, and a run that stops is a {@code ConstraintViolation}. What the findings of each behavior
+ * say, which are what its report is written from, is held to that and not to what the reading of
+ * the constructions came to, so a stop they tell where no run stops, or one they say nothing of, is
+ * found by the program. How the report words a finding is held elsewhere.
+ *
+ * <p>Held construction by construction, each by the type made and where it is written, which is
+ * what a run that stops there says: a stop shown at one construction of a behavior says nothing
+ * of another, and a construction the reading leaves out is found even beside one it tells.
  *
  * <p>The report is asked with no rows composed or run ({@link Adequacy.Level#OFF}), so a stop it
  * tells is one shown from the model and not one a row came to.
  *
  * <p>What stops a run and is said as not resolved, rather than as a stop, is written down in
- * {@link #NOT_SHOWN}, one form each with why: a stop the compiler learns to show moves the form out
- * of it. What stops a run and is not said at all is in {@link #NOTHING_SAID}, and a form that is
- * not there and says nothing is a stop dropped without a word.
+ * {@link #NOT_SHOWN}, one form each with the reason the report gives: a stop the compiler learns to
+ * show moves the form out of it. A form that stops a run and says nothing of it, not even that it
+ * is not resolved, is a stop dropped without a word, and none is allowed.
  *
  * <p>This holds the report and the program to one another on these inputs, and not on every
  * input: a stop only some other value reaches is not found by it.
@@ -61,11 +69,10 @@ class AConstructionIsToldOfAStopWhereARunStopsThereTest {
 
     private static final Map<String, Form> FORMS = new LinkedHashMap<>();
 
-    /** What a run stops at and is said as not resolved, each with why. */
-    private static final Map<String, String> NOT_SHOWN = new LinkedHashMap<>();
-
-    /** What a run stops at and nothing is said of, each with why. */
-    private static final Map<String, String> NOTHING_SAID = new LinkedHashMap<>();
+    /** What a run stops at and is said as not resolved, each with the reason said of a
+     *  construction on the way. */
+    private static final Map<String, WhyAConstructionStopIsNotShown> NOT_SHOWN =
+            new LinkedHashMap<>();
 
     static {
         // one construction, over an Int and over a Decimal
@@ -84,11 +91,21 @@ class AConstructionIsToldOfAStopWhereARunStopsThereTest {
         FORMS.put("onAnArmOfAnotherNumber", new Form("OneC", "Count",
                 "{ let m = if Decimal.compare(d, 0.0m) < 0 then Count(q) else Count(0) \n "
                         + "OneC { a = m, w = q <= 3 } }"));
-        NOT_SHOWN.put("onAnArmOfAnotherNumber", "it is made on one arm of a choice the way to the "
-                + "rule says nothing of, so no value is shown to get to it");
-        NOTHING_SAID.put("onAnArmOfAnotherNumber", "what a construction on an arm of a value "
-                + "worked out before the rule asks is not among what the constructions on the way "
-                + "ask, so nothing is said of it");
+        // one on an arm beside one every run makes, both stopped at by some run: a stop shown of
+        // the one says nothing of the other
+        FORMS.put("anArmBesideEveryRun", new Form("TwoC", "Count",
+                "{ let m = if Decimal.compare(d, 0.0m) < 0 then Count(q) else Count(0) \n "
+                        + "TwoC { a = m, b = Count(q), w = q <= 3 } }"));
+        // one in a function bound by a name, before the rule the function holds
+        FORMS.put("inANamedFunction", new Form("OneC", "Count",
+                "{ let f = x -> { let n = Count(x) \n n.value <= 3 } \n "
+                        + "OneC { a = Count(0), w = List.all(f, [q]) } }"));
+        // which applications of the function a run makes before the rule is not read, so no run
+        // is shown to get to it
+        NOT_SHOWN.put("inANamedFunction", WhyAConstructionStopIsNotShown.REACH_NOT_SHOWN);
+        // a construction over a place no rule on the way reads
+        FORMS.put("overAPlaceNoRuleReads", new Form("OneC", "Count",
+                "OneC { a = Count(q), w = Decimal.compare(d, e) <= 0 }"));
         FORMS.put("rightOfAnOr", new Form("OneC", "Count",
                 "{ let ok = q < 0 || Count(q).value >= 3 \n OneC { a = Count(0), w = ok } }"));
         FORMS.put("armNoRunTakes", new Form("OneS", "Small",
@@ -129,15 +146,13 @@ class AConstructionIsToldOfAStopWhereARunStopsThereTest {
         // something before it that may end a run first
         FORMS.put("overflowFirst", new Form("OneC", "Count",
                 "OneC { a = Count(q + 1), w = q <= 3 }"));
-        NOT_SHOWN.put("overflowFirst", "what it is made of may end the run first, an Int worked "
-                + "out past its type, and no stop is shown past it");
-        FORMS.put("aConstructionNotReadFirst", new Form("TwoH", "Held",
+        // what it is made of may end the run first, an Int worked out past its type
+        NOT_SHOWN.put("overflowFirst", WhyAConstructionStopIsNotShown.SOMETHING_BEFORE_IT_MAY_STOP);
+        // the construction before it refuses no run, which is read as asking nothing
+        FORMS.put("aConstructionThatRefusesNoneFirst", new Form("TwoH", "Held",
                 "{ let f = Decimal.multiply(d, e) \n TwoH { a = Held(Decimal.max(0.0m, "
                         + "Decimal.subtract(d, f))), b = Held(Decimal.min(f, d)), "
                         + "w = Decimal.compare(d, 3.0m) <= 0 } }"));
-        NOT_SHOWN.put("aConstructionNotReadFirst", "the construction before it is made of a "
-                + "number whose condition is not read, so whether it ends the run first is not "
-                + "known");
     }
 
     @Test
@@ -181,24 +196,28 @@ class AConstructionIsToldOfAStopWhereARunStopsThereTest {
         }
         Compilation compilation = ACompiledModel.measured(model.toString(),
                 new Adequacy.Asked(Adequacy.Level.OFF, false));
-        Map<String, int[]> said = notes(compilation);
-        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(model.toString()),
+        BytesClassLoader loader = new BytesClassLoader(compilation.classes(),
                 AConstructionIsToldOfAStopWhereARunStopsThereTest.class.getClassLoader());
+        SourceRendering rendering = SourceRendering.namedByIdentity(compilation.texts());
         TreeSet<String> shownAndNoRunStops = new TreeSet<>();
         TreeSet<String> shownAndItsValueDoesNotStop = new TreeSet<>();
         TreeSet<String> stopsAndNotShown = new TreeSet<>();
         TreeSet<String> stopsAndNothingSaid = new TreeSet<>();
+        TreeSet<String> notSaidWhy = new TreeSet<>();
         for (int at = 0; at < names.size(); at++) {
+            String name = names.get(at);
             Object behavior = Emitted.behavior(loader, "demo", "b" + at)
                     .getConstructor().newInstance();
-            boolean stops = someRunStops(loader, behavior);
-            int[] counts = said.getOrDefault("b" + at, new int[2]);
-            if (!stops && counts[SHOWN] > 0) {
-                shownAndNoRunStops.add(names.get(at));
+            Set<String> stopsAt = constructionsSomeRunStopsAt(loader, behavior);
+            Said said = said(compilation, "b" + at, rendering);
+            for (String site : said.shownAt()) {
+                if (!stopsAt.contains(site)) {
+                    shownAndNoRunStops.add(name + ": " + site);
+                }
             }
             // And the value each stop shown rests on, run: it stops, whatever the places it does
             // not name hold.
-            for (AConstructionStopShown shown : constructionStopsShown(compilation, "b" + at)) {
+            for (AConstructionStopShown shown : said.shown()) {
                 Map<String, Object> in = new LinkedHashMap<>(Map.of("q", 0L,
                         "d", BigDecimal.ZERO, "e", BigDecimal.ZERO));
                 for (AStopShown.NumberAt number : shown.at()) {
@@ -206,17 +225,23 @@ class AConstructionIsToldOfAStopWhereARunStopsThereTest {
                     in.put(field, field.equals("q") ? (Object) number.number().longValueExact()
                             : new BigDecimal(number.number()));
                 }
-                PhysicalPos written = SourceRendering.namedByIdentity(compilation.texts())
-                        .layouts().resolve(shown.asks().at());
-                if (!stopsAt(loader, behavior, in, shown.asks().construction(), written)) {
-                    shownAndItsValueDoesNotStop.add(names.get(at) + " at " + in + ", told of "
-                            + shown.asks().construction() + " at " + written);
+                String site = siteOf(shown.asks().construction(), shown.asks().at(), rendering);
+                if (!site.equals(constructionStoppedAt(loader, behavior, in))) {
+                    shownAndItsValueDoesNotStop.add(name + " at " + in + ", told of " + site);
                 }
             }
-            if (stops && counts[SHOWN] == 0) {
-                stopsAndNotShown.add(names.get(at));
-                if (counts[NOT_RESOLVED] == 0) {
-                    stopsAndNothingSaid.add(names.get(at));
+            // And each construction some run stops at, by where it is written: a stop shown of
+            // one construction says nothing of another.
+            for (String site : stopsAt) {
+                if (said.shownAt().contains(site)) {
+                    continue;
+                }
+                stopsAndNotShown.add(name);
+                List<WhyAConstructionStopIsNotShown> why = said.notShownAt().get(site);
+                if (why == null) {
+                    stopsAndNothingSaid.add(name + ": " + site);
+                } else if (NOT_SHOWN.containsKey(name) && !why.contains(NOT_SHOWN.get(name))) {
+                    notSaidWhy.add(name + ": " + site + " said " + why);
                 }
             }
         }
@@ -231,92 +256,87 @@ class AConstructionIsToldOfAStopWhereARunStopsThereTest {
                 () -> assertEquals(new TreeSet<>(NOT_SHOWN.keySet()), stopsAndNotShown,
                         "a run stops and no stop is shown, beside the forms the compiler cannot "
                                 + "yet show"),
-                () -> assertEquals(new TreeSet<>(NOTHING_SAID.keySet()), stopsAndNothingSaid,
+                () -> assertEquals(new TreeSet<>(), stopsAndNothingSaid,
                         "a run stops and the report says nothing of it, not even that it is not "
-                                + "resolved, beside the forms whose construction is read as asking "
-                                + "nothing"));
+                                + "resolved"),
+                () -> assertEquals(new TreeSet<>(), notSaidWhy,
+                        "a stop not resolved is said without the reason written down for it"));
     }
 
-    private static final int SHOWN = 0;
-    private static final int NOT_RESOLVED = 1;
+    /**
+     * What the findings of one behavior say of a run stopping at a construction on its way to its
+     * rules, which is what its report writes from, each construction by where it is written
+     * ({@link #siteOf}).
+     *
+     * @param shown      what shows a run on the way stops at a construction, of every rule
+     * @param shownAt    where each of {@code shown} is written
+     * @param notShownAt each construction said not resolved, with why, of every rule
+     */
+    private record Said(List<AConstructionStopShown> shown, Set<String> shownAt,
+                        Map<String, List<WhyAConstructionStopIsNotShown>> notShownAt) {}
 
-    private static boolean someRunStops(ClassLoader loader, Object behavior) throws Exception {
+    private static Said said(Compilation compilation, String behavior,
+                             SourceRendering rendering) {
+        Partitions.Partitioning divided =
+                compilation.db().ask(new Adequacy.Divided("demo", behavior)).value();
+        List<AConstructionStopShown> shown = new ArrayList<>();
+        Set<String> shownAt = new TreeSet<>();
+        Map<String, List<WhyAConstructionStopIsNotShown>> notShownAt = new TreeMap<>();
+        for (WhatIsShownOfAStop each : divided.stopsShown()) {
+            if (each instanceof RuleWhereARunMayStop stops) {
+                for (AConstructionStopShown one : stops.constructions()) {
+                    shown.add(one);
+                    shownAt.add(siteOf(one.asks().construction(), one.asks().at(), rendering));
+                }
+            } else if (each instanceof RuleWhereAStopIsNotShown open) {
+                for (AConstructionStopNotShown one : open.asks()) {
+                    notShownAt.computeIfAbsent(siteOf(one.construction(), one.at(), rendering),
+                            _ -> new ArrayList<>()).add(one.why());
+                }
+            }
+        }
+        return new Said(shown, shownAt, notShownAt);
+    }
+
+    /** A construction as the type made and the line and column it is written at, which is what a
+     *  run that stops there says of where it stopped. */
+    private static String siteOf(String type, SourcePos at, SourceRendering rendering) {
+        PhysicalPos written = rendering.layouts().resolve(at);
+        return type + " at " + written.line() + ":" + written.column();
+    }
+
+    /** Every construction some run of the grid stops at ({@link #constructionStoppedAt}). */
+    private static Set<String> constructionsSomeRunStopsAt(ClassLoader loader, Object behavior)
+            throws Exception {
+        Set<String> out = new TreeSet<>();
         for (long q : WHOLE) {
             for (BigDecimal d : DECIMAL) {
                 for (BigDecimal e : DECIMAL) {
-                    if (stopsAt(loader, behavior, Map.of("q", q, "d", d, "e", e))) {
-                        return true;
+                    String site = constructionStoppedAt(loader, behavior,
+                            Map.of("q", q, "d", d, "e", e));
+                    if (site != null) {
+                        out.add(site);
                     }
                 }
             }
         }
-        return false;
-    }
-
-    private static boolean stopsAt(ClassLoader loader, Object behavior, Map<String, Object> raw)
-            throws Exception {
-        Object in = Codecs.decoded(loader, "demo.In", raw);
-        try {
-            Codecs.apply(behavior, in);
-            return false;
-        } catch (ConstraintViolation stopped) {
-            return true;
-        }
-    }
-
-    /** Whether the run of {@code raw} stops at the construction of {@code type} written at
-     *  {@code written}, its invariant not holding: not past it, and not at anything else first,
-     *  another construction of the same type included. */
-    private static boolean stopsAt(ClassLoader loader, Object behavior, Map<String, Object> raw,
-                                   String type, PhysicalPos written) throws Exception {
-        Object in = Codecs.decoded(loader, "demo.In", raw);
-        try {
-            Codecs.apply(behavior, in);
-            return false;
-        } catch (ConstraintViolation stopped) {
-            return stopped.failure() instanceof InvariantFailure failure
-                    && failure.type().equals(type) && stopped.site() != null
-                    && stopped.site().line() == written.line()
-                    && stopped.site().column() == written.column();
-        }
-    }
-
-    /** What shows a run on the way to a rule of {@code behavior} stops at a construction, of
-     *  every rule the reading says it of. */
-    private static List<AConstructionStopShown> constructionStopsShown(Compilation compilation,
-                                                                        String behavior) {
-        Partitions.Partitioning divided =
-                compilation.db().ask(new Adequacy.Divided("demo", behavior)).value();
-        List<AConstructionStopShown> out = new ArrayList<>();
-        for (WhatIsShownOfAStop each : divided.stopsShown()) {
-            if (each instanceof RuleWhereARunMayStop stops) {
-                out.addAll(stops.constructions());
-            }
-        }
         return out;
     }
 
-    /** How many {@code may stop a run} notes that tell a stop at a construction ({@link #SHOWN})
-     *  and how many {@code stop not resolved} notes ({@link #NOT_RESOLVED}) each behavior's report
-     *  holds. */
-    private static Map<String, int[]> notes(Compilation compilation) {
-        Pattern header = Pattern.compile("^(\\w+)\\s+implemented\\b.*");
-        Map<String, int[]> out = new LinkedHashMap<>();
-        String current = null;
-        for (String line : AdequacyReport.of(compilation)
-                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
-                .map(String::strip).toList()) {
-            Matcher started = header.matcher(line);
-            if (started.matches()) {
-                current = started.group(1);
-                out.put(current, new int[2]);
-            } else if (current != null && line.startsWith("· may stop a run:")
-                    && line.contains("stops at a construction on the way to this rule")) {
-                out.get(current)[SHOWN]++;
-            } else if (current != null && line.startsWith("· stop not resolved:")) {
-                out.get(current)[NOT_RESOLVED]++;
-            }
+    /** The construction the run of {@code raw} stops at, its invariant not holding, as
+     *  {@link #siteOf} writes it: null where it stops at nothing, or at something else. */
+    private static String constructionStoppedAt(ClassLoader loader, Object behavior,
+                                                Map<String, Object> raw) throws Exception {
+        Object in = Codecs.decoded(loader, "demo.In", raw);
+        try {
+            Codecs.apply(behavior, in);
+            return null;
+        } catch (ConstraintViolation stopped) {
+            return stopped.failure() instanceof InvariantFailure failure && stopped.site() != null
+                    ? failure.type() + " at " + stopped.site().line() + ":"
+                            + stopped.site().column()
+                    : null;
         }
-        return out;
     }
+
 }

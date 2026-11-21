@@ -4873,12 +4873,12 @@
           "asks": {
             "type": "array",
             "minItems": 1,
-            "description": "On `rule_stop_not_shown` only, where a construction a run works out on the way to the rule asks something of it that the declarations do not already hold: one entry for each construction, as the model wrote it, so two that ask the same are two. The condition a run has to meet to get past it — a run that does not is stopped there, before it gets to the rule. Whether an admissible run does not meet it is not resolved: which rows stop is for the rows run, and a condition on several numbers says what none of them does alone, as a product at nought or above is met by a gross at nought whatever the rate is. The same condition narrows the rows the rule is read over. Only constructions every run that gets to the rule works out on its way are among these, and with `constructions` they are all that is said of a construction: one some runs work out and others do not, such as one on an arm of a value worked out before the rule, is said of nowhere, which is not that no run stops there. Absent where no construction asks anything.",
+            "description": "On `rule_stop_not_shown` only: each construction a run on the way to the rule may work out before it, of which neither that some admissible run stops there nor that none does is shown, one entry for each construction as the model wrote it, so two that ask the same are two. A run that does not meet what a construction asks is stopped there, before it gets to the rule. Every construction a run on the way may work out is among these or `constructions`, or is shown to stop no run: one only some runs work out, such as one on an arm of a value worked out before the rule, is asked about with the arm's condition as part of the way to it, and one whose condition is not read is here with that reason. Of a rule whose way is not read — in the body of a helper read at its call, of a value the behavior builds, or of a function not handed to the call that applies it — every construction written in the behavior's body and in that body may come first, and each is here with `reach_not_shown` unless shown to stop no run. Each construction is said under at least one rule it is on the way to, and not under every one: under the rules whose comparison reads a place of a number it asks of, and under every rule it is on the way to where none of those says anything of it, as where it is on the way to none of them or shown to stop no run that takes their way. Absent where every construction on the way is shown one way or the other, or said under another rule.",
             "items": {
               "type": "object",
               "required": [
                 "construction",
-                "asked"
+                "reason"
               ],
               "additionalProperties": false,
               "properties": {
@@ -4891,7 +4891,22 @@
                   "description": "Where the construction is written, present where a reader can be sent there."
                 },
                 "asked": {
-                  "$ref": "#/$defs/constructionAsked"
+                  "$ref": "#/$defs/constructionAsked",
+                  "description": "What a run has to meet to get past it, of what the way to it does not already hold. Which rows do not is for the rows run, and a condition on several numbers says what none of them does alone, as a product at nought or above is met by a gross at nought whatever the rate is. Absent where what its type asks is not read (`asks_not_read`)."
+                },
+                "reason": {
+                  "type": "string",
+                  "enum": [
+                    "reach_not_shown",
+                    "asks_not_read",
+                    "something_before_it_may_stop",
+                    "a_condition_not_read",
+                    "not_over_the_input",
+                    "no_value_shown",
+                    "no_value_found",
+                    "no_value_found_within_what_is_tried"
+                  ],
+                  "description": "Why neither is shown. `reach_not_shown`: which runs on the way to the rule get to it is not determined, as for one worked out inside a function. `asks_not_read`: what its type requires of the values it is made of is not read. `something_before_it_may_stop`: something evaluated before it may stop a run first. `a_condition_not_read`: a condition on the way to the rule or to it is no comparison of whole numbers of the input, so no input is checked against it. `not_over_the_input`: what it asks, or what a construction before it asks, is over a value the body works out and not over numbers of the input. `no_value_shown`: the input's types declare invariants or cases, and no input meeting them is built. `no_value_found`: no input tried gets to it without meeting what it asks. `no_value_found_within_what_is_tried`: the inputs tried ran out first, and another may."
                 }
               }
             }
@@ -4899,7 +4914,7 @@
           "constructions": {
             "type": "array",
             "minItems": 1,
-            "description": "On `rule_may_stop_a_run` only, where some run on the way to the rule is shown to stop at a construction it works out first: one entry for each such construction, as the model wrote it, and what it asks that the way to the rule does not hold, in the same shape as `asks`. Shown and not a possibility: a value of the input is shown to exist that meets every condition on the way to the rule, gets to the construction with nothing before it ending the run, and does not meet what the construction asks. Absent where no such stop is shown.",
+            "description": "On `rule_may_stop_a_run` only, where some run on the way to the rule is shown to stop at a construction it works out first: one entry for each such construction, as the model wrote it, and what it asks that the way to the rule does not hold, in the same shape as `asks`. Shown and not a possibility: a value of the input is shown to exist that meets every condition on the way to the rule and on the way to the construction, gets to the construction with nothing before it ending the run, and does not meet what the construction asks. Said under the same rules as `asks` says a construction under. Absent where no such stop is shown.",
             "items": {
               "type": "object",
               "required": [
