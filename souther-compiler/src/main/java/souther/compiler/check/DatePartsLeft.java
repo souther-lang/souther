@@ -141,15 +141,24 @@ public record DatePartsLeft(Map<TakenAs.DatePart, NumericDomain.Bounds> byPart,
     /**
      * Whether a date these leave, moved as {@code moved} moves it, has {@code part} at
      * {@code value}, shown by a day met: one of these the move is defined at and brings to the
-     * part. The move is defined at fewer days than its days say where a step of it stops at an
-     * end of the calendar. A search
-     * that gave up shows none and says nothing of whether there are some, so false here is that
-     * this shows no such date and never that there is none.
+     * part. The search is over the days the move is defined at, and for a year over the days whose
+     * moved date is in it, so it starts where such a day can be and not at the calendar's first.
+     * A search that gave up shows none and says nothing of whether there are some, so false here
+     * is that this shows no such date and never that there is none.
      */
     public boolean someDateHas(TakenAs.DatePart part, int value, DateTranslation moved) {
-        for (long day : walk(null, null, true, MOST_DAYS_MET).days()) {
-            if (moved.definedAt(day)
-                    && part.of(LocalDate.ofEpochDay(day + moved.offsetDays())) == value) {
+        long from = moved.first();
+        long to = moved.last();
+        if (part == TakenAs.DatePart.YEAR) {
+            if (value < LocalDate.MIN.getYear() || value > LocalDate.MAX.getYear()) {
+                return false;
+            }
+            from = Math.max(from, LocalDate.of(value, 1, 1).toEpochDay() - moved.offsetDays());
+            to = Math.min(to, LocalDate.of(value, 12, 31).toEpochDay() - moved.offsetDays());
+        }
+        for (long day : walk(BigInteger.valueOf(from), BigInteger.valueOf(to), true,
+                MOST_DAYS_MET).days()) {
+            if (part.of(LocalDate.ofEpochDay(day + moved.offsetDays())) == value) {
                 return true;
             }
         }

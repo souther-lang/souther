@@ -36,12 +36,15 @@ class DatePartsLeftTest {
         assertTrue(FEBRUARY.someDateHas(TakenAs.DatePart.MONTH, 3, aDayOn));
     }
 
-    /** Where nothing is said of the date, any part the calendar has is shown, however far moved. */
+    /** Where nothing is said of the date, any part the calendar has is shown, however far moved:
+     *  a year far from the calendar's first as well, which a search from the first would not
+     *  reach. */
     @Test
     void whereNothingIsSaidOfTheDateEveryPartTheCalendarHasIsShown() {
         DateTranslation far = DateTranslation.none().thenAddDays(1_000);
         assertTrue(DatePartsLeft.EVERY_DATE.someDateHas(TakenAs.DatePart.DAY, 31, far));
         assertFalse(DatePartsLeft.EVERY_DATE.someDateHas(TakenAs.DatePart.DAY, 32, far));
+        assertTrue(DatePartsLeft.EVERY_DATE.someDateHas(TakenAs.DatePart.YEAR, 2026, far));
     }
 
     /** A step on and the step back move nothing, and are defined at no date the first step is

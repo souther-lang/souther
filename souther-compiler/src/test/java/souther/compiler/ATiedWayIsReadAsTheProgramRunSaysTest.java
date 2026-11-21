@@ -199,11 +199,15 @@ class ATiedWayIsReadAsTheProgramRunSaysTest {
      * Behind a gate that adds the two numbers, an order between them is told apart by a stop at
      * values far from the small ones: at {@code p = 2^62} no {@code e} that passes the gate has
      * the comparison come out as it does at {@code p = 1}, and one more than the greatest stops.
-     * A report that holds both to one class of {@code p} says what the program does not.
+     * A report that holds both to one class of {@code p} says what the program does not. Each way
+     * the order is written is a behavior of one model: a number a sum may stop at and one twice or
+     * three times the other differ in where the run stops, and none is read.
      */
     @Test
-    void anOrderWhoseOtherSideStopsFarOutIsNotRead() throws Exception {
-        Compilation compilation = ACompiledModel.measured("""
+    void anOrderBehindASumThatMayStopIsNotReadHoweverItIsWritten() throws Exception {
+        List<String> orders = List.of("i.e.value < i.p.value", "i.e.value < 3 * i.p.value",
+                "2 * i.p.value >= i.e.value", "i.e.value < i.p.value + 1");
+        StringBuilder model = new StringBuilder("""
                 module demo
 
                 data Eaches = Int
@@ -212,17 +216,24 @@ class ATiedWayIsReadAsTheProgramRunSaysTest {
                     invariant value >= 0
                 data In = { e: Eaches, p: PackSize }
                 data Out = Int
-
-                behavior b : (i: In) -> Out
-                let b (i) = Out { value =
-                    if i.e.value + i.p.value >= 0
-                    then (if i.e.value < 3 * i.p.value then 1 else 2) else 3 }
-                """, Adequacy.Asked.fullReport());
-        JsonNode behavior = behaviorNamed(JsonMapper.builder().build()
-                .readTree(AdequacyReport.of(compilation)
-                        .json(SourceRendering.namedByIdentity(compilation.texts()))), "b");
-        assertTrue(!isRead(behavior) || !behavior.get("partition").path("weights").isEmpty(),
-                () -> behavior.get("partition").toString());
+                """);
+        for (int at = 0; at < orders.size(); at++) {
+            model.append("\nbehavior b").append(at).append(" : (i: In) -> Out\nlet b").append(at)
+                    .append(" (i) = Out { value = if i.e.value + i.p.value >= 0 then (if ")
+                    .append(orders.get(at)).append(" then 1 else 2) else 3 }\n");
+        }
+        Compilation compilation = ACompiledModel.measured(model.toString(),
+                Adequacy.Asked.fullReport());
+        JsonNode report = JsonMapper.builder().build().readTree(AdequacyReport.of(compilation)
+                .json(SourceRendering.namedByIdentity(compilation.texts())));
+        List<String> read = new ArrayList<>();
+        for (int at = 0; at < orders.size(); at++) {
+            JsonNode behavior = behaviorNamed(report, "b" + at);
+            if (isRead(behavior) && behavior.get("partition").path("weights").isEmpty()) {
+                read.add(orders.get(at));
+            }
+        }
+        assertEquals(List.of(), read);
     }
 
     /**
@@ -330,6 +341,25 @@ class ATiedWayIsReadAsTheProgramRunSaysTest {
                 let b (e, p, q) = Out { value =
                     if %s then (if Rational.toInt(UP, (e / p) / q) >= 2 then 1 else 2) else 3 }
                 """.formatted(way);
+    }
+
+    /** A divisor that is a product of two numbers is no form of them, and a run stops where it is
+     *  nought: the stop is left unresolved, and no class is claimed beside it. */
+    @Test
+    void aDivisorThatIsAProductIsNotReadAndItsStopIsLeftUnresolved() {
+        String said = reportOf("""
+                module demo
+
+                data Small = Int
+                    invariant value >= -3 && value <= 3
+                data Out = Int
+
+                behavior b : (e: Int, p: Small, q: Small) -> Out
+                let b (e, p, q) = Out { value =
+                    if Rational.toInt(UP, e / (p.value * q.value)) >= 2 then 1 else 2 }
+                """);
+        assertTrue(said.contains("· not read: comparison"), said);
+        assertTrue(said.contains("stop not resolved"), said);
     }
 
     private static String reportOf(String model) {

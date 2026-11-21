@@ -18,16 +18,16 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Every run that takes the arms the way to a comparison takes gets to a construction, unless
- * something before ends it, only where nothing on the way from where the two part decides whether
- * the construction is worked out, and it is worked out before the comparison: no arm, no right of
- * an {@code ||}, no function value. The construction an attempt tests is none a run gets to and
- * past, since whether it is built is the attempt's deciding; what it is built of is.
+ * A run that takes the way to a comparison and the way to a construction gets to the construction,
+ * unless something before ends it, where it is worked out before the comparison and not inside a
+ * function value: on an arm, or on the right of an {@code ||}, past what decides it, which it works
+ * out first. The construction an attempt tests is none a run gets to and past, since whether it is
+ * built is the attempt's deciding; what it is built of is.
  *
- * <p>Held here and not by the report: what a construction on such a part asks is read under what
- * decides it, and no model reaches the report with a construction there whose condition is left.
+ * <p>Held here and not by the report: which runs take the arm is the way to the construction's to
+ * say, and the report asks a value to meet it ({@link ConstructionStopAssessment}).
  */
-class ARunOnTheWayGetsToAConstructionOnlyWhereNothingDecidesItTest {
+class ARunOnTheWayGetsToAConstructionPastWhatDecidesItAndNotIntoAFunctionTest {
 
     private static final String HEAD = """
             module probe.w
@@ -104,9 +104,11 @@ class ARunOnTheWayGetsToAConstructionOnlyWhereNothingDecidesItTest {
                 """).isPresent());
     }
 
+    /** What decides the arm is worked out on every run that gets to the construction, before
+     *  what it is made of. */
     @Test
-    void aConstructionOnAnArmOfAValueBeforeTheComparisonIsNotShownToBeGotTo() {
-        assertEquals(Optional.empty(), toTheConstructionOfT("""
+    void aConstructionOnAnArmOfAValueBeforeTheComparisonIsGotToPastItsCondition() {
+        assertEquals(List.of("u", "t"), namesWorkedOutFirst("""
                 let pick (s, t, u) = {
                     let made = if u then Domain(t) else Domain("a")
                     if s == "x" then Yes else No
@@ -115,13 +117,22 @@ class ARunOnTheWayGetsToAConstructionOnlyWhereNothingDecidesItTest {
     }
 
     @Test
-    void aConstructionOnTheRightOfAnOrIsNotShownToBeGotTo() {
-        assertEquals(Optional.empty(), toTheConstructionOfT("""
+    void aConstructionOnTheRightOfAnOrIsGotToPastItsLeft() {
+        assertEquals(List.of("u", "t"), namesWorkedOutFirst("""
                 let pick (s, t, u) = {
                     let ok = u || String.length(Domain(t).value) > 3
                     if s == "x" then Yes else No
                 }
                 """));
+    }
+
+    /** The names every run getting to the construction of {@code t} reads first, in order. */
+    private static List<String> namesWorkedOutFirst(String body) {
+        Optional<WhatARunWorksOutBeforeACount.BeforeAConstruction> before =
+                toTheConstructionOfT(body);
+        assertTrue(before.isPresent(), "a run on the way gets to it");
+        return before.get().onEveryRun().stream()
+                .map(part -> ((Core.Read) Core.withoutStanding(part)).name()).toList();
     }
 
     @Test

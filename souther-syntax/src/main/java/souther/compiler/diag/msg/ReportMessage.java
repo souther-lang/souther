@@ -603,10 +603,40 @@ public sealed interface ReportMessage extends Message {
     record ABoundOnTheInputWouldKeepEveryRunFromIt(String data, String invariant)
             implements ReportMessage, Prose {}
 
-    /** What the constructions on the way to a rule ask of a run, no run being shown not to meet
-     *  it: {@code asks}, each said by {@link ConstructionAsks} or {@link ConstructionNeverPassed}. */
-    record WhatTheConstructionsOnTheWayAskIsNotDetermined(Message asks)
+    /** The constructions on the way to a rule of which neither that a run stops there nor that
+     *  none does is shown: {@code asks}, each said by {@link ConstructionAsksAndNotShown},
+     *  {@link ConstructionNeverPassedAndNotShown} or {@link ConstructionNotShown}. */
+    record AStopAtAConstructionOnTheWayIsNotDetermined(Message asks)
             implements ReportMessage, Prose {}
+
+    /** One such construction, what it asks of a run that works it out, and why neither is
+     *  shown. */
+    record ConstructionAsksAndNotShown(String construction, String at, String asked, Message why)
+            implements ReportMessage, Prose {}
+
+    /** One such construction that no run gets past, and why that a run on the way gets to it is
+     *  not shown. */
+    record ConstructionNeverPassedAndNotShown(String construction, String at, Message why)
+            implements ReportMessage, Prose {}
+
+    /** One such construction whose condition is not read, and why. */
+    record ConstructionNotShown(String construction, String at, Message why)
+            implements ReportMessage, Prose {}
+
+    /** Why: that a run on the way to the rule gets to the construction is not shown. */
+    record NoRunIsShownToGetToIt() implements ReportMessage, Prose {}
+
+    /** Why: what the type made asks of the numbers it is made of is not read. */
+    record WhatItsTypeAsksIsNotRead() implements ReportMessage, Prose {}
+
+    /** Why: something evaluated before the construction may stop a run first. */
+    record SomethingBeforeTheConstructionMayStopARun() implements ReportMessage, Prose {}
+
+    /** Why: no input tried gets to the construction and is refused by its type. */
+    record NoInputTriedIsRefusedByIt() implements ReportMessage, Prose {}
+
+    /** Why: the inputs tried ran out before one was refused by the construction's type. */
+    record TheInputsTriedRanOutBeforeOneWasRefused() implements ReportMessage, Prose {}
 
     /**
      * The invariant an author may declare on {@code data}, the data holding an input, that keeps

@@ -13,6 +13,8 @@ import souther.compiler.report.AdequacyReport;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -71,8 +73,7 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
 
     /** What the report says each construction asks, as the document writes it. */
     private static List<JsonNode> asksOf(Compilation compilation) {
-        JsonNode report = JSON.readTree(AdequacyReport.of(compilation)
-                .json(SourceRendering.namedByIdentity(compilation.texts())));
+        JsonNode report = document(compilation);
         DocumentShape.assertShapedLikeTheSchema(report);
         List<JsonNode> out = new ArrayList<>();
         collect(report, out);
@@ -103,10 +104,16 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
         };
     }
 
-    /** What the findings of {@code kind} say the constructions on the way ask. */
-    private static List<JsonNode> toldIn(Compilation compilation, String kind) {
-        JsonNode report = JSON.readTree(AdequacyReport.of(compilation)
+    /** The document the report writes of {@code compilation}, written once for every reading a
+     *  test makes of it. */
+    private static JsonNode document(Compilation compilation) {
+        return JSON.readTree(AdequacyReport.of(compilation)
                 .json(SourceRendering.namedByIdentity(compilation.texts())));
+    }
+
+    /** What the findings of {@code kind} in {@code report} say the constructions on the way
+     *  ask. */
+    private static List<JsonNode> toldIn(JsonNode report, String kind) {
         List<JsonNode> out = new ArrayList<>();
         collectOfKind(report, kind, out);
         return out;
@@ -120,9 +127,7 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
     }
 
     private static Compilation compiled(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        return ACompiledModel.compiles(compilation);
+        return ACompiledModel.measured(model, new Adequacy.Asked(Adequacy.Level.OFF, false));
     }
 
     private static String human(Compilation compilation) {
@@ -151,7 +156,7 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
                 List.copyOf(asked.path("allOf").values()));
         assertTrue(Pattern.compile("a run gets past Refund at [0-9]+:[0-9]+ only where"
                         + " gross \\* rate is at least 0 and gross is at least 0")
-                .matcher(human(compilation)).find(), human(compilation));
+                .matcher(human(compilation)).find(), () -> human(compilation));
     }
 
     /** A condition the declarations hold of every value says nothing: a gross at nought or above
@@ -161,7 +166,17 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
         Compilation compilation = compiled(plan("gross: Gross, rate: Rate, limit: Decimal",
                 "gross.value", "rate.value", "Decimal.min(fee, gross.value)"));
         assertEquals(List.of(), asksOf(compilation));
-        assertTrue(!human(compilation).contains("a run gets past"), human(compilation));
+        assertTrue(!human(compilation).contains("a run gets past"), () -> human(compilation));
+        assertEveryOneSafe(compilation, "plan", 2);
+    }
+
+    /** That {@code behavior} has {@code howMany} constructions on the way to its rules and every
+     *  one of them is judged to stop no run: asked about, and not left out. */
+    private static void assertEveryOneSafe(Compilation compilation, String behavior,
+                                           int howMany) {
+        Map<Integer, Set<String>> judged = ConstructionsJudged.of(compilation, behavior);
+        assertEquals(howMany, judged.size(), judged::toString);
+        assertEquals(Set.of(Set.of("Safe")), Set.copyOf(judged.values()), judged::toString);
     }
 
     /** Of the two that the declarations do not hold, only that one is asked: the gross is held at
@@ -198,7 +213,7 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
         assertEquals(List.of(is("x", "at_least", "0"), is("y", "at_least", "0")),
                 List.copyOf(asks.getFirst().path("asked").path("oneOf").values()));
         assertTrue(human(compilation).contains("only where x is at least 0 or y is at least 0"),
-                human(compilation));
+                () -> human(compilation));
     }
 
     /**
@@ -223,10 +238,12 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
                     within = Decimal.compare(x, c) <= 0
                 }
                 """);
-        List<JsonNode> asks = toldIn(compilation, "rule_may_stop_a_run");
+        JsonNode report = document(compilation);
+        List<JsonNode> asks = toldIn(report, "rule_may_stop_a_run");
         assertEquals(1, asks.size(), asks.toString());
         assertEquals(10, asks.getFirst().path("at").path("line").asInt(), asks.toString());
-        assertEquals(List.of(), toldIn(compilation, "rule_stop_not_shown"));
+        assertEquals(List.of(), toldIn(report, "rule_stop_not_shown"));
+        assertEquals(Set.of("Safe"), ConstructionsJudged.of(compilation, "f").get(11));
     }
 
     /**
@@ -301,7 +318,9 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
         assertEquals(List.of(is("x", "at_least", "0")),
                 asksOf(compiled(madeOf("Decimal.max(-1.0m, x)"))).stream()
                         .map(one -> one.path("asked")).toList());
-        assertEquals(List.of(), asksOf(compiled(madeOf("Decimal.max(1.0m, x)"))));
+        Compilation settled = compiled(madeOf("Decimal.max(1.0m, x)"));
+        assertEquals(List.of(), asksOf(settled));
+        assertEveryOneSafe(settled, "f", 1);
         assertEquals(List.of(is("x", "at_least", "0")),
                 asksOf(compiled(madeOf("Decimal.min(1.0m, x)"))).stream()
                         .map(one -> one.path("asked")).toList());
@@ -328,8 +347,9 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
                     if GUARD then Plan { p = Held(NUMBER), within = Decimal.compare(x, c) <= 0 }
                     else Plan { p = Held(0.0m), within = false }
                 """;
-        assertEquals(List.of(), asksOf(compiled(under.replace("GUARD", "x >= 0.0m")
-                .replace("NUMBER", "x"))));
+        Compilation held = compiled(under.replace("GUARD", "x >= 0.0m").replace("NUMBER", "x"));
+        assertEquals(List.of(), asksOf(held));
+        assertEquals(Set.of("Safe"), ConstructionsJudged.of(held, "f").get(10));
         assertEquals(List.of(is("x", "at_least", "0")), asksOf(compiled(
                 under.replace("GUARD", "y >= 0.0m").replace("NUMBER", "x"))).stream()
                 .map(one -> one.path("asked")).toList());
@@ -416,25 +436,104 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
     @Test
     void aConstructionSomeAdmissibleRunDoesNotMeetIsAStopShown() {
         Compilation compilation = compiled(madeOf("x"));
+        JsonNode report = document(compilation);
         assertEquals(List.of(is("x", "at_least", "0")),
-                toldIn(compilation, "rule_may_stop_a_run").stream()
+                toldIn(report, "rule_may_stop_a_run").stream()
                         .map(one -> one.path("asked")).toList());
-        assertEquals(List.of(), toldIn(compilation, "rule_stop_not_shown"));
+        assertEquals(List.of(), toldIn(report, "rule_stop_not_shown"));
         assertTrue(Pattern.compile("may stop a run: [^\\n]* some admissible run stops at a "
                         + "construction on the way to this rule[^\\n]*; a run gets past Held at "
                         + "[0-9]+:[0-9]+ only where x is at least 0")
-                .matcher(human(compilation)).find(), human(compilation));
+                .matcher(human(compilation)).find(), () -> human(compilation));
+    }
+
+    /**
+     * A rule in the body of a helper read at each call of it, as one walking a list by its head
+     * is, has what a run works out before it unread: a construction written before it in that
+     * body is said as one no run is shown to get to, and never left out.
+     */
+    @Test
+    void aConstructionBeforeARuleInAHelperReadAtItsCallIsNotLeftOut() {
+        Compilation compilation = compiled("""
+                module demo
+
+                data Held = Decimal
+                    invariant value >= 0.0m
+                data Plan = { within: Bool }
+
+                behavior f : (xs: List<Decimal>, c: Decimal) -> Plan
+                    constructs Plan, Held
+                let f (xs, c) = Plan { within = every(xs, c) }
+
+                partial let every (xs: List<Decimal>, c: Decimal): Bool = match List.get(0, xs) with
+                    | None -> true
+                    | Some x -> {
+                        let h = Held(x)
+                        Decimal.compare(h.value, c) <= 0 && every(List.drop(1, xs), c)
+                    }
+                """);
+        assertEquals(List.of("Held: reach_not_shown"), asksOf(compilation).stream()
+                .map(one -> one.path("construction").asString() + ": "
+                        + one.path("reason").asString())
+                .distinct().toList());
+    }
+
+    /**
+     * A construction on an arm whose condition holds what it asks stops no run that takes the arm:
+     * it is among the constructions on the way to the rule after it, and judged to stop none.
+     */
+    @Test
+    void aConstructionOnAnArmThatHoldsWhatItAsksIsJudgedSafe() {
+        Compilation compilation = compiled("""
+                module demo
+
+                data Refund = Decimal
+                    invariant value >= 0.0m
+                data Out = { refund: Refund, within: Bool }
+
+                behavior plan : (gross: Decimal, rate: Decimal, limit: Decimal) -> Out
+                    constructs Out, Refund
+                let plan (gross, rate, limit) = {
+                    let net = if Decimal.compare(gross, rate) <= 0 then Refund(0.0m)
+                        else Refund(Decimal.subtract(gross, rate))
+                    Out { refund = net, within = Decimal.compare(gross, limit) <= 0 }
+                }
+                """);
+        assertEveryOneSafe(compilation, "plan", 2);
     }
 
     /**
      * A construction after one whose condition is not read is not shown to stop a run, since the
-     * one before may end it first, and is said as not resolved.
+     * one before may end it first, and is said as not resolved for that reason; the one before is
+     * said for its own, and not left out.
      */
     @Test
     void aConstructionAfterOneNotReadIsNotResolved() {
-        Compilation compilation = compiled(UNTYPED);
-        assertEquals(1, toldIn(compilation, "rule_stop_not_shown").size());
-        assertEquals(List.of(), toldIn(compilation, "rule_may_stop_a_run"));
+        Compilation compilation = compiled(HEAD + """
+                data Span = { lo: Decimal, hi: Decimal }
+                    invariant lo <= hi
+
+                behavior plan : (gross: Decimal, limit: Decimal) -> Out
+                    constructs Out, Refund, Span
+
+                let plan (gross, limit) = {
+                    let span = Span { lo = gross, hi = limit }
+                    Out {
+                        refund = Refund(gross),
+                        fee = Refund(0.0m),
+                        within = Decimal.compare(span.lo, span.hi) <= 0
+                    }
+                }
+                """);
+        assertEquals(List.of("Span: asks_not_read", "Refund: something_before_it_may_stop"),
+                asksOf(compilation).stream()
+                        .map(one -> one.path("construction").asString() + ": "
+                                + one.path("reason").asString())
+                        .toList());
+        assertTrue(Pattern.compile("stop not resolved: [^\\n]*; whether a run stops at Span at "
+                        + "[0-9]+:[0-9]+ is not determined: what its type requires of the values "
+                        + "it is made of is not read")
+                .matcher(human(compilation)).find(), () -> human(compilation));
     }
 
     /** What an {@code Int} construction asks is asked as a decimal number too. */

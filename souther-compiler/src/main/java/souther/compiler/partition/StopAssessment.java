@@ -194,8 +194,8 @@ final class StopAssessment {
 
     /**
      * What each quotient evaluating the comparison always works out is divided by, as a form of
-     * the value at a place of the input, in the order they are worked out; null for a divisor that
-     * is no such place, which the owner of what it is answers for and no stop is told of here.
+     * the value at places of the input, in the order they are worked out. A divisor that is no such
+     * form is left out: the owner of the quotient answers for it.
      */
     private static List<LinearForm<NumericTerm>> divisorsOf(ComparisonReadings.Reading each,
                                                             InputReading read) {
@@ -203,8 +203,14 @@ final class StopAssessment {
         for (Core.Binary quotient : each.quotients()) {
             LinearForm<NumericTerm> form = AffineReading.formOf(quotient.right(), each.reads(),
                     read, new ElementsMet(), AffineReading.Unkept.EVERY_NAME_AFRESH);
-            out.add(form != null && form.coefs().keySet().stream()
-                    .allMatch(NumericTerm.ValueOf.class::isInstance) ? form : null);
+            // A divisor that is no form of places of the input — a choice, a count or a total of
+            // a container — is the stop of the owner of that quotient, which holds the rows to
+            // where it answers ({@link QuotientByAValue.Read#answers}) and says what it says of
+            // the rest.
+            if (form != null && form.coefs().keySet().stream()
+                    .allMatch(NumericTerm.ValueOf.class::isInstance)) {
+                out.add(form);
+            }
         }
         return out;
     }
@@ -227,9 +233,6 @@ final class StopAssessment {
                 true, each.assumed());
         List<Place> comparison = places.isEmpty() ? List.of(beside) : places;
         for (int at = 0; at < divisors.size(); at++) {
-            if (divisors.get(at) == null) {
-                continue;
-            }
             LinearForm<NumericTerm> divisor = divisors.get(at);
             Site site = new Site.ByNought(divisor);
             List<LinearForm<NumericTerm>> before = divisors.subList(0, at);
@@ -240,10 +243,9 @@ final class StopAssessment {
                 return left == null || left.keepsAwayFromNought(divisor);
             })) {
                 out.add(new Judgement.Safe(site, WhyNone.DIVISOR_AWAY_FROM_NOUGHT));
-            } else if (places.size() > 1 || before.contains(null)) {
-                out.add(new Judgement.Unresolved(site, before.contains(null)
-                        ? WhyAStopIsNotShown.NOT_OVER_THE_INPUT
-                        : WhyAStopIsNotShown.NOT_EVERY_OPERATION_TOLD));
+            } else if (places.size() > 1) {
+                out.add(new Judgement.Unresolved(site,
+                        WhyAStopIsNotShown.NOT_EVERY_OPERATION_TOLD));
             } else {
                 out.add(aStopIn(each, comparison.getFirst(), site, before, read));
             }
