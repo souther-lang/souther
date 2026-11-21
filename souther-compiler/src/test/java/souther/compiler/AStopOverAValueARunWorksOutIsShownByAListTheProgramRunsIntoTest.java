@@ -54,15 +54,33 @@ class AStopOverAValueARunWorksOutIsShownByAListTheProgramRunsIntoTest {
      *
      * @param before    the comparison with the operation the stop is in left out, which stops at
      *                  nothing the stop rests on; null where the form has several stops
+     * @param operation the operation, as written, whose stop {@code at} and {@code structure} are
+     *                  of and {@code before} leaves out; null where it is of every stop shown
      * @param structure the lists the one stop shown asks for, or null where which of several that
      *                  stop is is not held
      */
     private record Form(String types, String element, String comparison, String before,
-                        List<AStopShown.NumberAt> at, List<InputFact> structure) {
+                        String operation, List<AStopShown.NumberAt> at,
+                        List<InputFact> structure) {
 
         Form(String comparison, String before, List<AStopShown.NumberAt> at,
              List<InputFact> structure) {
-            this("", "Int", comparison, before, at, structure);
+            this("", "Int", comparison, before, null, at, structure);
+        }
+
+        Form(String comparison, String before, String operation, List<AStopShown.NumberAt> at,
+             List<InputFact> structure) {
+            this("", "Int", comparison, before, operation, at, structure);
+        }
+
+        Form(String types, String element, String comparison, String before,
+             List<AStopShown.NumberAt> at, List<InputFact> structure) {
+            this(types, element, comparison, before, null, at, structure);
+        }
+
+        /** Whether {@code shown} is the stop {@code at} and {@code structure} are of. */
+        boolean isTheOneHeld(AStopShown shown) {
+            return operation == null || shown.operation().equals(operation);
         }
     }
 
@@ -104,13 +122,14 @@ class AStopOverAValueARunWorksOutIsShownByAListTheProgramRunsIntoTest {
         STOPPING.put("theElementOfAWalkOverOne", new Form(WALK + " + 1 <= 10", WALK + " <= 10",
                 List.of(), List.of(new InputFact.ListLength(DS, 1),
                         new InputFact.ListElement(DS, 0, GREATEST))));
-        // what stops first is shown: the operation in the step is worked out before the one over
-        // what it comes to, and a list of one holding the greatest stops there
-        STOPPING.put("theOperationWorkedOutFirst", new Form(
-                "Option.withDefault(0, List.max(List.map(x -> x + 1, ds))) + 1 <= 10",
-                "Option.withDefault(0, List.max(List.map(x -> x, ds))) <= 10", List.of(),
-                List.of(new InputFact.ListLength(DS, 1),
-                        new InputFact.ListElement(DS, 0, GREATEST))));
+        // what a run works out first is got past: the sum of what the default comes to and
+        // {@code q + 1} is worked out after {@code q + 1}, so a run is shown to stop in it at the
+        // number before the greatest, where {@code q + 1} does not stop, and not at the greatest
+        STOPPING.put("theOperationAfterOneWorkedOutFirst", new Form(
+                "Option.withDefault(0, List.max(ds)) + 1 + (q + 1) <= 10",
+                "(Option.withDefault(0, List.max(ds)) + 1) * 0 + (q + 1) * 0 <= 10",
+                "i.q + 2", List.of(new AStopShown.NumberAt(Q, GREATEST.subtract(BigInteger.ONE))),
+                List.of(new InputFact.ListLength(DS, 0))));
         // a list as long as a list is, and the longest a stop is shown at: four thousand million
         // and a hundred of the length past which a number of a list's size passes the type
         STOPPING.put("theMostElementsAListHolds", new Form(
@@ -170,8 +189,8 @@ class AStopOverAValueARunWorksOutIsShownByAListTheProgramRunsIntoTest {
         List<AStopShown> shown = run.shown();
         assertFalse(shown.isEmpty(), "a stop is shown");
         if (form.structure() != null) {
-            assertTrue(shown.stream().anyMatch(each -> each.at().equals(form.at())
-                    && each.structure().equals(form.structure())),
+            assertTrue(shown.stream().anyMatch(each -> form.isTheOneHeld(each)
+                    && each.at().equals(form.at()) && each.structure().equals(form.structure())),
                     "a stop shown rests on " + form.at() + form.structure() + ", of " + shown);
         }
         for (AStopShown each : shown) {
@@ -180,7 +199,7 @@ class AStopOverAValueARunWorksOutIsShownByAListTheProgramRunsIntoTest {
             }
             assertTrue(run.stoppedFor("b", each).startsWith("Int overflow"),
                     "the run of the input the stop rests on, " + each);
-            if (form.before() != null) {
+            if (form.before() != null && form.isTheOneHeld(each)) {
                 assertEquals("no stop", run.stoppedFor("p", each),
                         "what is worked out before the operation, on the same input, " + each);
             }
