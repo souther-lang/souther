@@ -246,7 +246,7 @@ final class StopAssessment {
                 Site site = new Site.PastItsEnds(operations.get(at));
                 if (left == null) {
                     out.add(new Judgement.Safe(site, WhyNone.NOT_WORKED_OUT));
-                } else if (keptWithinItsEnds(left, operations.get(at))) {
+                } else if (left.keepsWithinItsEnds(operations.get(at))) {
                     out.add(new Judgement.Safe(site, WhyNone.WITHIN_ITS_ENDS));
                 } else {
                     out.add(aStopIn(each, place, left, site, operations.get(at).origin().node(),
@@ -256,13 +256,6 @@ final class StopAssessment {
         }
         out.addAll(divisionsOf(each, places, divisors, within, read));
         return out;
-    }
-
-    /** Whether every value the way {@code left} is of leaves keeps {@code operation} within its
-     *  ends: no run along it stops there, the value a stop is shown at among them. */
-    private static boolean keptWithinItsEnds(WhatAWayLeavesOfAValue left,
-                                             UndividedByARelation.IntOperation operation) {
-        return left.keepsWithinItsType(operation) || left.noRowTakesItPastItsEnds(operation);
     }
 
     /**
@@ -559,7 +552,7 @@ final class StopAssessment {
         // which is one of them, and is not asked of it. That it is got past is held against the
         // value once one is found.
         List<UndividedByARelation.IntOperation> kept = others.stream()
-                .filter(it -> keptWithinItsEnds(left, it)).toList();
+                .filter(left::keepsWithinItsEnds).toList();
         others.removeAll(kept);
         Set<NumericTerm> numbers = new LinkedHashSet<>();
         List<LinearForm<NumericTerm>> forms = new ArrayList<>();
