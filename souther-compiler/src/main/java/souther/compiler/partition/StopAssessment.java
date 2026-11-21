@@ -28,6 +28,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * Whether a run stops in each operation a comparison works out: shown not to, shown to, or
@@ -326,30 +327,29 @@ final class StopAssessment {
         if (place.worked().onAnArm() != null) {
             return new Judgement.Unresolved(site, WhyAStopIsNotShown.ON_AN_ARM);
         }
-        // A working is not on every run where the expression the comparison was stopped at may
-        // end a run before the operations it tells. Where the operation's step has a place in the
-        // order, what may end a run before it is every node of the comparison not known to come
-        // after it, each asked what it ends a run for: that is what a run stopping at the
-        // operation has to get past, and what is left untold after it is not asked. Where it has
-        // none, what the working leaves untold is, wherever it is. A quotient is worked out
-        // wherever the comparison is ({@link QuotientsEveryRunWorksOut}), and the stop of one that
-        // is among those asked is not left untold: a witness is asked to get past it.
-        boolean mayEndBefore = site instanceof Site.PastItsEnds && !working.onEveryRun();
-        boolean prefixKnown = mayEndBefore && each.places().hasAPlace(siteNode);
-        boolean leftUntold = prefixKnown
-                ? !onlyWhatIsAskedMayEndARunBefore(each, working, siteNode)
-                : working.leavesUntoldBeyond(each.quotients())
-                        || (mayEndBefore && !onlyWhatIsAskedMayEndARunBefore(each, working,
-                                siteNode));
+        // What a run stopping at the site has to get past is what it works out before it, and it is
+        // shown that nothing of that ends a run but what is asked in either of two ways. The
+        // working says it of the whole comparison: nothing is left untold beyond what it tells and
+        // the quotients asked, and where it is of an operation it is on every run. Or, where the
+        // site's step has a place in the order, every node of the comparison not known to come
+        // after the site is asked what it ends a run for, and what the working leaves untold after
+        // the site is no part of it. A quotient is worked out wherever the comparison is
+        // ({@link QuotientsEveryRunWorksOut}), and the stop of one that is among those asked is
+        // not left untold: a witness is asked to get past it.
+        boolean wholeIsAccountedFor = !working.leavesUntoldBeyond(each.quotients())
+                && (!(site instanceof Site.PastItsEnds) || working.onEveryRun());
+        boolean leftUntold = !wholeIsAccountedFor
+                && !(each.places().hasAPlace(siteNode)
+                        && everythingBeforeIsAccountedFor(each, working, siteNode));
         if (leftUntold) {
             return new Judgement.Unresolved(site, WhyAStopIsNotShown.NOT_EVERY_OPERATION_TOLD);
         }
         // A quotient worked out after an operation is not got to where the run stops in the
         // operation, so its divisor is not asked to be away from nought. One worked out before it
-        // is, and where what is worked out beside the stop may end a run before the operation, a
-        // divisor that is no form of the input's numbers is one nothing says is got past.
+        // is, and a divisor that is no form of the input's numbers is one nothing says is got
+        // past: not read is not that it does not stop.
         if (site instanceof Site.PastItsEnds) {
-            quotients = quotientsAskedBefore(each, divisors, siteNode, mayEndBefore);
+            quotients = quotientsAskedBefore(each, divisors, siteNode);
         }
         if (!each.nothingBeforeItEndsARun()) {
             return new Judgement.Unresolved(site, WhyAStopIsNotShown.SOMETHING_BEFORE_IT_MAY_STOP);
@@ -365,16 +365,16 @@ final class StopAssessment {
             }
         }
         // Everything else a run may work out before this: what this is not worked out before.
-        // One worked out of this comes after it, and so does one the comparison works out past
-        // everything of this; neither is got to where it stops. One whose place is not known is
-        // asked.
+        // One worked out of this comes after it, and so does one whose own step the comparison
+        // takes past this one's, whatever it is made of; neither is got to where it stops. One
+        // whose place is not known is asked.
         int at = site instanceof Site.PastItsEnds(var operation)
                 ? indexOf(working.operations(), operation) : -1;
         List<UndividedByARelation.IntOperation> others = new ArrayList<>();
         for (int other = 0; other < working.operations().size(); other++) {
             UndividedByARelation.IntOperation it = working.operations().get(other);
-            if (other != at && !it.after().contains(at)
-                    && !each.places().comesAfter(it.origin().node(), siteNode)) {
+            if (other != at && !it.after().contains(at) && !isTheStopAt(it, siteNode)
+                    && !each.places().ownStepBefore(siteNode, it.origin().node())) {
                 others.add(it);
             }
         }
@@ -418,18 +418,15 @@ final class StopAssessment {
     /**
      * The divisors of the quotients a run stopping at {@code siteNode} has worked out first: those
      * of the quotients not known to be worked out after it. A divisor that is no form of the
-     * input's numbers is kept as null where {@code keepWhatIsNotRead}, which the caller reads as
-     * a quotient nothing says is got past.
+     * input's numbers is kept as null, which the caller reads as a quotient nothing says is got
+     * past.
      */
     private static List<LinearForm<NumericTerm>> quotientsAskedBefore(
             ComparisonReadings.Reading each, List<LinearForm<NumericTerm>> divisors,
-            Core siteNode, boolean keepWhatIsNotRead) {
+            Core siteNode) {
         List<LinearForm<NumericTerm>> out = new ArrayList<>();
         for (int at = 0; at < divisors.size(); at++) {
-            if (each.places().ownStepBefore(siteNode, each.quotients().get(at))) {
-                continue;
-            }
-            if (divisors.get(at) != null || keepWhatIsNotRead) {
+            if (!each.places().ownStepBefore(siteNode, each.quotients().get(at))) {
                 out.add(divisors.get(at));
             }
         }
@@ -437,17 +434,17 @@ final class StopAssessment {
     }
 
     /**
-     * Whether, of what a run works out in the comparison before the step {@code siteNode} takes,
-     * only what {@code working} tells or the comparison's quotients ask may end the run. A node
-     * with no place is one that may be worked out before it. Where the comparison or the node is
-     * not known, nothing is said.
+     * Whether everything a run works out in the comparison before the step {@code siteNode} takes
+     * is accounted for: it may end a run only for what {@code working} tells of an operation, or
+     * where it is a quotient the comparison asks ({@link EvaluationPlaces#everyNodeNotAfter}).
+     * What a run does not get to before {@code siteNode} is not asked, and what is not known to
+     * come after it is.
      */
-    private static boolean onlyWhatIsAskedMayEndARunBefore(ComparisonReadings.Reading each,
-                                                           UndividedByARelation.Working working,
-                                                           Core siteNode) {
-        if (siteNode == null
-                || !(each.statement() instanceof ComparisonReadings.Stated.AComparison(
-                        var comparison))) {
+    private static boolean everythingBeforeIsAccountedFor(ComparisonReadings.Reading each,
+                                                          UndividedByARelation.Working working,
+                                                          Core siteNode) {
+        if (!(each.statement() instanceof ComparisonReadings.Stated.AComparison(
+                var comparison))) {
             return false;
         }
         Set<Core> told = Collections.newSetFromMap(new IdentityHashMap<>());
@@ -456,47 +453,39 @@ final class StopAssessment {
                 told.add(Core.withoutStanding(operation.origin().node()));
             }
         }
-        told.add(Core.withoutStanding(siteNode));
         Set<Core> asked = Collections.newSetFromMap(new IdentityHashMap<>());
         each.quotients().forEach(quotient -> asked.add(Core.withoutStanding(quotient)));
-        Set<Core> met = Collections.newSetFromMap(new IdentityHashMap<>());
-        return onlyWhatIsAskedMayEndARunIn(comparison.left(), siteNode, each.places(), told,
-                asked, met)
-                && onlyWhatIsAskedMayEndARunIn(comparison.right(), siteNode, each.places(), told,
-                asked, met);
+        Predicate<Core> accounted = node -> endsARunOnlyForWhatIsAsked(node, told, asked);
+        return each.places().everyNodeNotAfter(comparison.left(), siteNode, accounted)
+                && each.places().everyNodeNotAfter(comparison.right(), siteNode, accounted);
     }
 
-    private static boolean onlyWhatIsAskedMayEndARunIn(Core expression, Core siteNode,
-                                                       EvaluationPlaces places, Set<Core> told,
-                                                       Set<Core> asked, Set<Core> met) {
-        Core node = Core.withoutStanding(expression);
-        if (!met.add(node)) {
-            return true;
+    /** Whether {@code node} ends a run only for what is told of it as an operation, or not at all
+     *  where it is a quotient asked. What its owner does not say it ends a run for is not known to
+     *  end none. */
+    private static boolean endsARunOnlyForWhatIsAsked(Core node, Set<Core> told,
+                                                      Set<Core> asked) {
+        if (!(WhatARunMayEndFor.itself(node) instanceof WhatARunMayEndFor.Endings.Known(
+                AbortSet kinds))) {
+            return false;
         }
-        if (!places.ownStepBefore(siteNode, node)) {
-            if (!(WhatARunMayEndFor.itself(node) instanceof WhatARunMayEndFor.Endings.Known(
-                    AbortSet kinds))) {
-                return false;
-            }
-            Set<AbortKind> left = new HashSet<>(kinds.kinds());
-            if (told.contains(node)) {
-                left.remove(AbortKind.REQUIRED_FORM_HAS_NO_PLACE);
-            }
-            if (asked.contains(node)) {
-                left.clear();
-            }
-            if (!left.isEmpty()) {
-                return false;
-            }
+        Set<AbortKind> left = new HashSet<>(kinds.kinds());
+        if (told.contains(node)) {
+            left.remove(AbortKind.REQUIRED_FORM_HAS_NO_PLACE);
         }
-        boolean[] accounted = {true};
-        Core.forEachChild(node, child -> {
-            if (accounted[0]) {
-                accounted[0] = onlyWhatIsAskedMayEndARunIn(child, siteNode, places, told, asked,
-                        met);
-            }
-        });
-        return accounted[0];
+        if (asked.contains(node)) {
+            left.clear();
+        }
+        return left.isEmpty();
+    }
+
+    /** Whether {@code operation} is the stop at {@code siteNode} told again: two stops are the same
+     *  where they are worked out at the same node, which is no other operation to get past. An
+     *  operation worked out at no node that is known is not. */
+    private static boolean isTheStopAt(UndividedByARelation.IntOperation operation,
+                                       Core siteNode) {
+        return siteNode != null && operation.origin().node() != null
+                && Core.withoutStanding(operation.origin().node()) == Core.withoutStanding(siteNode);
     }
 
     /** Where {@code operation} is among {@code operations}, by the object it is. */

@@ -348,7 +348,7 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
         notShown("an operation on an arm of a choice", "armOfAChoice",
                 "takenFromAProductInAnArm", "elementsOfAChosenListThatAgree");
         notShown("an operation over what a choice comes to, a value a run works out and no "
-                + "number of the input", "armPastTheType", "totalOfWrittenChoices", "maxOfASum");
+                + "number of the input", "armPastTheType", "totalOfWrittenChoices");
         notShown("an operation worked out on each application of a closure", "lengthOfAStep",
                 "lengthOfACancelledStep", "lengthOfAConditionStep", "lengthOfAFlatStep",
                 "lengthOfAShiftedStep", "lengthOfASortedStep", "lengthOfAStepAtAnIndex",
@@ -365,7 +365,7 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
         notShown("a product of two numbers of the input, which is no form a value is put to",
                 "productOfTwoNumbers");
         notShown("beside a call whose own stop no reading tells as an operation, here the least "
-                + "Int having no absolute value", "absOfASum", "absInALetBody");
+                + "Int having no absolute value", "absInALetBody");
         notShown("a construction on the way refused at some q, which asks something of a run "
                 + "that no run is shown not to meet", "fieldBesideARefusedPart");
     }

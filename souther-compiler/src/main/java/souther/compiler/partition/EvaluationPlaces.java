@@ -8,6 +8,7 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * Where each node of an expression stands in the order a run works the expression out: the nodes a
@@ -112,6 +113,41 @@ final class EvaluationPlaces {
         Stretch after = stretches.get(Core.withoutStanding(later));
         Stretch before = stretches.get(Core.withoutStanding(earlier));
         return after != null && before != null && after.first() > before.own();
+    }
+
+    /**
+     * Whether {@code holds} is true of every node of {@code root}'s tree that a run may work out
+     * before it takes the step {@code site} stands for: the one walk over what a run stopping at
+     * {@code site} has got past.
+     *
+     * <p>A node whose stretch of the order begins past {@code site} is worked out after it, and so
+     * is everything under it, a branch or an arm included: none of it is asked. A node whose own
+     * step comes after {@code site}'s is not asked of itself, but what it is made of may come
+     * before and is walked. A node with no place may come before, and is asked, as is everything
+     * under it that has none either; that holds of every node the tree holds and this does not
+     * place, so what is not known is not taken to be after.
+     */
+    boolean everyNodeNotAfter(Core root, Core site, Predicate<Core> holds) {
+        return everyNodeNotAfter(root, site, holds,
+                Collections.newSetFromMap(new IdentityHashMap<>()));
+    }
+
+    private boolean everyNodeNotAfter(Core expression, Core site, Predicate<Core> holds,
+                                      Set<Core> met) {
+        Core node = Core.withoutStanding(expression);
+        if (!met.add(node) || comesAfter(node, site)) {
+            return true;
+        }
+        if (!ownStepBefore(site, node) && !holds.test(node)) {
+            return false;
+        }
+        boolean[] every = {true};
+        Core.forEachChild(node, child -> {
+            if (every[0]) {
+                every[0] = everyNodeNotAfter(child, site, holds, met);
+            }
+        });
+        return every[0];
     }
 
     /** Whether {@code node} has a place in the order. */

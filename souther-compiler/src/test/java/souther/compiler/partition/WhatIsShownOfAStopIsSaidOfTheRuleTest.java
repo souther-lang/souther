@@ -74,10 +74,8 @@ class WhatIsShownOfAStopIsSaidOfTheRuleTest {
     }
 
     /** A product of two numbers of the input is no form a value is put to, so whether it stops
-     *  a run is not resolved; and its line stands, the border held by nothing. The {@code 2 *
-     *  price} it is the product of is worked out first and stops a run where {@code price} is
-     *  price} it is the product of is worked out first, and what is said of that is held to the
-     *  program run elsewhere. */
+     *  a run is not resolved; and its line stands, the border held by nothing. What is said of
+     *  the {@code 2 * price} it is the product of is held to the program run elsewhere. */
     @Test
     void aProductNotResolvedLeavesItsLineStanding() {
         Compilation compilation = compiled("price: Int, quantity: Int",

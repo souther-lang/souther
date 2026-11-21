@@ -51,17 +51,39 @@ class AStopShownAtAnOperationIsOneTheProgramRunsIntoTest {
     private static final List<Long> WHOLE = List.of(0L, 1L, -1L, 3L, 4_611_686_018_427_387_904L,
             Long.MAX_VALUE, Long.MIN_VALUE);
 
-    /** A comparison, and the way the program takes to it. */
-    private record Form(String way, String comparison) {}
+    /**
+     * A comparison, and the way the program takes to it.
+     *
+     * @param required whether a stop is to be shown of it: every run of the way stops, which the
+     *                 program says ({@link #everyRunOfTheWayStops}), and nothing a run works out
+     *                 before the stop is a thing this compiler cannot say it gets past
+     */
+    private record Form(String way, String comparison, boolean required) {
+
+        Form(String way, String comparison) {
+            this(way, comparison, false);
+        }
+    }
 
     private static final Map<String, Form> FORMS = new LinkedHashMap<>();
 
     static {
         // an operation worked out before a quotient: the quotient is not got to
         FORMS.put("aQuotientAfterTheSum", new Form("q >= " + GREATEST,
-                "Rational.toInt(DOWN, (q + 1) / p) >= 2"));
+                "Rational.toInt(DOWN, (q + 1) / p) >= 2", true));
         FORMS.put("aQuotientAfterTheSumByNought", new Form(
-                "q >= " + GREATEST + " && p == 0", "Rational.toInt(DOWN, (q + 1) / p) >= 2"));
+                "q >= " + GREATEST + " && p == 0", "Rational.toInt(DOWN, (q + 1) / p) >= 2", true));
+        // what a run does not get to is not asked, whether it stands after the stop in a branch,
+        // in the other operand of an operator that may settle, or in an arm
+        FORMS.put("aBranchAfterTheSum", new Form("q >= " + GREATEST,
+                "Rational.toInt(DOWN, (q + 1) / p) + (if e > 0 then h(e) else 0) >= 2", true));
+        FORMS.put("aBranchOfACallAfterTheSum", new Form("q >= " + GREATEST,
+                "(q + 1) + (if e > 0 then h(e) else 0) >= 2", true));
+        // a quotient is stopped at all the same, with what stands after it left untold
+        FORMS.put("aCallAfterTheQuotient", new Form("p == 0",
+                "Rational.toInt(DOWN, e / p) + h(e) >= 2", true));
+        FORMS.put("aBranchAfterTheQuotient", new Form("p == 0",
+                "Rational.toInt(DOWN, e / p) + (if q > 0 then h(q) else 0) >= 2", true));
         // a quotient worked out before the operation: it is got past
         FORMS.put("aQuotientBeforeTheSum", new Form("q >= " + GREATEST,
                 "Rational.toInt(DOWN, (e / p) / (q + 1)) >= 2"));
@@ -73,7 +95,7 @@ class AStopShownAtAnOperationIsOneTheProgramRunsIntoTest {
         FORMS.put("aRoundingBeforeTheSum", new Form("q >= " + GREATEST,
                 "Rational.toInt(DOWN, (Rational.toInt(DOWN, e / p) + (q + 1)) / 2) >= 2"));
         FORMS.put("aRoundingAfterTheSum", new Form("q >= " + GREATEST,
-                "(q + 1) + Rational.toInt(DOWN, e / 3) >= 2"));
+                "(q + 1) + Rational.toInt(DOWN, e / 3) >= 2", true));
         FORMS.put("aRoundingBeforeTheSumInASum", new Form("q >= " + GREATEST,
                 "Rational.toInt(DOWN, e / 3) + (q + 1) >= 2"));
         FORMS.put("aRoundingOnEitherSide", new Form("q >= " + GREATEST,
@@ -82,7 +104,7 @@ class AStopShownAtAnOperationIsOneTheProgramRunsIntoTest {
         FORMS.put("aCallBeforeTheSumThatStops", new Form("q >= " + GREATEST + " && p == 0",
                 "h(p) + (q + 1) >= 2"));
         FORMS.put("aCallAfterTheSumThatStops", new Form("q >= " + GREATEST + " && p == 0",
-                "(q + 1) + h(p) >= 2"));
+                "(q + 1) + h(p) >= 2", true));
         // the first operation of a product of three, the second of two numbers of the input
         FORMS.put("aProductOfTheInput", new Form("e >= 0", "2 * p * q >= 1000"));
         // nothing before it, nothing after it
@@ -114,6 +136,8 @@ class AStopShownAtAnOperationIsOneTheProgramRunsIntoTest {
                 AStopShownAtAnOperationIsOneTheProgramRunsIntoTest.class.getClassLoader());
         TreeSet<String> shownAndItsRunDoesNotStop = new TreeSet<>();
         TreeSet<String> stopsAndNothingSaid = new TreeSet<>();
+        TreeSet<String> requiredAndNotAStopOfTheProgram = new TreeSet<>();
+        TreeSet<String> requiredAndNotShown = new TreeSet<>();
         for (int at = 0; at < names.size(); at++) {
             String name = names.get(at);
             Object behavior = Emitted.behavior(loader, "demo", "b" + at)
@@ -121,9 +145,11 @@ class AStopShownAtAnOperationIsOneTheProgramRunsIntoTest {
             Partitions.Partitioning divided =
                     compilation.db().ask(new Adequacy.Divided("demo", "b" + at)).value();
             boolean saidSomething = false;
+            boolean aStopShown = false;
             for (WhatIsShownOfAStop each : divided.stopsShown()) {
                 if (each instanceof RuleWhereARunMayStop stops) {
                     saidSomething |= !stops.shown().isEmpty() || !stops.everyRunStops().isEmpty();
+                    aStopShown |= !stops.shown().isEmpty();
                     for (AStopShown shown : stops.shown()) {
                         String ends = shown.operation().startsWith("division")
                                 ? DIVISION_BY_ZERO : INT_OVERFLOW;
@@ -142,8 +168,21 @@ class AStopShownAtAnOperationIsOneTheProgramRunsIntoTest {
             if (!saidSomething && someRunStops(loader, behavior)) {
                 stopsAndNothingSaid.add(name);
             }
+            if (FORMS.get(name).required()) {
+                if (!everyRunOfTheWayStops(loader, behavior)) {
+                    requiredAndNotAStopOfTheProgram.add(name);
+                } else if (!aStopShown) {
+                    requiredAndNotShown.add(name);
+                }
+            }
         }
         assertAll(
+                () -> assertEquals(new TreeSet<>(), requiredAndNotAStopOfTheProgram,
+                        "a form said to stop every run of its way, and a run of the grid on the"
+                                + " way gets past what it works out"),
+                () -> assertEquals(new TreeSet<>(), requiredAndNotShown,
+                        "every run of the way stops, nothing it works out first is one this"
+                                + " compiler cannot say it gets past, and no stop is shown"),
                 () -> assertEquals(new TreeSet<>(), shownAndItsRunDoesNotStop,
                         "told that a run stops at an operation, and the run of the numbers the "
                                 + "stop rests on does not stop"),
@@ -174,6 +213,32 @@ class AStopShownAtAnOperationIsOneTheProgramRunsIntoTest {
             }
         }
         return out;
+    }
+
+    /**
+     * Whether some run of the grid stops and none gets past the way's comparison. A run off the
+     * way answers {@code 3} and a run on it that stops answers nothing, so a run that answers one
+     * or two is a run on the way that does not stop.
+     */
+    private static boolean everyRunOfTheWayStops(ClassLoader loader, Object behavior)
+            throws Exception {
+        boolean someStops = false;
+        for (long e : WHOLE) {
+            for (long p : WHOLE) {
+                for (long q : WHOLE) {
+                    Map<String, Object> raw = Map.of("e", e, "p", p, "q", q);
+                    if (stoppedFor(loader, behavior, raw) != null) {
+                        someStops = true;
+                    } else {
+                        Object out = Codecs.apply(behavior, Codecs.decoded(loader, "demo.In", raw));
+                        if (!String.valueOf(Codecs.encode(loader, "demo.Out", out)).equals("3")) {
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+        return someStops;
     }
 
     private static boolean someRunStops(ClassLoader loader, Object behavior) throws Exception {
