@@ -858,12 +858,13 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                         + " projection is held where its base is");
         row(out, c + "partition/StopAssessment", "everythingBeforeIsAccountedFor",
                 "(L" + c + "partition/ComparisonReadings$Reading;L" + c
-                        + "partition/UndividedByARelation$Working;Ljava/util/Set;Z)Z",
+                        + "partition/UndividedByARelation$Working;L" + c
+                        + "core/Evaluated$WorkedOutAfter;Z)Z",
                 Reading.STRUCTURE, EVALUATION);
-        row(out, c + "partition/StopAssessment$StopsBefore", "entirelyAfter",
-                "(" + core + "Ljava/util/Set;)Z", Reading.STRUCTURE,
-                "asks each node under one whether the walk of the comparison puts it after the"
-                        + " site, a projection being worked out where its base is");
+        row(out, c + "core/Evaluated$WorkedOutAfter", "entirely", "(" + core + ")Z",
+                Reading.STRUCTURE,
+                "asks each node under one whether the walk puts it after the site, a projection"
+                        + " being worked out where its base is");
         row(out, c + "core/Evaluated$After", "visit", "(" + core + ")V", Reading.STRUCTURE,
                 "walks each node in the order a run works it out, a projection being worked out"
                         + " where its base is");

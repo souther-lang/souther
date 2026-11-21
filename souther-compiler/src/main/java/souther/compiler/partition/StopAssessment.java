@@ -290,8 +290,8 @@ final class StopAssessment {
      * ({@link EvaluationPlaces#isWorkedOutAfter}) — a quotient whose dividend holds this divides
      * after it. What a run works out before the comparison is before all of it. One whose place is
      * not known is asked of the value, unless the walk of the comparison says it is worked out
-     * after the site ({@code after}, {@link Evaluated#workedOutAfter}): a node a run always works
-     * out has its place in the order, and one it works out only on some runs, or in the body of a
+     * after the site ({@link Evaluated#workedOutAfter}): a node a run always works out has its
+     * place in the order, and one it works out only on some runs, or in the body of a
      * {@code let}, has none. One that is the same stop as the site ({@link Site#sameStopAs}) is
      * not: a run that stops there stops in it.
      *
@@ -308,7 +308,8 @@ final class StopAssessment {
         static StopsBefore of(ComparisonReadings.Reading each, Site site, Core node,
                               UndividedByARelation.Working earlier,
                               UndividedByARelation.Working working,
-                              List<LinearForm<NumericTerm>> divisors, Set<Core> after) {
+                              List<LinearForm<NumericTerm>> divisors,
+                              Evaluated.WorkedOutAfter after) {
             int at = site instanceof Site.PastItsEnds(var operation)
                     ? indexOf(working.operations(), operation) : -1;
             List<UndividedByARelation.IntOperation> operations = new ArrayList<>();
@@ -320,7 +321,7 @@ final class StopAssessment {
             for (int other = 0; other < working.operations().size(); other++) {
                 UndividedByARelation.IntOperation it = working.operations().get(other);
                 if (working.mayComeBefore(other, at, node, each.places())
-                        && !entirelyAfter(it.origin().node(), after)
+                        && !after.entirely(it.origin().node())
                         && !site.sameStopAs(new Site.PastItsEnds(it))) {
                     operations.add(it);
                 }
@@ -330,41 +331,25 @@ final class StopAssessment {
                 LinearForm<NumericTerm> divisor = divisors.get(quotient);
                 Core asked = each.quotients().get(quotient);
                 if (!each.places().isWorkedOutAfter(asked, node)
-                        && !after.contains(Core.withoutStanding(asked))
+                        && !after.contains(asked)
                         && !(divisor != null && site.sameStopAs(new Site.ByNought(divisor)))) {
                     before.add(divisor);
                 }
             }
             return new StopsBefore(operations, before);
         }
-
-        /**
-         * Whether the whole of {@code node}, which an operation may stop anywhere in, is worked out
-         * after the site: it and every node under it is among {@code after}, which says where a
-         * node's own step stands. False where {@code node} is not known.
-         */
-        private static boolean entirelyAfter(Core node, Set<Core> after) {
-            // A node's own step comes after what it is made of, so where that is not after the
-            // site, the whole of it is not, and what is under it is not asked.
-            if (node == null || !after.contains(Core.withoutStanding(node))) {
-                return false;
-            }
-            boolean[] every = {true};
-            Core.forEachDistinctNode(node,
-                    part -> every[0] &= after.contains(Core.withoutStanding(part)));
-            return every[0];
-        }
     }
 
     /**
-     * The nodes of the comparison a run takes the step of only after it has taken the step of
-     * {@code siteNode} ({@link Evaluated#workedOutAfter}), none where the statement is no
-     * comparison. Asked once for each site, of the two readers of what is worked out before it.
+     * What a run has not got to where it stops at {@code siteNode} ({@link Evaluated#workedOutAfter}),
+     * nothing where the statement is no comparison. Asked once for each site, of the two readers
+     * of what is worked out before it.
      */
-    private static Set<Core> workedOutAfter(ComparisonReadings.Reading each, Core siteNode) {
+    private static Evaluated.WorkedOutAfter workedOutAfter(ComparisonReadings.Reading each,
+                                                           Core siteNode) {
         if (!(each.statement() instanceof ComparisonReadings.Stated.AComparison(
                 var comparison))) {
-            return Set.of();
+            return Evaluated.WorkedOutAfter.NONE;
         }
         return Evaluated.workedOutAfter(List.of(comparison.left(), comparison.right()), siteNode);
     }
@@ -383,7 +368,7 @@ final class StopAssessment {
      */
     private static boolean everythingBeforeIsAccountedFor(ComparisonReadings.Reading each,
                                                           UndividedByARelation.Working working,
-                                                          Set<Core> after,
+                                                          Evaluated.WorkedOutAfter after,
                                                           boolean workingAccountsForTheRest) {
         if (!(each.statement() instanceof ComparisonReadings.Stated.AComparison(
                 var comparison))) {
@@ -400,7 +385,7 @@ final class StopAssessment {
         boolean[] every = {true};
         Consumer<Core> check = node -> {
             Core bare = Core.withoutStanding(node);
-            if (!after.contains(bare) && !accountedFor(bare, told, asked,
+            if (!after.contains(node) && !accountedFor(bare, told, asked,
                     workingAccountsForTheRest)) {
                 every[0] = false;
             }
@@ -555,7 +540,7 @@ final class StopAssessment {
         // get past it.
         boolean workingAccountsForTheRest = !working.leavesUntoldBeyond(each.quotients())
                 && (!(site instanceof Site.PastItsEnds) || working.onEveryRun());
-        Set<Core> after = workedOutAfter(each, siteNode);
+        Evaluated.WorkedOutAfter after = workedOutAfter(each, siteNode);
         if (!everythingBeforeIsAccountedFor(each, working, after, workingAccountsForTheRest)) {
             return new Judgement.Unresolved(site, WhyAStopIsNotShown.NOT_EVERY_OPERATION_TOLD);
         }

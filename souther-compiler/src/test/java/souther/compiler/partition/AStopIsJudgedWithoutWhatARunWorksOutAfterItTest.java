@@ -98,26 +98,31 @@ class AStopIsJudgedWithoutWhatARunWorksOutAfterItTest {
                 judged::toString);
     }
 
-    private static List<StopAssessment.Judgement.Stops> stopsPastItsEnds(
-            List<StopAssessment.Judgement> judged) {
+    /** The stops shown at the operation written {@code written}. */
+    private static List<StopAssessment.Judgement.Stops> stopsAt(
+            List<StopAssessment.Judgement> judged, String written) {
         return judged.stream()
                 .filter(StopAssessment.Judgement.Stops.class::isInstance)
                 .map(StopAssessment.Judgement.Stops.class::cast)
-                .filter(each -> each.shown().site() instanceof StopAssessment.Site.PastItsEnds)
+                .filter(each -> each.shown().site().written().equals(written))
                 .toList();
     }
 
     /**
      * In {@code (q + 1) + (if e > 0 then q + 2 else 0)} the arm is worked out after {@code q + 1},
      * so a run that stops at {@code q + 1} has not got to {@code q + 2}, which stops every run
-     * that does: the stop at {@code q + 1} is shown, though the arm has no place among what a
-     * run always works out.
+     * that does: the stop at {@code q + 1} is shown at the greatest {@code Int}, though the arm
+     * has no place among what a run always works out.
      */
     @Test
     void aStopIsShownWhereAnOperationInAnArmAfterItWouldStopEveryRun() {
         List<StopAssessment.Judgement> judged =
                 judged("(q + 1) + (if e > 0 then q + 2 else 0) >= 2");
-        assertTrue(!stopsPastItsEnds(judged).isEmpty(), judged::toString);
+        List<StopAssessment.Judgement.Stops> stops = stopsAt(judged, "q + 1");
+        assertTrue(!stops.isEmpty(), judged::toString);
+        assertTrue(stops.stream().allMatch(
+                each -> heldAt(each.shown(), "q").equals(new BigInteger(GREATEST))),
+                judged::toString);
     }
 
     /**
@@ -129,7 +134,9 @@ class AStopIsJudgedWithoutWhatARunWorksOutAfterItTest {
     void aStopIsShownWhereAnOperationInALetBodyAfterItWouldStopEveryRun() {
         List<StopAssessment.Judgement> judged =
                 judged("(q + 1) + { let t = e\n q + 2 } >= 2");
-        assertTrue(!stopsPastItsEnds(judged).isEmpty(), judged::toString);
+        List<StopAssessment.Judgement.Stops> stops = stopsAt(judged, "q + 1");
+        assertEquals(1, stops.size(), judged::toString);
+        assertEquals(new BigInteger(GREATEST), heldAt(stops.getFirst().shown(), "q"));
     }
 
     /**
@@ -141,10 +148,33 @@ class AStopIsJudgedWithoutWhatARunWorksOutAfterItTest {
     void aStopIsNotShownWhereAnOperationInALetBodyBeforeItWouldStopEveryRun() {
         List<StopAssessment.Judgement> judged =
                 judged("{ let t = e\n q + 2 } + (q + 1) >= 2");
-        assertTrue(stopsPastItsEnds(judged).stream()
-                .noneMatch(each -> "1".equals(String.valueOf(
-                        ((StopAssessment.Site.PastItsEnds) each.shown().site())
-                                .operation().form().constant()))),
+        assertEquals(List.of(), stopsAt(judged, "q + 1"), judged::toString);
+    }
+
+    /**
+     * The body of a function value runs when it is applied, and {@code List.fold} applies it after
+     * its arguments are worked out, so a run that stops at {@code q + 1} in the body has got past
+     * {@code p + 1}, which the way keeps it from: no value is shown to stop at {@code q + 1}.
+     */
+    @Test
+    void aStopInAFunctionValueIsNotShownWhereAnArgumentOfTheCallStopsEveryRun() {
+        List<StopAssessment.Judgement> judged = judgedOn(
+                "q >= " + GREATEST + " && p >= " + GREATEST,
+                "List.fold((w, l) -> q + 1, p + 1, [1]) >= 2");
+        assertEquals(List.of(), stopsAt(judged, "q + 1"), judged::toString);
+    }
+
+    /**
+     * The control: with {@code p} left to be anything but the greatest {@code Int}, the argument
+     * is got past and the stop at {@code q + 1} in the body is shown, where {@code p} is held
+     * away from the end.
+     */
+    @Test
+    void aStopInAFunctionValueIsShownWhereTheArgumentOfTheCallIsGotPast() {
+        List<StopAssessment.Judgement> judged = judged("List.fold((w, l) -> q + 1, p + 1, [1]) >= 2");
+        List<StopAssessment.Judgement.Stops> stops = stopsAt(judged, "q + 1");
+        assertEquals(1, stops.size(), judged::toString);
+        assertTrue(!heldAt(stops.getFirst().shown(), "p").equals(new BigInteger(GREATEST)),
                 judged::toString);
     }
 
