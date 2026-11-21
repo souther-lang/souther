@@ -199,8 +199,10 @@ class AQuotientIsALineWhereItsDivisorIsAConstantTest {
     void aQuotientByAPositionHeldAgainstANumberIsReadOnEachSignOfTheDivisor() {
         // A line over two positions leaves what each settles alone unworked out, as `x < 30 * y`
         // written out does, so what is held of that one is the line it draws. And the inverse of
-        // a whole number is below thirty on both signs of it, so its lines turn nothing.
-        assertEquals(List.of("x ComparisonLineTurningNothing[]"), reasonsOf("anInverse"));
+        // a whole number is below thirty on both signs of it, so its lines turn nothing. And a
+        // divisor nothing keeps from nought is one a run stops at, which the lines do not say.
+        assertEquals(List.of("x ComparisonLineTurningNothing[]", "x EvaluationStopsNotFullyRead[]"),
+                reasonsOf("anInverse"));
         assertTrue(cutsOf("byAPosition").stream().anyMatch(cut ->
                 cut.startsWith("LinearForm[constant=0, coefs={x=1, y=-30}]")), cutsOf("byAPosition")
                 .toString());

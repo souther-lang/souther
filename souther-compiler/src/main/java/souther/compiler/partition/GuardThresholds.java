@@ -444,7 +444,8 @@ public final class GuardThresholds {
                             // read leaves that standing.
                             boolean stopsNotFullyRead = toItsValue.aRowArrives(toItself.toIt())
                                     && !(arrived instanceof ComparisonAssessment.AnswersNowhere)
-                                    && somethingWorkedOutIsNotAllTold(each, toItsValue, read);
+                                    && (somethingWorkedOutIsNotAllTold(each, toItsValue, read)
+                                            || StopAssessment.mayDivideByNought(judged));
                             // And what is shown of a run on the way stopping at each construction
                             // it may work out first. Asked where a row takes the way, and not
                             // where one arrives: what arrives is what got past every construction
@@ -1478,7 +1479,8 @@ public final class GuardThresholds {
             // A place that tells no operation and no stop left untold has nothing to judge, and
             // its way is not worked out.
             if (worked.stops().operations().operations().isEmpty()
-                    && !worked.stops().operations().aStopUntold()) {
+                    && !worked.stops().operations().aStopUntold()
+                    && each.quotients().isEmpty()) {
                 continue;
             }
             Proposition reached = reachedWhere(worked);

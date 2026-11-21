@@ -467,7 +467,37 @@ class ARuleOfADeclarationHoldingAFormToAnIntervalStillLeavesTheNextComparisonOfI
      *  and a row at the line meets it whatever else the row says. */
     @Test
     void aRuleHoldingAtEveryValueTheGuardChangesBetweenLeavesRoom() {
-        String report = report("2 * a - b <= 201", "    guard 2 * p.a - p.b < 200 else High");
-        assertFalse(report.contains(NOT_READ), report);
+        assertFalse(boundedReport("2 * a.value - b.value <= 201").contains(NOT_READ));
+        assertTrue(boundedReport("2 * a.value - b.value <= 200").contains(NOT_READ));
+    }
+
+    /** Fields held to a few hundred either way, so that twice the first stops no run: held to
+     *  nothing it does from half the greatest {@code Int}, and a guard read past a stop is not
+     *  read to the end. */
+    private static String boundedReport(String rule) {
+        Compilation compilation = Compilation.ofSource("""
+                module example.band
+
+                data Low
+                data Mid
+                data High
+
+                data Small = Int
+                    invariant value >= -1000 && value <= 1000
+
+                data Pair = { a: Small, b: Small }
+                    invariant %s
+
+                behavior band : (p: Pair) -> Low | Mid | High
+
+                let band (p) = {
+                    guard 2 * p.a.value - p.b.value < 200 else High
+                    Mid
+                }
+                """.formatted(rule), "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        ACompiledModel.compiles(compilation);
+        return AdequacyReport.of(compilation)
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 }

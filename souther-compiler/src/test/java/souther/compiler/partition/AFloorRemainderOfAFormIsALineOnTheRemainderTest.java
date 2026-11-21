@@ -392,10 +392,13 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
                 .filter(reason -> reason == UndividedPosition.Reason.UNSUPPORTED_SYNTAX
                         || reason == UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE)
                 .toList());
-        for (String spelled : List.of("Int.floorMod(a + b, 11) == c",
-                "2 * c == 2 * Int.floorMod(a + b, 11)")) {
-            assertEquals(List.of("-1", "11", "0"), bordersOf(parameters, spelled), spelled);
-        }
+        assertEquals(List.of("-1", "11", "0"),
+                bordersOf(parameters, "Int.floorMod(a + b, 11) == c"));
+        // Twice each side is another program over an unbounded {@code c}: {@code 2 * c} stops the
+        // run from half the greatest {@code Int}, so no line is drawn on a {@code c} that holds
+        // values the run stops at with the ones it does not.
+        List<String> twice = bordersOf(parameters, "2 * c == 2 * Int.floorMod(a + b, 11)");
+        assertFalse(twice.contains("-1") || twice.contains("11"), twice::toString);
     }
 
     /**
