@@ -173,12 +173,12 @@ class AnOperationPastItsTypeStopsEveryRunThatGetsToItsComparisonTest {
                 everyRunStops("Int", "x", "guard z >= 0 else No { n = 0 }", "(z + 1) + x == y"));
     }
 
-    /** Neither of {@code x + 1} and {@code z + 1} is worked out of the other, so either may come
-     *  first: each is said to stop a run only where the other gets past, and where both pass the
-     *  type nothing says which one the run stops in. */
+    /** Neither of {@code x + 1} and {@code z + 1} is worked out of the other, but the left of a
+     *  sum is worked out first: {@code x + 1} stops a run wherever {@code x} is past, and
+     *  {@code z + 1} only where {@code x + 1} gets past. */
     @Test
-    void twoOperationsInEitherOrderEachStopsARunOnlyWhereTheOtherGetsPast() {
-        assertEquals(List.of("x + 1 where x " + GREATEST + ".. and z .." + plus(GREATEST, -1),
+    void anOperationWorkedOutAfterAnotherIsAskedNothingOfWhereTheFirstStops() {
+        assertEquals(List.of("x + 1 where x " + GREATEST + "..",
                         "z + 1 where x .." + plus(GREATEST, -1) + " and z " + GREATEST + "..",
                         "x + z + 2 where x .." + plus(GREATEST, -1) + " and x + z "
                                 + plus(GREATEST, -1) + ".. and z .." + plus(GREATEST, -1),
