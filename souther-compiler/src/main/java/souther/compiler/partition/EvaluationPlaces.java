@@ -113,4 +113,25 @@ final class EvaluationPlaces {
         Stretch before = stretches.get(Core.withoutStanding(earlier));
         return after != null && before != null && after.first() > before.own();
     }
+
+    /** Whether {@code node} has a place in the order. */
+    boolean hasAPlace(Core node) {
+        return node != null && stretches.containsKey(Core.withoutStanding(node));
+    }
+
+    /**
+     * Whether the step {@code earlier} itself takes — its own operation, once what it is made of
+     * is worked out — is taken before the one {@code later} takes. A quotient by a sum is worked
+     * out after the sum though the stretch of the quotient begins before it, so this asks what
+     * {@link #comesAfter} does not: of an operation and the quotient it is the operand of. False
+     * where either has no place, which says no more than that it is not known.
+     */
+    boolean ownStepBefore(Core earlier, Core later) {
+        if (earlier == null || later == null) {
+            return false;
+        }
+        Stretch first = stretches.get(Core.withoutStanding(earlier));
+        Stretch second = stretches.get(Core.withoutStanding(later));
+        return first != null && second != null && first.own() < second.own();
+    }
 }
