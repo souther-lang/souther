@@ -388,7 +388,8 @@ final class StopAssessment {
                                         boolean workingAccountsForTheRest) {
         WhatARunMayEndFor.Endings endings = WhatARunMayEndFor.itself(node);
         if (workingAccountsForTheRest) {
-            return !(node instanceof Core.Call) || endings instanceof WhatARunMayEndFor.Endings.Known;
+            return !(Core.withoutStanding(node) instanceof Core.Call)
+                    || endings instanceof WhatARunMayEndFor.Endings.Known;
         }
         if (!(endings instanceof WhatARunMayEndFor.Endings.Known(AbortSet kinds))) {
             return false;
