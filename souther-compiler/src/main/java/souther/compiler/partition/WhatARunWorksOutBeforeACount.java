@@ -388,12 +388,18 @@ final class WhatARunWorksOutBeforeACount {
             return null;
         }
         for (int i = 0; i < way.size(); i++) {
-            if (way.get(i) instanceof Core.Block block) {
-                Core above = i == 0 ? null : way.get(i - 1);
-                if (above == null || Within.argumentsOf(above).stream()
-                        .noneMatch(arg -> Core.withoutStanding(arg) == block)) {
-                    return new NotHanded(block, above);
+            switch (way.get(i)) {
+                case Core.Block block -> {
+                    Core above = i == 0 ? null : way.get(i - 1);
+                    if (above == null || Within.argumentsOf(above).stream()
+                            .noneMatch(arg -> Core.withoutStanding(arg) == block)) {
+                        return new NotHanded(block, above);
+                    }
                 }
+                // A value standing as a wider type is a step of the way of its own, and the
+                // function value it holds is met one step down.
+                case Core.Widen _ -> { }
+                default -> { }
             }
         }
         return null;
@@ -429,6 +435,8 @@ final class WhatARunWorksOutBeforeACount {
                 case Core.IfConstructed attempt -> child != attempt.construct();
                 case Core.Binary both -> both.op().stopsWhenItsAnswerIsSettled()
                         && child == both.right();
+                // Standing as a wider type chooses nothing; what it holds is the next step.
+                case Core.Widen _ -> false;
                 default -> false;
             };
             if (in && chosen) {

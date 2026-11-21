@@ -996,7 +996,9 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         Core.Block closure = notHanded.closure();
         Optional<List<OnTheWay>> made = in.constructions().madeOn(closure);
         ClosureUses uses = in.atTheRoot().usesOf(closure);
-        if (!(notHanded.above() instanceof Core.LetIn) || made.isEmpty() || uses == null) {
+        if (notHanded.above() == null
+                || !(Core.withoutStanding(notHanded.above()) instanceof Core.LetIn)
+                || made.isEmpty() || uses == null) {
             return WaysInto.NOT_READ;
         }
         List<OnTheWay> inside = without(assumed, made.get());
