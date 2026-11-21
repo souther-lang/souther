@@ -8,8 +8,6 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Consumer;
-import java.util.function.Predicate;
 
 /**
  * Where each node of an expression stands in the order a run works the expression out: the nodes a
@@ -130,69 +128,5 @@ final class EvaluationPlaces {
         Stretch after = stretches.get(Core.withoutStanding(later));
         Stretch before = stretches.get(Core.withoutStanding(earlier));
         return after != null && before != null && after.own() > before.own();
-    }
-
-    /** Whether {@code node} has a place in the order. */
-    boolean hasAPlace(Core node) {
-        return node != null && stretches.containsKey(Core.withoutStanding(node));
-    }
-
-    /**
-     * Whether {@code holds} is true of every node of {@code root}'s tree that a run may work out
-     * before it takes the step {@code site} stands for: the one walk over what a run stopping at
-     * {@code site} has got past.
-     *
-     * <p>A node whose stretch of the order begins past {@code site} is worked out after it
-     * ({@link #comesAfter}), and so is everything under it, a branch or an arm included: none of it
-     * is asked. A node whose own step comes after {@code site}'s ({@link #isWorkedOutAfter}) is not
-     * asked of itself, but what it is made of may come before and is walked. Where {@code site} is
-     * in the stretch of a node, it is in what the node always works out, and what the node enters
-     * only after that — an arm, the right of an operator that may settle, a body — is worked out
-     * after {@code site} though it has no place: only what the node always works out is walked.
-     * Everything else that has no place may come before, and is asked: what is not known is not
-     * taken to be after.
-     */
-    boolean everyNodeNotAfter(Core root, Core site, Predicate<Core> holds) {
-        return everyNodeNotAfter(root, site, holds,
-                Collections.newSetFromMap(new IdentityHashMap<>()));
-    }
-
-    private boolean everyNodeNotAfter(Core expression, Core site, Predicate<Core> holds,
-                                      Set<Core> met) {
-        Core node = Core.withoutStanding(expression);
-        if (!met.add(node) || comesAfter(node, site)) {
-            return true;
-        }
-        if (!isWorkedOutAfter(node, site) && !holds.test(node)) {
-            return false;
-        }
-        boolean[] every = {true};
-        Consumer<Core> walk = child -> {
-            if (every[0]) {
-                every[0] = everyNodeNotAfter(child, site, holds, met);
-            }
-        };
-        if (holdsTheSite(node, site)) {
-            for (Evaluated.Step step : Evaluated.inOrder(node)) {
-                if (step instanceof Evaluated.Step.Always(Core part)) {
-                    walk.accept(part);
-                }
-            }
-        } else {
-            Core.forEachChild(node, walk);
-        }
-        return every[0];
-    }
-
-    /** Whether {@code site} stands in what {@code node} always works out: both have a place, and
-     *  the site's step is taken within the stretch of the node and before the node's own. */
-    private boolean holdsTheSite(Core node, Core site) {
-        if (site == null) {
-            return false;
-        }
-        Stretch around = stretches.get(Core.withoutStanding(node));
-        Stretch at = stretches.get(Core.withoutStanding(site));
-        return around != null && at != null && around.first() <= at.own()
-                && at.own() < around.own();
     }
 }

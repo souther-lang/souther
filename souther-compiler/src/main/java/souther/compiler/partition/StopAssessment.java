@@ -4,6 +4,7 @@ import souther.compiler.abort.AbortKind;
 import souther.compiler.abort.AbortSet;
 import souther.compiler.check.WhatARunMayEndFor;
 import souther.compiler.core.Core;
+import souther.compiler.core.Evaluated;
 import souther.compiler.inputs.AStopNotShown;
 import souther.compiler.inputs.AStopShown;
 import souther.compiler.inputs.ElementsMet;
@@ -29,7 +30,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.function.Predicate;
+import java.util.function.Consumer;
 
 /**
  * Whether a run stops in each operation a comparison works out: shown not to, shown to, or
@@ -342,57 +343,54 @@ final class StopAssessment {
 
     /**
      * Whether everything a run works out in the comparison before the step {@code siteNode} takes
-     * is accounted for: it may end a run only for what {@code working} tells of an operation, or
-     * where it is a quotient the comparison asks ({@link EvaluationPlaces#everyNodeNotAfter}).
-     * What a run does not get to before {@code siteNode} is not asked, and what is not known to
-     * come after it is.
+     * is accounted for, which is all a run stopping there has to get past: a node
+     * ({@link Evaluated#workedOutAfter}) a run takes the step of after it is not asked, and every
+     * other is, whether or not its place in the order is known.
+     *
+     * <p>A node is accounted for where it ends a run only for what {@code working} tells of an
+     * operation or, a quotient the comparison asks, for a division by nought. Or, where the working
+     * says nothing is left untold ({@code workingAccountsForTheRest}), where it is of a kind the
+     * working reads itself: not a call of a declaration, whose body is no part of the comparison
+     * and so of no working, and whose owner says nothing of what it ends a run for.
      */
     private static boolean everythingBeforeIsAccountedFor(ComparisonReadings.Reading each,
                                                           UndividedByARelation.Working working,
-                                                          Core siteNode) {
+                                                          Core siteNode,
+                                                          boolean workingAccountsForTheRest) {
         if (!(each.statement() instanceof ComparisonReadings.Stated.AComparison(
                 var comparison))) {
             return false;
         }
+        Set<Core> after = Evaluated.workedOutAfter(
+                List.of(comparison.left(), comparison.right()), siteNode);
         Set<Core> told = Collections.newSetFromMap(new IdentityHashMap<>());
-        for (UndividedByARelation.IntOperation operation : working.operations()) {
+        working.operations().forEach(operation -> {
             if (operation.origin().node() != null) {
                 told.add(Core.withoutStanding(operation.origin().node()));
             }
-        }
+        });
         Set<Core> asked = Collections.newSetFromMap(new IdentityHashMap<>());
         each.quotients().forEach(quotient -> asked.add(Core.withoutStanding(quotient)));
-        Predicate<Core> accounted = node -> endsARunOnlyForWhatIsAsked(node, told, asked);
-        return each.places().everyNodeNotAfter(comparison.left(), siteNode, accounted)
-                && each.places().everyNodeNotAfter(comparison.right(), siteNode, accounted);
+        boolean[] every = {true};
+        Consumer<Core> check = node -> {
+            Core bare = Core.withoutStanding(node);
+            if (!after.contains(bare) && !accountedFor(bare, told, asked,
+                    workingAccountsForTheRest)) {
+                every[0] = false;
+            }
+        };
+        Core.forEachDistinctNode(comparison.left(), check);
+        Core.forEachDistinctNode(comparison.right(), check);
+        return every[0];
     }
 
-    /**
-     * Whether nothing a run may work out before the step {@code siteNode} takes is a call of a
-     * declaration, whose owner does not say what it ends a run for. Its body is not one this
-     * comparison tells, so what it ends a run for is in no working, and a working that says
-     * nothing is left untold says it of what it was told, which is not that. What a function
-     * applied or a construction made ends a run for is told by the working's own readings.
-     */
-    private static boolean nothingBeforeEndsARunForWhatNobodySays(
-            ComparisonReadings.Reading each, Core siteNode) {
-        if (!(each.statement() instanceof ComparisonReadings.Stated.AComparison(
-                var comparison))) {
-            return false;
+    private static boolean accountedFor(Core node, Set<Core> told, Set<Core> asked,
+                                        boolean workingAccountsForTheRest) {
+        WhatARunMayEndFor.Endings endings = WhatARunMayEndFor.itself(node);
+        if (workingAccountsForTheRest) {
+            return !(node instanceof Core.Call) || endings instanceof WhatARunMayEndFor.Endings.Known;
         }
-        Predicate<Core> says = node -> !(Core.withoutStanding(node) instanceof Core.Call)
-                || WhatARunMayEndFor.itself(node) instanceof WhatARunMayEndFor.Endings.Known;
-        return each.places().everyNodeNotAfter(comparison.left(), siteNode, says)
-                && each.places().everyNodeNotAfter(comparison.right(), siteNode, says);
-    }
-
-    /** Whether {@code node} ends a run only for what is told of it as an operation, or not at all
-     *  where it is a quotient asked. What its owner does not say it ends a run for is not known to
-     *  end none. */
-    private static boolean endsARunOnlyForWhatIsAsked(Core node, Set<Core> told,
-                                                      Set<Core> asked) {
-        if (!(WhatARunMayEndFor.itself(node) instanceof WhatARunMayEndFor.Endings.Known(
-                AbortSet kinds))) {
+        if (!(endings instanceof WhatARunMayEndFor.Endings.Known(AbortSet kinds))) {
             return false;
         }
         Set<AbortKind> left = new HashSet<>(kinds.kinds());
@@ -521,22 +519,16 @@ final class StopAssessment {
                 return new Judgement.Unresolved(site, WhyAStopIsNotShown.ON_AN_ARM);
             }
         }
-        // What a run stopping at the site has to get past is what it works out before it, and it
-        // is shown that nothing of that ends a run but what is asked in either of two ways. The
-        // working says it of the whole comparison: nothing is left untold beyond what it tells and
-        // the quotients asked, and where it is of an operation it is on every run, which it is not
-        // where the expression the comparison was stopped at may end a run before the operations
-        // it tells. Or, where the site's step has a place in the order, every node of the
-        // comparison not known to come after the site is asked what it ends a run for, and what
-        // the working leaves untold after the site is no part of it. A quotient is worked out
-        // wherever the comparison is ({@link QuotientsEveryRunWorksOut}), and the stop of one that
-        // is among those asked is not left untold: a witness is asked to get past it.
-        boolean wholeIsAccountedFor = !working.leavesUntoldBeyond(each.quotients())
-                && (!(site instanceof Site.PastItsEnds) || working.onEveryRun())
-                && nothingBeforeEndsARunForWhatNobodySays(each, siteNode);
-        if (!wholeIsAccountedFor
-                && !(each.places().hasAPlace(siteNode)
-                        && everythingBeforeIsAccountedFor(each, working, siteNode))) {
+        // What a run stopping at the site has to get past is what it works out before it. The
+        // working says nothing is left untold beyond what it tells and the quotients asked, and
+        // where it is of an operation that it is on every run, which it is not where the
+        // expression the comparison was stopped at may end a run before the operations it tells.
+        // A quotient is worked out wherever the comparison is ({@link QuotientsEveryRunWorksOut}),
+        // and the stop of one that is among those asked is not left untold: a witness is asked to
+        // get past it.
+        boolean workingAccountsForTheRest = !working.leavesUntoldBeyond(each.quotients())
+                && (!(site instanceof Site.PastItsEnds) || working.onEveryRun());
+        if (!everythingBeforeIsAccountedFor(each, working, siteNode, workingAccountsForTheRest)) {
             return new Judgement.Unresolved(site, WhyAStopIsNotShown.NOT_EVERY_OPERATION_TOLD);
         }
         Optional<UndividedByARelation.Working> earlier = each.workedOutBeforeIt();
