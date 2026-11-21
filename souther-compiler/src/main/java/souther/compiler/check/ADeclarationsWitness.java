@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * A value of a declaration, written down, that every rule of the declaration holds of.
@@ -94,24 +95,8 @@ final class ADeclarationsWitness {
     }
 
     /**
-     * Whether a value of {@code declared} at the fields {@code writing} is shown to exist: one that
-     * every one of {@code rules} folds to true over.
-     *
-     * <p>The other fields are written as nothing, so a rule reading one of them folds to nothing
-     * and is not shown to hold.
-     *
-     * @param writing the fields a value is written at, which are all of them where a value of the
-     *                whole declaration is asked for
-     * @param rules   every rule that holds of the fields {@code writing}, over the bindings of the
-     *                declaration's fields
-     */
-    static boolean exists(RuleReadingSource source, TypeSymbol.AtModule declared,
-                          Set<String> writing, List<Core> rules, Hints hints) {
-        return written(source, declared, writing, rules, hints, Map.of()) != null;
-    }
-
-    /**
-     * The value {@link #exists} finds with the places {@code pinned} names held to the constants
+     * A value of {@code declared} at the fields {@code writing} that every one of {@code rules}
+     * folds to true over, with the places {@code pinned} names held to the constants
      * it gives them, as the constant at each place a value was tried at — what the fold reads it
      * as, by the fields that reach the place — or null where none was found.
      *
@@ -125,8 +110,16 @@ final class ADeclarationsWitness {
      * type as well, as a constant a rule writes is, which is where a rule relating two places is
      * met by the two being alike.
      *
+     * <p>The fields not in {@code writing} are written as nothing, so a rule reading one of them
+     * folds to nothing and is not shown to hold.
+     *
+     * @param writing the fields a value is written at, which are all of them where a value of the
+     *                whole declaration is asked for
+     * @param rules   every rule that holds of the fields {@code writing}, over the bindings of the
+     *                declaration's fields
      * @param pinned the constants some places are held to, by the fields that reach them, as the
-     *               fold reads a constant
+     *               fold reads a constant. A value is written holding every one of them, so
+     *               none is found where one is held at a place the value has no slot at
      */
     static Map<List<String>, Object> written(RuleReadingSource source,
                                              TypeSymbol.AtModule declared, Set<String> writing,
@@ -252,6 +245,11 @@ final class ADeclarationsWitness {
                     unread.add(slot);
                 }
             }
+        }
+        // A constant held at a place the value has no slot at is one it is not written holding.
+        if (!slots.stream().map(Slot::place).collect(Collectors.toSet())
+                .containsAll(pinned.keySet())) {
+            return null;
         }
         Map<List<String>, Core> held = new LinkedHashMap<>();
         for (Slot slot : slots) {

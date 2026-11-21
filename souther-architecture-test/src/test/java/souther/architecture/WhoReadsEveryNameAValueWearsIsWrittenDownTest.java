@@ -175,7 +175,7 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                     THE_SPINE),
             row(PARTITION + "AValueOfTheInput", "walk",
                     "(L" + INPUTS + "TermPath;" + TYPE + "Ljava/util/Set;L" + INPUTS
-                            + "InputReading;Ljava/util/Map;)I", THE_POSITION),
+                            + "InputReading;Ljava/util/Map;Ljava/util/List;)I", THE_POSITION),
             row(PARTITION + "BehaviorInputs", "view", "(" + TYPE + ")L" + TYPE_VIEW + ";",
                     THE_POSITION),
             row(PARTITION + "CardinalityComposer", "compose",
