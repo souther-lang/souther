@@ -400,7 +400,7 @@ final class StopAssessment {
             left.remove(AbortKind.REQUIRED_FORM_HAS_NO_PLACE);
         }
         if (asked.contains(node)) {
-            left.clear();
+            left.remove(AbortKind.DIVISION_BY_ZERO);
         }
         return left.isEmpty();
     }
