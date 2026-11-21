@@ -47,7 +47,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>Each form is a case of its own, one model of one behavior, and a form is in the list for the
  * mechanism that turns its case red where it is taken out. The grid is the three numbers that
- * decide them, so a case costs what compiling one model does.
+ * decide them, so a case costs what running the grid of one behavior does, the forms being
+ * behaviors of one module compiled once.
  */
 class AStopShownAtAnOperationIsOneTheProgramRunsIntoTest {
 
@@ -111,29 +112,54 @@ class AStopShownAtAnOperationIsOneTheProgramRunsIntoTest {
         return FORMS.keySet().stream();
     }
 
-    /** One form is one model of one behavior, which is as much as the claim about it asks. */
+    /**
+     * The module of every form, one behavior for each, compiled and loaded when the first is
+     * run.
+     */
+    private static final class Module {
+
+        static final Compilation COMPILED = compile();
+        static final BytesClassLoader LOADER = new BytesClassLoader(COMPILED.classes(),
+                AStopShownAtAnOperationIsOneTheProgramRunsIntoTest.class.getClassLoader());
+
+        private static Compilation compile() {
+            StringBuilder model = new StringBuilder("""
+                    module demo
+
+                    data In = { e: Int, p: Int, q: Int }
+                    data Out = Int
+
+                    behavior h : (z: Int) -> Int
+                    let h (z) = Rational.toInt(DOWN, 1 / z)
+                    """);
+            for (Map.Entry<String, Form> each : FORMS.entrySet()) {
+                String behavior = behaviorOf(each.getKey());
+                model.append("""
+
+                        behavior %1$s : (i: In) -> Out constructs Out
+                        let %1$s (i) = Out { value = if %2$s then (if %3$s then 1 else 2) else 3 }
+                        """.formatted(behavior, onTheInput(each.getValue().way()),
+                        onTheInput(each.getValue().comparison())));
+            }
+            return ACompiledModel.measured(model.toString(),
+                    new Adequacy.Asked(Adequacy.Level.OFF, false));
+        }
+    }
+
+    private static String behaviorOf(String form) {
+        return "b" + new ArrayList<>(FORMS.keySet()).indexOf(form);
+    }
+
+    /** One form is one behavior of the one module, which is as much as the claim about it asks. */
     @ParameterizedTest
     @MethodSource("forms")
     void aStopShownAtAnOperationIsOneTheProgramRunsInto(String name) throws Exception {
         Form form = FORMS.get(name);
-        String model = """
-                module demo
-
-                data In = { e: Int, p: Int, q: Int }
-                data Out = Int
-                %s
-                behavior b : (i: In) -> Out constructs Out
-                let b (i) = Out { value = if %s then (if %s then 1 else 2) else 3 }
-                """.formatted(form.comparison().contains("h(")
-                        ? "\nbehavior h : (z: Int) -> Int\nlet h (z) = Rational.toInt(DOWN, 1 / z)\n"
-                        : "", onTheInput(form.way()), onTheInput(form.comparison()));
-        Compilation compilation = ACompiledModel.measured(model,
-                new Adequacy.Asked(Adequacy.Level.OFF, false));
-        BytesClassLoader loader = new BytesClassLoader(compilation.classes(),
-                AStopShownAtAnOperationIsOneTheProgramRunsIntoTest.class.getClassLoader());
-        Object behavior = Emitted.behavior(loader, "demo", "b").getConstructor().newInstance();
+        String id = behaviorOf(name);
+        BytesClassLoader loader = Module.LOADER;
+        Object behavior = Emitted.behavior(loader, "demo", id).getConstructor().newInstance();
         Partitions.Partitioning divided =
-                compilation.db().ask(new Adequacy.Divided("demo", "b")).value();
+                Module.COMPILED.db().ask(new Adequacy.Divided("demo", id)).value();
         boolean saidSomething = false;
         boolean aStopShown = false;
         List<String> shownAndItsRunDoesNotStop = new ArrayList<>();
