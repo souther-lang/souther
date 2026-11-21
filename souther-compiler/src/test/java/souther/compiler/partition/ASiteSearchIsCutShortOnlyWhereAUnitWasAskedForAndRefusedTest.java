@@ -14,8 +14,9 @@ class ASiteSearchIsCutShortOnlyWhereAUnitWasAskedForAndRefusedTest {
 
     @Test
     void aSearchThatSpentTheLastUnitAndWasDoneIsNotCutShort() {
-        StopAssessment.Tries tries = new StopAssessment.Tries(3);
-        assertTrue(tries.spend() && tries.spend() && tries.spend());
+        StopAssessment.Tries tries = new StopAssessment.Tries(2);
+        assertTrue(tries.spend());
+        assertTrue(tries.spend());
         assertTrue(tries.spent());
         assertFalse(tries.cutShort());
     }

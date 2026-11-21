@@ -3,6 +3,7 @@ package souther.compiler;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import souther.compiler.inputs.AStopShown;
 import souther.compiler.inputs.InputFact;
@@ -22,6 +23,8 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -90,6 +93,20 @@ class AStopOverAValueARunWorksOutIsShownByAListTheProgramRunsIntoTest {
     private static final String MORE_WAYS_THAN_THE_FIGURE =
             "aListWrittenOutOfMoreElementsThanTheFigure";
 
+    private static final String MORE_CHOICES_THAN_THE_FIGURE =
+            "aStepThatChoosesMoreTimesThanTheFigure";
+
+    /** A walk of a step that answers what it carried where the element is not above it, by each
+     *  of {@code choices} comparisons in turn, and the element where it is above it. */
+    private static String stepOfChoices(int choices) {
+        String[] notAbove = {"<", "<=", "=="};
+        StringBuilder step = new StringBuilder();
+        for (int at = 0; at < choices; at++) {
+            step.append("if l ").append(notAbove[at % notAbove.length]).append(" w then w else ");
+        }
+        return "List.fold((w, l) -> " + step + "l, 0, ds)";
+    }
+
     private static final String WALK = "List.fold((w, l) -> if l > w then l else w, 0, ds)";
 
     /** A type some value of exists: a pair the first of which is below the second. */
@@ -136,6 +153,10 @@ class AStopOverAValueARunWorksOutIsShownByAListTheProgramRunsIntoTest {
                 List.of(), List.of(new InputFact.ListLength(DS, 0))));
         // a walk over one comes to what its step answers of the seed and that element: the
         // element where the arm that keeps it is the one taken
+        STOPPING.put("theElementOfAWalkWhoseStepChoosesAFewTimes", new Form(
+                stepOfChoices(2) + " + 1 <= 10", stepOfChoices(2) + " <= 10", List.of(),
+                List.of(new InputFact.ListLength(DS, 1),
+                        new InputFact.ListElement(DS, 0, GREATEST))));
         STOPPING.put("theElementOfAWalkOverOne", new Form(WALK + " + 1 <= 10", WALK + " <= 10",
                 List.of(), List.of(new InputFact.ListLength(DS, 1),
                         new InputFact.ListElement(DS, 0, GREATEST))));
@@ -168,6 +189,10 @@ class AStopOverAValueARunWorksOutIsShownByAListTheProgramRunsIntoTest {
         NOT_SHOWN.put("aListLongerThanAListIs", new Form(
                 "List.length(ds) * 4294967296 >= 1", null, List.of(), null));
         // a value of more ways than a site is looked at by is no more than the figure of ways
+        // the same of the arms of a step that chooses more times than the figure allows ways: the
+        // arm that answers the element is the last, and is one of those not made
+        NOT_SHOWN.put(MORE_CHOICES_THAN_THE_FIGURE, new Form(
+                stepOfChoices(10) + " + 1 <= 10", null, List.of(), null));
         NOT_SHOWN.put(MORE_WAYS_THAN_THE_FIGURE, new Form(
                 "Option.withDefault(0, List.max([q, 1, 2, 3, 4, 5, 6, 7, 8])) + 1 >= 3",
                 null, List.of(), null));
@@ -228,12 +253,24 @@ class AStopOverAValueARunWorksOutIsShownByAListTheProgramRunsIntoTest {
     }
 
     /** A value made more ways than the figure of a site's search allows is a search cut short, and
-     *  is said so: it is no value that no way is known for. */
-    @Test
-    void aValueOfMoreWaysThanTheFigureIsLeftUnresolvedForWantOfIt() {
+     *  is said so: it is no value that no way is known for. Whatever the ways are made of, the
+     *  elements of a list written out and the arms of a step alike. */
+    @ParameterizedTest
+    @ValueSource(strings = {MORE_WAYS_THAN_THE_FIGURE, MORE_CHOICES_THAN_THE_FIGURE})
+    void aValueOfMoreWaysThanTheFigureIsLeftUnresolvedForWantOfIt(String name) {
         assertEquals(List.of(WhyAStopIsNotShown.NO_VALUE_FOUND_WITHIN_WHAT_IS_TRIED),
-                whyNotShown(OverNumbers.COMPILED, OverNumbers.behavior("b",
-                        NOT_SHOWN.get(MORE_WAYS_THAN_THE_FIGURE))));
+                whyNotShown(OverNumbers.COMPILED, OverNumbers.behavior("b", NOT_SHOWN.get(name))));
+    }
+
+    /** What makes up a list is worked out before the operation over its greatest, and where that
+     *  stops it is no run that stops in the operation: the one stop shown is the one in the
+     *  element. */
+    @Test
+    void theStopInWhatMakesUpAListIsNoStopInTheOperationOverItsGreatest() {
+        Form form = STOPPING.get("anElementOfAListWrittenOutWorkedOutFirst");
+        assertEquals(Set.of(form.operation()), shown(OverNumbers.COMPILED,
+                OverNumbers.behavior("b", form)).stream().map(AStopShown::operation)
+                .collect(Collectors.toSet()));
     }
 
     /** Two elements of a type some value of exists are a list of two. */

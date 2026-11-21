@@ -768,11 +768,6 @@ final class WorkedOutToReachIt {
         return ownWorkingEndsNoRun(value, question) && partsAndNamesEndNoRun(value, question);
     }
 
-    /** How many ways a stop is looked for by at one site, and so the most that are made of a value:
-     *  the one figure the search of a site is given. */
-    private static final int MOST_WAYS_LOOKED_AT =
-            CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT.maximum();
-
     /** The ends of an {@code Int}, which a total of whole numbers and each operation of them
      *  answers within. */
     private static final WhereAnOperatorAnswers.WhereItsExactValueIsHeld AN_INT =
@@ -1401,28 +1396,30 @@ final class WorkedOutToReachIt {
         if (seeds.leftUnmade()) {
             return Attainments.TOO_MANY;
         }
-        List<Attainment> out = new ArrayList<>();
-        out.addAll(holdingTheCount(seeds.ways(), count, ExactRatio.ZERO));
+        Attainments.Builder out = new Attainments.Builder();
+        holdingTheCount(seeds, count, ExactRatio.ZERO, out);
         Attainment theElement = Attainment.always(LinearForm.atom(
                 new NumericTerm.ValueOf(element)));
-        out.addAll(holdingTheCount(answersOfAStep(walk.step().body(), new AStepOverOne(
-                walk.element().binding(), walk.accumulator().binding(), seeds.ways(), theElement)),
-                count, ExactRatio.ONE));
-        return Attainments.of(out);
+        holdingTheCount(answersOfAStep(walk.step().body(), new AStepOverOne(
+                walk.element().binding(), walk.accumulator().binding(), seeds, theElement)),
+                count, ExactRatio.ONE, out);
+        return out.build();
     }
 
-    /** Each of {@code of}, for the rows where the list {@code count} counts holds {@code size}. */
-    private static List<Attainment> holdingTheCount(List<Attainment> of, NumericTerm count,
-                                                    ExactRatio size) {
+    /** Each of {@code of}, for the rows where the list {@code count} counts holds {@code size},
+     *  made into {@code out}. */
+    private static void holdingTheCount(Attainments of, NumericTerm count, ExactRatio size,
+                                        Attainments.Builder out) {
+        out.noting(of);
         TakenConstraint.Affine exactly = new TakenConstraint.Affine(
                 LinearForm.atomMinusConstant(count, size), Rel.EQ);
-        List<Attainment> out = new ArrayList<>(of.size());
-        for (Attainment each : of) {
+        for (Attainment each : of.ways()) {
             List<TakenConstraint.Affine> holding = new ArrayList<>(each.holding());
             holding.add(exactly);
-            out.add(new Attainment(each.form(), holding));
+            if (!out.add(new Attainment(each.form(), holding))) {
+                return;
+            }
         }
-        return out;
     }
 
     /**
@@ -1431,59 +1428,69 @@ final class WorkedOutToReachIt {
      * the choice leaves it — the comparison of two such answers, or its denial — as what a row
      * meets for the step to answer it. Nothing where a comparison is of anything else.
      */
-    private static List<Attainment> answersOfAStep(Core body, AStepOverOne step) {
+    private static Attainments answersOfAStep(Core body, AStepOverOne step) {
         return switch (Core.withoutStanding(body)) {
             case Core.Read name -> step.element().equals(name.binding())
-                    ? List.of(step.theElement())
-                    : step.carried().equals(name.binding()) ? step.seeds() : List.of();
+                    ? Attainments.of(List.of(step.theElement()))
+                    : step.carried().equals(name.binding()) ? step.seeds() : Attainments.NONE;
             case Core.If fork -> answersOfAChoice(fork, step);
-            default -> List.of();
+            default -> Attainments.NONE;
         };
     }
 
     /** What a step walks one element with: the names it is handed the element and what it
      *  carried by, and how a row makes each of them a number. */
-    private record AStepOverOne(BindingId element, BindingId carried, List<Attainment> seeds,
+    private record AStepOverOne(BindingId element, BindingId carried, Attainments seeds,
                                 Attainment theElement) {}
 
     /** What either arm of {@code fork} answers, each where a row meets what the comparison it is
-     *  decided by states, or its denial. Nothing where it is decided by anything else. */
-    private static List<Attainment> answersOfAChoice(Core.If fork, AStepOverOne step) {
+     *  decided by states, or its denial. None where it is decided by anything else. */
+    private static Attainments answersOfAChoice(Core.If fork, AStepOverOne step) {
         if (!(Core.withoutStanding(fork.cond()) instanceof Core.Binary comparison)
                 || !comparison.op().compares()) {
-            return List.of();
+            return Attainments.NONE;
         }
         Rel rel = comparison.op().relation();
-        List<Attainment> out = new ArrayList<>();
-        for (Attainment left : answersOfAStep(comparison.left(), step)) {
-            for (Attainment right : answersOfAStep(comparison.right(), step)) {
+        Attainments lefts = answersOfAStep(comparison.left(), step);
+        Attainments rights = answersOfAStep(comparison.right(), step);
+        Attainments.Builder out = new Attainments.Builder();
+        out.noting(lefts);
+        out.noting(rights);
+        for (Attainment left : lefts.ways()) {
+            for (Attainment right : rights.ways()) {
+                if (!out.hasRoom()) {
+                    return out.build();
+                }
                 LinearForm<NumericTerm> apart = left.form().minus(right.form()).orNull();
                 if (apart == null) {
-                    return List.of();
+                    continue;
                 }
                 List<TakenConstraint.Affine> holding = new ArrayList<>(left.holding());
                 holding.addAll(right.holding());
-                out.addAll(answeredWhere(fork.then(), new TakenConstraint.Affine(apart, rel),
-                        holding, step));
-                out.addAll(answeredWhere(fork.els(),
-                        new TakenConstraint.Affine(apart, rel.denied()), holding, step));
+                answeredWhere(fork.then(), new TakenConstraint.Affine(apart, rel), holding, step,
+                        out);
+                answeredWhere(fork.els(), new TakenConstraint.Affine(apart, rel.denied()),
+                        holding, step, out);
             }
         }
-        return out;
+        return out.build();
     }
 
-    /** What {@code arm} answers where a row meets {@code taken} and {@code before}. */
-    private static List<Attainment> answeredWhere(Core arm, TakenConstraint.Affine taken,
-                                                  List<TakenConstraint.Affine> before,
-                                                  AStepOverOne step) {
-        List<Attainment> out = new ArrayList<>();
-        for (Attainment answer : answersOfAStep(arm, step)) {
+    /** What {@code arm} answers where a row meets {@code taken} and {@code before}, made into
+     *  {@code out}. */
+    private static void answeredWhere(Core arm, TakenConstraint.Affine taken,
+                                      List<TakenConstraint.Affine> before, AStepOverOne step,
+                                      Attainments.Builder out) {
+        Attainments answers = answersOfAStep(arm, step);
+        out.noting(answers);
+        for (Attainment answer : answers.ways()) {
             List<TakenConstraint.Affine> holding = new ArrayList<>(answer.holding());
             holding.addAll(before);
             holding.add(taken);
-            out.add(new Attainment(answer.form(), holding));
+            if (!out.add(new Attainment(answer.form(), holding))) {
+                return;
+            }
         }
-        return out;
     }
 
     /** What {@code place} holds, where that is known ({@link #atAPlace}). */
@@ -1533,9 +1540,9 @@ final class WorkedOutToReachIt {
                 case ValuesHeld.MayStandAt _, ValuesHeld.NotAPosition _ -> Attainments.NONE;
             };
         }
-        // A stop is looked for by no more ways than the figure of the search allows
-        // ({@link StopAssessment}), and each of these is made of a comparison with every other.
-        if (written.size() > MOST_WAYS_LOOKED_AT) {
+        // Each way is made of a comparison with every other, so the elements are no more than the
+        // ways there is room for ({@link Attainments#MOST}), before any is made.
+        if (written.size() > Attainments.MOST) {
             return Attainments.TOO_MANY;
         }
         List<Attainment> each = new ArrayList<>(written.size());
@@ -1552,7 +1559,7 @@ final class WorkedOutToReachIt {
         if (end == null) {
             return each.size() == 1 ? Attainments.of(each) : Attainments.NONE;
         }
-        List<Attainment> out = new ArrayList<>(each.size());
+        Attainments.Builder out = new Attainments.Builder();
         for (int chosen = 0; chosen < each.size(); chosen++) {
             List<TakenConstraint.Affine> holding = new ArrayList<>(each.get(chosen).holding());
             for (int other = 0; other < each.size(); other++) {
@@ -1570,7 +1577,7 @@ final class WorkedOutToReachIt {
             }
             out.add(new Attainment(each.get(chosen).form(), holding));
         }
-        return Attainments.of(out);
+        return out.build();
     }
 
     /** What {@link #originOf} answered of each expression, wherever it was read, for as long as
