@@ -176,11 +176,11 @@ class AProvedEdgeOfADatePartIsAPartSomeDateHasTest {
         assertTrue(proved.contains("2"), proved::toString);
     }
 
-    /** The report of {@code model}, measured as far as what the rules say without running
-     *  anything, which is where a point is proved writable: what the arms took is not asked. */
+    /** The report of {@code model} with no rows measured: a point is proved writable by what the
+     *  model itself says, which is derived whatever is measured. */
     private static JsonNode reportOf(String model) throws Exception {
         Compilation compilation = ACompiledModel.measured(model,
-                Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
+                Adequacy.Asked.reportOnly(Adequacy.Level.OFF));
         return JsonMapper.builder().build().readTree(AdequacyReport.of(compilation)
                 .json(SourceRendering.namedByIdentity(compilation.texts())));
     }
