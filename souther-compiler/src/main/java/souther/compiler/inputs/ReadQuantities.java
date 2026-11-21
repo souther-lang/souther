@@ -11,6 +11,7 @@ import souther.compiler.check.Emptiness;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.PartId;
 import souther.compiler.check.RuleKey;
+import souther.compiler.check.RuleOfDateParts;
 import souther.compiler.collect.RecentAnswers;
 import souther.compiler.check.RuleRef;
 import souther.compiler.meaning.PositionsAStatementReads;
@@ -3666,6 +3667,26 @@ final class ReadQuantities implements Quantities {
                 && asking(Set.of(here)) instanceof StructuralContext.Merge.Together(
                         StructuralContext under)
                 && under.holds(opened.opening()) ? declared : HeldClass.NONE;
+    }
+
+    /**
+     * The rules the declarations of the date at {@code date} hold its parts to together, read
+     * where {@link #classDeclaredAt} reads the class: under the context the date is asked in, and
+     * none where no declarations reach it or the context does not hold where they were opened.
+     */
+    @Override
+    public List<RuleOfDateParts> rulesOfThePartsOfTheDate(NumericTerm.ValueOf date) {
+        UnderARoot at = rootOf(date.subjectPath());
+        OpenedRules opened = at == null ? null : byRoot.get(at.root());
+        if (opened == null) {
+            return List.of();
+        }
+        List<RuleOfDateParts> rules = opened.rules().bounds().rulesOfThePartsAt(at.named());
+        if (rules != null && rules.isEmpty()) {
+            return rules;
+        }
+        return asking(Set.of(date)) instanceof StructuralContext.Merge.Together(
+                StructuralContext under) && under.holds(opened.opening()) ? rules : List.of();
     }
 
     /** The magnitude of the divisor {@code taken} is a remainder by, or null where it is no

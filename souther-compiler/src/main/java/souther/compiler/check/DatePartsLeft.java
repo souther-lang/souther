@@ -147,22 +147,40 @@ public record DatePartsLeft(Map<TakenAs.DatePart, NumericDomain.Bounds> byPart,
      * is that this shows no such date and never that there is none.
      */
     public boolean someDateHas(TakenAs.DatePart part, int value, DateTranslation moved) {
+        return aDateWith(part, value, moved) != null;
+    }
+
+    /** The date {@link #someDateHas} met, before it is moved, or null where it met none. */
+    public LocalDate aDateWith(TakenAs.DatePart part, int value, DateTranslation moved) {
+        return aDateWithin(part, value, value, moved);
+    }
+
+    /**
+     * A date these leave, before it is moved, whose {@code part} once moved is from
+     * {@code least} to {@code most}, both counted — or null where the search met none, which
+     * says nothing of whether there is one ({@link #someDateHas}).
+     */
+    public LocalDate aDateWithin(TakenAs.DatePart part, int least, int most,
+                                 DateTranslation moved) {
         long from = moved.first();
         long to = moved.last();
         if (part == TakenAs.DatePart.YEAR) {
-            if (value < LocalDate.MIN.getYear() || value > LocalDate.MAX.getYear()) {
-                return false;
+            int first = Math.max(least, LocalDate.MIN.getYear());
+            int last = Math.min(most, LocalDate.MAX.getYear());
+            if (first > last) {
+                return null;
             }
-            from = Math.max(from, LocalDate.of(value, 1, 1).toEpochDay() - moved.offsetDays());
-            to = Math.min(to, LocalDate.of(value, 12, 31).toEpochDay() - moved.offsetDays());
+            from = Math.max(from, LocalDate.of(first, 1, 1).toEpochDay() - moved.offsetDays());
+            to = Math.min(to, LocalDate.of(last, 12, 31).toEpochDay() - moved.offsetDays());
         }
         for (long day : walk(BigInteger.valueOf(from), BigInteger.valueOf(to), true,
                 MOST_DAYS_MET).days()) {
-            if (part.of(LocalDate.ofEpochDay(day + moved.offsetDays())) == value) {
-                return true;
+            int value = part.of(LocalDate.ofEpochDay(day + moved.offsetDays()));
+            if (value >= least && value <= most) {
+                return LocalDate.ofEpochDay(day);
             }
         }
-        return false;
+        return null;
     }
 
     /** Whether the date {@code day} counts to has parts these leave. */

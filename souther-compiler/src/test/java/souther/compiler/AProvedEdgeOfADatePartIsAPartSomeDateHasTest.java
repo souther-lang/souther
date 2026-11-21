@@ -13,6 +13,9 @@ import tools.jackson.databind.json.JsonMapper;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
+import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -31,10 +34,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AProvedEdgeOfADatePartIsAPartSomeDateHasTest {
 
     private static final Pattern RANGE =
-            Pattern.compile("^(\\d+) (<|<=) Date\\.day\\(d\\) (<|<=) (\\d+)$");
+            Pattern.compile("^(\\d+) (<|<=) Date\\.\\w+\\(d\\) (<|<=) (\\d+)$");
 
-    /** A day written as a number, or as the run between two. */
-    private static final Pattern DAY = Pattern.compile("^(\\d+|\\d+ <=? Date\\.day\\(d\\) <=? \\d+)$");
+    /** A part of a date written as a number, or as the run between two. */
+    private static final Pattern POINT =
+            Pattern.compile("^(\\d+|\\d+ <=? Date\\.\\w+\\(d\\) <=? \\d+)$");
 
     private static final String BODY = """
 
@@ -57,7 +61,7 @@ class AProvedEdgeOfADatePartIsAPartSomeDateHasTest {
 
     @Test
     void everyDayProvedForAFebruaryIsADayAFebruaryHas() throws Exception {
-        List<String> proved = provedDays("""
+        List<String> proved = provedPoints("""
                 module demo
 
                 data Day = Date
@@ -70,7 +74,7 @@ class AProvedEdgeOfADatePartIsAPartSomeDateHasTest {
 
     @Test
     void aDateNoRuleHoldsKeepsTheDaysProvedForIt() throws Exception {
-        List<String> proved = provedDays("""
+        List<String> proved = provedPoints("""
                 module demo
 
                 data Day = Date
@@ -104,6 +108,73 @@ class AProvedEdgeOfADatePartIsAPartSomeDateHasTest {
         assertTrue(anyDate.containsAll(List.of("31", "30")), anyDate::toString);
     }
 
+    /** The months the dates {@code holds} leaves come to, moved {@code movedBy} days on, worked
+     *  out of the rule as written over a cycle of the calendar. */
+    private static Set<Integer> monthsOf(Predicate<LocalDate> holds, int movedBy) {
+        Set<Integer> out = new TreeSet<>();
+        for (LocalDate date = LocalDate.of(2000, 1, 1); date.getYear() < 2400;
+                date = date.plusDays(1)) {
+            if (holds.test(date)) {
+                out.add(date.plusDays(movedBy).getMonthValue());
+            }
+        }
+        return out;
+    }
+
+    /** {@code Date.day(value) - Date.month(value) >= 28}. */
+    private static boolean twentyEightDaysPastTheMonth(LocalDate date) {
+        return date.getDayOfMonth() - date.getMonthValue() >= 28;
+    }
+
+    /** The rule leaves the months up to March, and a February would need its thirtieth. */
+    private static final String TWENTY_EIGHT_DAYS_PAST_THE_MONTH = """
+            module demo
+
+            data Day = Date
+                invariant Date.day(value) - Date.month(value) >= 28
+            """;
+
+    /** February is between the months the rule leaves, and no date of it holds the rule: a month
+     *  some date of the rule has is proved, and one none has is not. */
+    @Test
+    void aMonthARuleOfTwoPartsRulesOutIsNotProved() throws Exception {
+        Set<Integer> held = monthsOf(
+                AProvedEdgeOfADatePartIsAPartSomeDateHasTest::twentyEightDaysPastTheMonth, 0);
+        List<String> proved = provedPoints(TWENTY_EIGHT_DAYS_PAST_THE_MONTH + """
+
+                data Out = Int
+
+                behavior go : (d: Day) -> Out
+                let go (d) = Out { value = if Date.month(d.value) >= 3 then 1
+                                           else (if Date.month(d.value) >= 2 then 2 else 3) }
+                """);
+        for (String each : proved) {
+            assertTrue(someNumberIn(each, held), "proved at " + each + ", which no Day has");
+        }
+        assertTrue(proved.contains("3"), proved::toString);
+    }
+
+    /** The same rule, the date a day on: the thirty-first of January is the first of February,
+     *  and no date of the rule is in March a day on. */
+    @Test
+    void aMonthARuleOfTwoPartsRulesOutOnceMovedIsNotProved() throws Exception {
+        Set<Integer> held = monthsOf(
+                AProvedEdgeOfADatePartIsAPartSomeDateHasTest::twentyEightDaysPastTheMonth, 1);
+        List<String> proved = provedPoints(TWENTY_EIGHT_DAYS_PAST_THE_MONTH + """
+
+                data Out = Int
+
+                behavior go : (d: Day) -> Out
+                let go (d) = Out { value = if Date.month(Date.addDays(1, d.value)) >= 3 then 1
+                                           else 2 }
+                """);
+        for (String each : proved) {
+            assertTrue(someNumberIn(each, held),
+                    "proved at " + each + ", which no Day a day on has");
+        }
+        assertTrue(proved.contains("2"), proved::toString);
+    }
+
     /** What the report proves writable, by the number or run it is at. */
     private static List<String> provedAt(String model) throws Exception {
         Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
@@ -119,8 +190,9 @@ class AProvedEdgeOfADatePartIsAPartSomeDateHasTest {
         return out;
     }
 
-    /** The points proved writable on a day, as the report writes the day they are at. */
-    private static List<String> provedDays(String model) throws Exception {
+    /** The points proved writable on a part of a date, as the report writes the number they are
+     *  at. */
+    private static List<String> provedPoints(String model) throws Exception {
         Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         JsonNode report = JsonMapper.builder().build().readTree(AdequacyReport.of(compilation)
                 .json(SourceRendering.namedByIdentity(compilation.texts())));
@@ -128,7 +200,7 @@ class AProvedEdgeOfADatePartIsAPartSomeDateHasTest {
         for (JsonNode each : report.findParents("knownWritable")) {
             JsonNode against = each.path("against");
             if (each.get("knownWritable").asBoolean() && each.toString().contains("it_is_proved")
-                    && against.isString() && DAY.matcher(against.asString()).matches()) {
+                    && against.isString() && POINT.matcher(against.asString()).matches()) {
                 out.add(against.asString());
             }
         }
@@ -137,6 +209,17 @@ class AProvedEdgeOfADatePartIsAPartSomeDateHasTest {
 
     /** Whether some day of a February is among the days {@code written} says, a day or a run. */
     private static boolean someFebruaryDayIn(String written) {
+        Set<Integer> february = new TreeSet<>();
+        for (int day = 1; day <= 31; day++) {
+            if (someFebruaryHas(day)) {
+                february.add(day);
+            }
+        }
+        return someNumberIn(written, february);
+    }
+
+    /** Whether one of {@code numbers} is among those {@code written} says, a number or a run. */
+    private static boolean someNumberIn(String written, Set<Integer> numbers) {
         Matcher run = RANGE.matcher(written);
         int low;
         int high;
@@ -148,7 +231,7 @@ class AProvedEdgeOfADatePartIsAPartSomeDateHasTest {
             high = low;
         }
         for (int day = low; day <= high; day++) {
-            if (someFebruaryHas(day)) {
+            if (numbers.contains(day)) {
                 return true;
             }
         }

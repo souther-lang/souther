@@ -3,12 +3,14 @@ package souther.compiler.check;
 import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.semantics.TakenArguments;
+import souther.compiler.semantics.TakenAs;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.ChoiceToLift;
 import souther.compiler.inputs.RepresentationBounds;
 import souther.compiler.inputs.RuleSite;
+import souther.compiler.numeric.AffineConstraint;
 import souther.compiler.numeric.CanonicalOrder;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumberSpace;
@@ -41,6 +43,7 @@ import souther.compiler.semantics.OperationLaw;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
@@ -2663,6 +2666,80 @@ public final class FieldDomains {
             }
         }
         return held;
+    }
+
+    /**
+     * The rules the parts of the date at {@code path} are held to that {@link #classAt} does not
+     * read: each relating two numbers taken of the date, or holding one away from a number — or
+     * null where a rule weighing a part of the date weighs anything but a part of it as it stands,
+     * or weighs two numbers that are one part.
+     *
+     * <p>Empty where the rules weigh no part of the date together with another, which is where what
+     * the class leaves each part is all they say of the parts. A rule weighing a part and another
+     * place, or a part of the date moved, ties the date to what this does not answer, and null says
+     * so rather than leaving the rule out.
+     */
+    public List<RuleOfDateParts> rulesOfThePartsAt(RuleKey path) {
+        FactSubject place = atomAt.get(path);
+        if (place == null) {
+            return List.of();
+        }
+        Map<FactSubject, TakenAs.DatePart> parts = new HashMap<>();
+        for (FactSubject atom : takenOf(place)) {
+            DerivedNumber number = DerivedNumber.readBack(atom.identity(), _ -> path);
+            if (number != null && number.partOfTheDate() instanceof TakenAs.DatePart part) {
+                parts.put(atom, part);
+            }
+        }
+        if (parts.isEmpty()) {
+            return List.of();
+        }
+        List<RuleOfDateParts> out = new ArrayList<>();
+        for (AffineConstraint<FactSubject> rule
+                : constraints.numbers().rulesWeighingAny(parts.keySet())) {
+            if (aRangeOfOnePart(rule)) {
+                continue;
+            }
+            RuleOfDateParts read = ruleOfTheParts(rule, parts);
+            if (read == null) {
+                return null;
+            }
+            out.add(read);
+        }
+        return out;
+    }
+
+    /** Whether {@code rule} bounds one number on its own, which the class holds. A hole in it is
+     *  no range. */
+    private static boolean aRangeOfOnePart(AffineConstraint<FactSubject> rule) {
+        return rule.form().coefs().size() == 1
+                && !(rule instanceof AffineConstraint.Disequality);
+    }
+
+    /**
+     * {@code rule} as a rule of the parts {@code parts} names, or null where it weighs a number
+     * that is none of them, or two that are one part: the rules hold those two apart, and read as
+     * one part the rule would say something else.
+     */
+    private static RuleOfDateParts ruleOfTheParts(AffineConstraint<FactSubject> rule,
+                                                  Map<FactSubject, TakenAs.DatePart> parts) {
+        Map<FactSubject, ExactRatio> coefs = rule.form().coefs();
+        if (!parts.keySet().containsAll(coefs.keySet())) {
+            return null;
+        }
+        Map<TakenAs.DatePart, ExactRatio> weights = new EnumMap<>(TakenAs.DatePart.class);
+        coefs.forEach((atom, weight) -> weights.put(parts.get(atom), weight));
+        if (weights.size() != coefs.size()) {
+            return null;
+        }
+        return switch (rule) {
+            case AffineConstraint.HalfSpace<FactSubject> half -> new RuleOfDateParts(weights,
+                    half.bound().at().negated(), half.bound().inclusive() ? Rel.LE : Rel.LT);
+            case AffineConstraint.Equality<FactSubject> at ->
+                    new RuleOfDateParts(weights, at.at().negated(), Rel.EQ);
+            case AffineConstraint.Disequality<FactSubject> hole ->
+                    new RuleOfDateParts(weights, hole.at().negated(), Rel.NE);
+        };
     }
 
     /**

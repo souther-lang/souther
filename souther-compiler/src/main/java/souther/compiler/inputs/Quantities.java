@@ -1,11 +1,13 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.RuleOfDateParts;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.regex.Language;
 import souther.compiler.regex.StringsHeldAsWritten;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -212,6 +214,17 @@ public sealed interface Quantities permits ReadQuantities {
      * projection answers both, so such a reader asks this alone rather than this and the range.
      */
     NumericDomain.FormProjection projectionOfTheDeclarations(NumericTerm term);
+
+    /**
+     * What the declarations hold the parts of the date at {@code date} to together, beyond the
+     * class they hold it to ({@link SearchRegion#classAt}) — or null where a rule weighing a part
+     * weighs anything but a part of that date as it stands.
+     *
+     * <p>Of the declarations, as {@link #projectionOfTheDeclarations} is: what a caller took in
+     * is no rule of the value, and an edge a declaration owes stays owed however much of a body
+     * was read.
+     */
+    List<RuleOfDateParts> rulesOfThePartsOfTheDate(NumericTerm.ValueOf date);
 
     /**
      * The same rules, with these positions fixed at these values.

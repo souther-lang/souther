@@ -181,6 +181,13 @@ record DerivedNumber(RuleKey position, ValueName operation, TakenArguments argum
         };
     }
 
+    /** The part of the date this is, where it is a part taken of the date as it stands, and null
+     *  where it is any other number. */
+    TakenAs.DatePart partOfTheDate() {
+        return from instanceof ValueTransformation.Identity && arguments.none()
+                && how() instanceof TakenAs.PartOfDate(TakenAs.DatePart part) ? part : null;
+    }
+
     /** What this number's operation takes of the value, given what it was given beside it. */
     private TakenAs how() {
         return DefaultBoundOperationFacts.get().takenAs(operation, arguments);

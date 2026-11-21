@@ -2,16 +2,24 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.DatePartsLeft;
+import souther.compiler.numeric.Count;
 import souther.compiler.numeric.DateTranslation;
+import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
 import souther.compiler.semantics.TakenAs;
 
 import java.time.LocalDate;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -68,19 +76,47 @@ class DatesAreFoundOnlyWhereTheCalendarHasThemTest {
     }
 
     /** What the finder answers, the dates of a {@link DatesThatHoldEveryStatement.Found} checked
-     *  against the statements and the dates each may be. */
+     *  against the statements, the dates each may be and the class each is of. */
     private static DatesThatHoldEveryStatement.Answer found(List<DateTranslation> days,
-            DatesThatHoldEveryStatement.Statement... statements) {
+            List<DatePartsLeft> classes, DatesThatHoldEveryStatement.Statement... statements) {
         DatesThatHoldEveryStatement.Answer answer =
-                DatesThatHoldEveryStatement.some(List.of(statements), days);
+                DatesThatHoldEveryStatement.some(List.of(statements), days, classes);
         if (answer instanceof DatesThatHoldEveryStatement.Found(List<LocalDate> dates)) {
             assertTrue(holdAt(List.of(statements), dates), dates.toString());
             for (int date = 0; date < dates.size(); date++) {
                 assertTrue(days.get(date).definedAt(dates.get(date).toEpochDay()),
                         dates.get(date).toString());
+                assertTrue(isOf(classes.get(date), dates.get(date)), dates.get(date).toString());
             }
         }
         return answer;
+    }
+
+    private static DatesThatHoldEveryStatement.Answer found(List<DateTranslation> days,
+            DatesThatHoldEveryStatement.Statement... statements) {
+        return found(days, Collections.nCopies(days.size(), DatePartsLeft.EVERY_DATE),
+                statements);
+    }
+
+    /** Whether {@code date} is of {@code left}, each part and the year's remainders worked out of
+     *  the date. */
+    private static boolean isOf(DatePartsLeft left, LocalDate date) {
+        for (Map.Entry<TakenAs.DatePart, NumericDomain.Bounds> each : left.byPart().entrySet()) {
+            if (!each.getValue().admits(ExactRatio.of(each.getKey().of(date)))) {
+                return false;
+            }
+        }
+        for (Map.Entry<Integer, Set<Integer>> each : left.yearsLeave().entrySet()) {
+            if (!each.getValue().contains(Math.floorMod(date.getYear(), each.getKey()))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static DatePartsLeft from(TakenAs.DatePart part, long least) {
+        return new DatePartsLeft(Map.of(part, new NumericDomain.Bounds(
+                Endpoint.inclusive(Count.of(least)), null)));
     }
 
     private static DatesThatHoldEveryStatement.Answer found(
@@ -244,6 +280,37 @@ class DatesAreFoundOnlyWhereTheCalendarHasThemTest {
 
         assertEquals(DatesThatHoldEveryStatement.Otherwise.NOT_SHOWN, found(List.of(between(
                 LocalDate.of(2001, 1, 1), LocalDate.of(2001, 12, 31))), equal));
+    }
+
+    /** {@code month + day <= 20} beside a class from February: the eighteenth of February holds
+     *  both, and the nineteenth, which January has, is in no date of the class. */
+    @Test
+    void aDateIsFoundOnlyInItsClass() {
+        List<DateTranslation> any = List.of(EVERY_DATE);
+        List<DatePartsLeft> fromFebruary = List.of(from(TakenAs.DatePart.MONTH, 2));
+        DatesThatHoldEveryStatement.Statement upTo20 =
+                statement(-20, Rel.LE, 1, month(0), 1, day(0));
+
+        assertEquals(2, dates(found(any, fromFebruary, upTo20,
+                statement(-18, Rel.EQ, 1, day(0)))).getFirst().getMonthValue());
+        dates(found(any, upTo20, statement(-19, Rel.EQ, 1, day(0))));
+        assertFalse(found(any, fromFebruary, upTo20, statement(-19, Rel.EQ, 1, day(0)))
+                instanceof DatesThatHoldEveryStatement.Found);
+    }
+
+    /** A class of the years by their remainders, which no statement of a part says: the
+     *  twenty-ninth of February is found in a leap year of the class, and not in 2000 where the
+     *  class leaves only odd years. */
+    @Test
+    void aDateIsFoundInAYearItsClassLeaves() {
+        List<DateTranslation> any = List.of(EVERY_DATE);
+        LocalDate date = dates(found(any, List.of(DatePartsLeft.yearLeaving(401, Set.of(0))),
+                statement(-229, Rel.EQ, 100, month(0), 1, day(0)))).getFirst();
+
+        assertEquals(LocalDate.of(date.getYear(), 2, 29), date);
+        assertFalse(found(any, List.of(DatePartsLeft.yearLeaving(2, Set.of(1))),
+                statement(-2000, Rel.EQ, 1, year(0)), statement(-1, Rel.EQ, 1, month(0)))
+                instanceof DatesThatHoldEveryStatement.Found);
     }
 
     /** More dates than the years are chosen together for, or more choices of what their months

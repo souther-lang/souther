@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.DatePartsLeft;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.DateTranslation;
@@ -9,6 +10,7 @@ import souther.compiler.semantics.TakenAs;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -253,7 +255,10 @@ final class PlacesTiedAlongAWay {
             }
             asked.add(new DatesThatHoldEveryStatement.Statement(parts, constant, each.rel()));
         }
-        return DatesThatHoldEveryStatement.some(asked, days);
+        // A date the declarations leave anything but every date between two ends has no days here
+        // ({@code daysOf}), so each date is of no class beside them.
+        return DatesThatHoldEveryStatement.some(asked, days,
+                Collections.nCopies(days.size(), DatePartsLeft.EVERY_DATE));
     }
 
     private Sets sets() {

@@ -5189,8 +5189,8 @@ public final class Adequacy {
                 // all, and is spelled there rather than here — a boolean lifted at the boundary it
                 // is answered at cannot arrive somewhere as the wrong one of the three.
                 out.addAll(Coverages.assess(partitioning.along(axis), everyLine, subject, observed,
-                        line -> ItemAssessment.WritabilityProjection.ofReading(
-                                partitioning.edgeIsKnownWritable(axis.term(), line,
+                        (line, point) -> ItemAssessment.WritabilityProjection.ofReading(
+                                partitioning.pointIsKnownWritable(axis.term(), line, point,
                                         subject.quantities())), put,
                         partitioning.reaching()));
             }
