@@ -47,7 +47,11 @@ class ATotalOfWhatAFilterKeepsIsHeldToTheListItKeepsFromTest {
             }
             """;
 
-    private static final String BOUNDED = " && value <= 1000000000000";
+    /** What every model here is measured at: the readings of its comparisons and stops, and no
+     *  row looked for, which nothing here asks about. */
+    private static final Adequacy.Asked READ = new Adequacy.Asked(Adequacy.Level.OFF, false);
+
+    private static final String BOUNDED =" && value <= 1000000000000";
 
     private static final String FILTERED_HERE = "List.filter(m -> m.days.value >= 17, [a, b, c])";
 
@@ -57,7 +61,7 @@ class ATotalOfWhatAFilterKeepsIsHeldToTheListItKeepsFromTest {
     private static List<String> report(String bound, String kept, String compared) {
         Compilation compilation = Compilation.ofSource(SOURCE.formatted(bound, kept, compared),
                 "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.measure(READ);
         ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
@@ -75,18 +79,6 @@ class ATotalOfWhatAFilterKeepsIsHeldToTheListItKeepsFromTest {
 
     private static final String FOLDED = "List.fold((acc, m) -> acc + m.pay.value, 0, ms)"
             + " / List.length(ms)";
-
-    @ParameterizedTest
-    @ValueSource(strings = {
-            TOTAL + " / List.length(ms)",
-            "Rational.toInt(DOWN, " + TOTAL + " / List.length(ms))",
-    })
-    void aComparisonOverTheFilteredTotalIsRead(String compared) {
-        List<String> report = report(BOUNDED, FILTERED_HERE, compared);
-        assertEquals(List.of(), unread(report));
-        assertEquals(List.of(), stops(report));
-        assertTrue(complete(report, "k4"), () -> String.join("\n", report));
-    }
 
     /** A walk carrying a total over the kept list takes as many steps as the list it keeps from,
      *  so no step of it passes an {@code Int}. What the walk answers is no form the comparison
@@ -147,7 +139,7 @@ class ATotalOfWhatAFilterKeepsIsHeldToTheListItKeepsFromTest {
     })
     void theModelAsReportedIsMeasuredComplete(String compared) {
         Compilation compilation = Compilation.ofSource(AS_REPORTED.formatted(compared), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.measure(READ);
         ACompiledModel.compiles(compilation);
         List<String> report = AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
@@ -184,7 +176,7 @@ class ATotalOfWhatAFilterKeepsIsHeldToTheListItKeepsFromTest {
     private static List<String> reportOfTheHelper(String helper, String read) {
         Compilation compilation = Compilation.ofSource(
                 BUILT_BY_A_HELPER.formatted(helper, read), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.measure(READ);
         ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()

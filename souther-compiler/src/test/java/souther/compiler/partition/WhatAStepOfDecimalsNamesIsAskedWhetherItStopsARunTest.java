@@ -39,7 +39,8 @@ class WhatAStepOfDecimalsNamesIsAskedWhetherItStopsARunTest {
     /** The lines that say a run may stop, or that a comparison is not read. */
     private static List<String> stopsAndUnread(String total) {
         Compilation compilation = Compilation.ofSource(SOURCE.formatted(total), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
+        // The readings of the walk, and no row looked for, which nothing here asks about.
+        compilation.measure(new Adequacy.Asked(Adequacy.Level.OFF, false));
         ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()

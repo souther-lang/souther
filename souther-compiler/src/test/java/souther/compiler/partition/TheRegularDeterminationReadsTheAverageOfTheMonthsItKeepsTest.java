@@ -192,7 +192,9 @@ class TheRegularDeterminationReadsTheAverageOfTheMonthsItKeepsTest {
     /** The report of the model, the amounts held by {@code bounds}, line by line. */
     private static List<String> report(String bounds) {
         Compilation compilation = Compilation.ofSource(MODEL.replace("BOUNDS", bounds), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
+        // The readings of the lookup and of the total, and no row looked for, which nothing here
+        // asks about.
+        compilation.measure(new Adequacy.Asked(Adequacy.Level.OFF, false));
         ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
