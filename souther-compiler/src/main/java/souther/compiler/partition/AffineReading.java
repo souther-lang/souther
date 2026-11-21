@@ -338,6 +338,17 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                        ElementsMet elements, Supplier<T> fresh, IntSupplier figureAsked);
     }
 
+    /** Names kept by no one: each is read afresh, as a reading that stands alone has them. */
+    enum Unkept implements NamesKept {
+        EVERY_NAME_AFRESH;
+
+        @Override
+        public <T> T answerOf(ValueStanding.NameQuestion question, Core value, InputReads at,
+                              ElementsMet elements, Supplier<T> fresh, IntSupplier figureAsked) {
+            return fresh.get();
+        }
+    }
+
     /**
      * The same, of the input {@code ofTheInput} reads, with the names as {@code reads} has them, saying
      * which of the four it is.

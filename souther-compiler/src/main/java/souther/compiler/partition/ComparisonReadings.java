@@ -350,6 +350,9 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      *                   ({@link AConstructionOnTheWay}), worked out the first time it is asked;
      *                   where what a run works out before it is not read, every construction that
      *                   may come first, with no way to any of them
+     * @param quotients  the quotients evaluating the comparison always works out, in the order
+     *                   it works them out ({@link QuotientsEveryRunWorksOut}): none for an
+     *                   application, which states no comparison to evaluate
      */
     record Reading(ConstructOccurrence occurrence, Stated statement, Citation at,
                    InputReads reads,
@@ -365,7 +368,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                    Function<Core.Construct,
                            Optional<WhatARunWorksOutBeforeACount.BeforeAConstruction>>
                            beforeAConstruction,
-                   Supplier<List<AConstructionOnTheWay>> constructionsOnTheWay) {
+                   Supplier<List<AConstructionOnTheWay>> constructionsOnTheWay,
+                   List<Core.Binary> quotients) {
 
         Reading {
             if (occurrence == null || statement == null || at == null
@@ -1537,7 +1541,9 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                             ? WhatARunWorksOutBeforeACount.workedOutBeforeAConstruction(in.root(),
                                     e, made)
                             : Optional.empty(),
-                    new Pullback.Once<>(() -> constructionsOnTheWay(e, past.asks(), in))));
+                    new Pullback.Once<>(() -> constructionsOnTheWay(e, past.asks(), in)),
+                    stated.statement() instanceof Stated.AComparison
+                            ? QuotientsEveryRunWorksOut.in(e) : List.of()));
         }
         // A fork the reading of the runs takes a way out of, under the closures the walk is in. A
         // value standing as a wider type is no fork, and a fork under it is met one step down.

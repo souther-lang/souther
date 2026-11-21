@@ -4384,6 +4384,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 operationsOverTheSides(read, conditions, heldWhole,
                         totalsWrittenByOneElement(terms),
                         numbers -> heldApart(numbers, read, theWay));
+        boolean[] lacking = valuesLackingARow(past, read);
         for (int at = 0; at < sides.size(); at++) {
             WhatARelationLeavesUndivided.Leaves each = offItsLine
                     ? WhatARelationLeavesUndivided.leavesOffItsLine(terms, at, constant, relation,
@@ -4395,7 +4396,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                             granularityOf(carriers.get(at)), greatestOf(carriers.get(at)),
                             supports, operations);
             leaves.add(each);
-            if (settledAtEveryValue(each)) {
+            if (settledAtEveryValue(each) && !lacking[at]) {
                 return comesOutOneWay(out, settled, countsRead);
             }
             if (each instanceof WhatARelationLeavesUndivided.Leaves.Undivided) {
@@ -4459,6 +4460,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         for (int at = 0; at < sides.size(); at++) {
+            if (lacking[at] && leaves.get(at) instanceof WhatARelationLeavesUndivided.Leaves.Settled) {
+                leaves.set(at, null);
+            }
             if (leaves.get(at) instanceof WhatARelationLeavesUndivided.Leaves.Settled
                     && !out.containsAll(sides.get(at).madeOf())) {
                 putDown(at, leaves.get(at), out, settled);
@@ -9602,6 +9606,29 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return placesTheCountReads(side.countedOver())
                 .stream().<FilingCoordinate>map(FilingCoordinate::at)
                 .filter(place -> beside.stream().noneMatch(place::sharesAPlaceWith)).toList();
+    }
+
+    /**
+     * For each side, whether some value of its number has no row that gets past what the run
+     * works out: the number the side is lies in fewer values once the run is narrowed to what
+     * gets past ({@link DemandReading.Answered#narrowing}) than the declarations leave it.
+     *
+     * <p>What is settled of such a number is said of the values that have a row. A class that
+     * held one that has none with one that has would hold two the program tells apart, a stop
+     * and an answer, so the side is not told as settled.
+     */
+    private boolean[] valuesLackingARow(DemandReading.Answered past, InputReading read) {
+        boolean[] out = new boolean[sides.size()];
+        SearchRegion all = read.quantities().region();
+        for (int at = 0; at < out.length && !past.narrowing().isEmpty(); at++) {
+            if (sides.get(at).number() instanceof NumericTerm number) {
+                List<TakenConstraint> ofIt = past.narrowing().stream()
+                        .filter(each -> each.terms().contains(number)).toList();
+                out[at] = !ofIt.isEmpty() && !Objects.equals(all.projectionOf(number),
+                        TakenConstraint.narrowedBy(ofIt, all).projectionOf(number));
+            }
+        }
+        return out;
     }
 
     /**
