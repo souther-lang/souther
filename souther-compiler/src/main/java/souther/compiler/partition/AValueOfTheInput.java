@@ -82,13 +82,14 @@ final class AValueOfTheInput {
     }
 
     /**
-     * The whole numbers a value of the input {@code read} reads holds at {@code place}, every one
-     * of which some value holds there, what the rest of it holds aside ({@link #whatAValueAtThemMeets}
-     * of the one place): within the ends of what the place holds, and within those this says,
-     * each none where there is none. Nothing where that is not shown.
+     * The whole numbers a value of the input {@code read} reads holds at each of {@code places},
+     * every combination of which, one at each, some value holds together
+     * ({@link #whatAValueAtThemMeets}): within the ends of what each place holds, and within those
+     * this says, each none where there is none. Nothing where that is not shown.
      */
-    static Optional<WholeRun> wholeNumbersAt(InputReading read, TermPath place) {
-        return runsAt(read, List.of(place)).map(runs -> runs.get(place));
+    static Optional<Map<TermPath, WholeRun>> wholeNumbersAt(InputReading read,
+                                                            Collection<TermPath> places) {
+        return runsAt(read, places);
     }
 
     /**

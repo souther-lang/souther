@@ -308,6 +308,44 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
                         line.indexOf("invariant"), line.indexOf(" keeps"))).toList()), report);
     }
 
+    /** Bounds on two fields a record's clause ties together are a region only where some value of
+     *  the record holds them all: each field keeping a value alone is not that. */
+    @Test
+    void boundsOnFieldsARecordsClauseTiesAreNoRegionWhereNoValueHoldsThemAll() {
+        String report = report("""
+                module m
+
+                data P = { x: Int, y: Int }
+                    invariant x == y
+
+                behavior f : (p: P) -> Bool
+                let f (p) = (p.x + 9223372036854775807) + 1 > (p.y - 9223372036854775807) - 2
+                """);
+
+        assertEquals(List.of(), suggested(report), report);
+    }
+
+    /** Readings of one rule that bound two fields a record's clause ties together, one each, say
+     *  no region together unless some value of the record is shown to hold both. */
+    @Test
+    void readingsBoundingTwoFieldsAClauseTiesSayNoRegionTogether() {
+        String report = report("""
+                module m
+
+                data P = { x: Int, y: Int }
+                    invariant x == y
+
+                let h (v: Int, k: Int, j: Int): Bool = (v + k) + j > 0
+
+                behavior f : (p: P) -> Bool
+                let f (p) = h(p.x, 9223372036854775807, 1) && h(p.y, 0 - 9223372036854775807, 0 - 2)
+                """);
+
+        assertTrue(report.contains("p.x + 9223372036854775807")
+                && report.contains("p.y - 9223372036854775807"), report);
+        assertEquals(List.of(), suggested(report), report);
+    }
+
     /** A bound a record's clause on the same field leaves no value beside is no region. */
     @Test
     void aBoundARecordsClauseLeavesNoValueBesideIsNoRegion() {

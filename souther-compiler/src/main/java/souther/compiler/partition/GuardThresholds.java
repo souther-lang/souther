@@ -29,7 +29,6 @@ import souther.compiler.inputs.AStopShown;
 import souther.compiler.inputs.AStopNotShown;
 import souther.compiler.inputs.WhatAConstructionAsks;
 import souther.compiler.inputs.WhatKeepsEveryRunGoing;
-import souther.compiler.inputs.Position;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.InputReading;
@@ -1454,7 +1453,7 @@ public final class GuardThresholds {
             for (ABoundThatKeepsEveryRunGoing other : region.bounds()) {
                 BigInteger at = other != bound ? other.at() : other.atMost()
                         ? other.at().add(BigInteger.ONE) : other.at().subtract(BigInteger.ONE);
-                for (TermPath place : placesHeldBy(other.holder(), read)) {
+                for (TermPath place : UndividedByARelation.placesHeldBy(other.holder(), read)) {
                     within.add(new TakenConstraint.Affine(new LinearForm<>(
                             ExactRatio.of(at).negated(),
                             Map.of(new NumericTerm.ValueOf(place), ExactRatio.ONE)),
@@ -1466,20 +1465,6 @@ public final class GuardThresholds {
             }
         }
         return region.asFarOutAsCanBe(farOut);
-    }
-
-    /** The places of the input, reached from a parameter through fields alone, whose values an
-     *  invariant declared on {@code holder} bounds ({@link UndividedByARelation#holderOf}). */
-    private static List<TermPath> placesHeldBy(ABoundThatKeepsEveryRunGoing.Holder holder,
-                                               InputReading read) {
-        List<TermPath> out = new ArrayList<>();
-        for (Position each : read.domain().positions()) {
-            if (each.path().steps().stream().allMatch(TermPath.Step.Field.class::isInstance)
-                    && holder.equals(UndividedByARelation.holderOf(each.path(), read))) {
-                out.add(each.path());
-            }
-        }
-        return out;
     }
 
     /**

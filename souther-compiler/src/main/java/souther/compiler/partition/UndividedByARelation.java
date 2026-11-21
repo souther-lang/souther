@@ -2884,7 +2884,25 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 }
             }
         }
+        // What each bound is declared on, and every place of the input those declarations hold:
+        // a value of the input has to be shown to hold them all together, beside the rules
+        // already written, and not each apart.
         List<ABoundThatKeepsEveryRunGoing> out = new ArrayList<>();
+        Map<TermPath, ABoundThatKeepsEveryRunGoing.Holder> holders = new LinkedHashMap<>();
+        Set<TermPath> held = new LinkedHashSet<>();
+        for (TermPath place : kept.keySet()) {
+            ABoundThatKeepsEveryRunGoing.Holder holder = holderOf(place, read);
+            if (holder == null) {
+                return Optional.empty();
+            }
+            holders.put(place, holder);
+            held.addAll(placesHeldBy(holder, read));
+        }
+        Optional<Map<TermPath, AValueOfTheInput.WholeRun>> runs =
+                AValueOfTheInput.wholeNumbersAt(read, held);
+        if (runs.isEmpty()) {
+            return Optional.empty();
+        }
         for (Map.Entry<TermPath, BigInteger[]> each : kept.entrySet()) {
             NumericTerm.ValueOf value = new NumericTerm.ValueOf(each.getKey());
             FormRange holds = FormRange.endsHeldByTheRules(value, read);
@@ -2895,7 +2913,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         : holds.least().compareTo(ExactRatio.of(bound)) >= 0))) {
                     continue;
                 }
-                ABoundThatKeepsEveryRunGoing one = aBoundOn(value, bound, atMost, read);
+                ABoundThatKeepsEveryRunGoing one = aBoundOn(value, bound, atMost,
+                        holders.get(each.getKey()), runs.get(), read);
                 if (one == null) {
                     return Optional.empty();
                 }
@@ -2903,6 +2922,20 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         return WhatKeepsEveryRunGoing.of(out);
+    }
+
+    /** The places of the input, reached from a parameter through fields alone, whose values an
+     *  invariant declared on {@code holder} bounds: those {@link #holderOf} says it holds. */
+    static List<TermPath> placesHeldBy(ABoundThatKeepsEveryRunGoing.Holder holder,
+                                       InputReading read) {
+        List<TermPath> out = new ArrayList<>();
+        for (Position each : read.domain().positions()) {
+            if (each.path().steps().stream().allMatch(TermPath.Step.Field.class::isInstance)
+                    && holder.equals(holderOf(each.path(), read))) {
+                out.add(each.path());
+            }
+        }
+        return out;
     }
 
     /**
@@ -2984,26 +3017,35 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
     /**
      * {@code bound} on the values of {@code value}'s place, from above where {@code atMost}, as
-     * the invariant an author declares it ({@link #holderOf}), beside the whole numbers a value of
-     * the input is shown to hold there — or null where the place is held by nothing an invariant
-     * can be declared on, its values are no whole numbers or dates, or what it holds is not shown.
+     * the invariant an author declares it on {@code holder}, beside the whole numbers
+     * {@code runs} say a value of the input holds together at every place the holder holds — or
+     * null where the place's values are no whole numbers or dates, or the holder holds a place
+     * {@code runs} do not say.
      */
-    private static ABoundThatKeepsEveryRunGoing aBoundOn(NumericTerm.ValueOf value,
-                                                         BigInteger bound, boolean atMost,
-                                                         InputReading read) {
+    private static ABoundThatKeepsEveryRunGoing aBoundOn(
+            NumericTerm.ValueOf value, BigInteger bound, boolean atMost,
+            ABoundThatKeepsEveryRunGoing.Holder holder,
+            Map<TermPath, AValueOfTheInput.WholeRun> runs, InputReading read) {
         TermOrders orders = read.quantities().ordersOf(value);
         Carrier carrier = orders == null ? null : orders.answered();
         ObservedValue at = carrier == null ? null
                 : carrier.valueOf(Count.of(new BigDecimal(bound)));
-        ABoundThatKeepsEveryRunGoing.Holder holder = holderOf(value.position(), read);
-        Optional<AValueOfTheInput.WholeRun> held =
-                AValueOfTheInput.wholeNumbersAt(read, value.position());
+        List<TermPath> places = placesHeldBy(holder, read);
         if (!(at instanceof ObservedValue.Integer || at instanceof ObservedValue.Temporal)
-                || holder == null || held.isEmpty()) {
+                || places.isEmpty() || !runs.keySet().containsAll(places)) {
             return null;
         }
+        BigInteger least = null;
+        BigInteger greatest = null;
+        for (TermPath place : places) {
+            AValueOfTheInput.WholeRun run = runs.get(place);
+            least = run.least() == null ? least : least == null ? run.least()
+                    : least.max(run.least());
+            greatest = run.greatest() == null ? greatest : greatest == null ? run.greatest()
+                    : greatest.min(run.greatest());
+        }
         return new ABoundThatKeepsEveryRunGoing(holder, atMost, bound, at,
-                new ABoundThatKeepsEveryRunGoing.Held(held.get().least(), held.get().greatest()));
+                new ABoundThatKeepsEveryRunGoing.Held(least, greatest));
     }
 
     /**

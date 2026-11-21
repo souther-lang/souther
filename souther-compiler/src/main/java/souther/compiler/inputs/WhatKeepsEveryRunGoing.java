@@ -20,7 +20,10 @@ import java.util.Set;
  * invariant holds every value of it, so two places one data holds are bounded by one declaration,
  * the tighter of what each asks, and the region is the declarations whatever order they were met
  * in. Made only where each data keeps a value under them: what its rules already leave it, met
- * with both sides declared, holds a whole number, every one of which is a value.
+ * with both sides declared, holds a whole number. What its rules leave is what a value of the
+ * input holds at every place the declarations hold, one number at each, all together
+ * ({@code AValueOfTheInput}), so a bound met with it at each place leaves a value of the input
+ * holding every one at once.
  *
  * <p>How far out the region goes is a second fact, said of each bound apart: a bound is as far out
  * as one can be where a run with it declared one step further out, every other declaration
@@ -76,10 +79,23 @@ public record WhatKeepsEveryRunGoing(Set<ABoundThatKeepsEveryRunGoing> bounds,
      * the two together leave some data no value. How far out a bound goes is shown of one region,
      * and stands only where the two together are that region, whatever order either met its
      * declarations in.
+     *
+     * <p>That a value of the input holds every declaration together was shown of each reading's
+     * own, over the places its declarations hold. Two that declare on what neither alone does
+     * hold places no reading asked together, and a clause may tie them: none is said of them.
+     * Where the two together declare on what one of them does, they hold its places, and only
+     * tighter.
      */
     public static Optional<WhatKeepsEveryRunGoing> together(Optional<WhatKeepsEveryRunGoing> one,
                                                             Optional<WhatKeepsEveryRunGoing> other) {
         if (one.isEmpty() || other.isEmpty()) {
+            return Optional.empty();
+        }
+        Set<ABoundThatKeepsEveryRunGoing.Holder> declaredOn = new LinkedHashSet<>(
+                one.get().declaredOn());
+        declaredOn.addAll(other.get().declaredOn());
+        if (!declaredOn.equals(one.get().declaredOn())
+                && !declaredOn.equals(other.get().declaredOn())) {
             return Optional.empty();
         }
         Set<ABoundThatKeepsEveryRunGoing> both = new LinkedHashSet<>(one.get().bounds);
@@ -93,6 +109,13 @@ public record WhatKeepsEveryRunGoing(Set<ABoundThatKeepsEveryRunGoing> bounds,
             }
             return region.asFarOutAsCanBe(farOut);
         });
+    }
+
+    /** What the bounds are declared on. */
+    private Set<ABoundThatKeepsEveryRunGoing.Holder> declaredOn() {
+        Set<ABoundThatKeepsEveryRunGoing.Holder> out = new LinkedHashSet<>();
+        bounds.forEach(each -> out.add(each.holder()));
+        return out;
     }
 
     /** Whether {@code bound} is as far out as a bound of this region can be. */
