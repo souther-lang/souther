@@ -1493,6 +1493,13 @@ public final class InputReads {
         }
     }
 
+    /** The argument whose very elements {@code operation}'s answer holds some of, or null where it
+     *  holds no argument's ({@link InputPath#argumentWhoseElementsItHolds}), for a reader outside
+     *  this reading that follows an element back to the list it came from. */
+    public static DeclaredArgument argumentWhoseElementsItHolds(ValueName operation) {
+        return InputPath.argumentWhoseElementsItHolds(operation);
+    }
+
     /**
      * The argument whose very elements {@code operation}, applied to {@code args}, answers some of:
      * the one its law says it holds the elements of — a filter, a reordering — or the one a closure

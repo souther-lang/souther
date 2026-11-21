@@ -31,12 +31,17 @@ class WhatAFilterKeepsIsHeldToWhatItsTestStatesTest {
     /** Whether working out the left side of the one comparison against {@code k} {@code body}
      *  writes, over {@code ds}, ends no run, beside the helpers {@code helpers}. */
     private static boolean theLeftSideEndsNoRun(String helpers, String body) {
+        return theLeftSideEndsNoRun(helpers, "Int", body);
+    }
+
+    /** The same, {@code ds} a list of {@code element}. */
+    private static boolean theLeftSideEndsNoRun(String helpers, String element, String body) {
         ReadComparisons read = ReadComparisons.ofTheAnalysis("""
                 module w1
                 %s
-                behavior m : (ds: List<Int>, k: Int) -> Bool
+                behavior m : (ds: List<%s>, k: Int) -> Bool
                 let m (ds, k) = %s
-                """.formatted(helpers, body), "m");
+                """.formatted(helpers, element, body), "m");
         List<ComparisonReadings.Reading> againstK = read.comparisons().stream()
                 .filter(each -> each.statement()
                         instanceof ComparisonReadings.Stated.AComparison compared
@@ -86,6 +91,27 @@ class WhatAFilterKeepsIsHeldToWhatItsTestStatesTest {
         assertFalse(theLeftSideEndsNoRun("", """
                 List.length(List.map(x -> x + 1, \
                 List.filter(y -> y > 0, List.filter(z -> z > 5, ds)))) >= k"""), "control");
+    }
+
+    /** A {@code take} or a reordering above the filter answers some of the very elements it was
+     *  handed, so what the filter's test states holds of every element past them too. */
+    @Test
+    void aTestBeneathATakeOrAReorderingHoldsOfWhatComesPastThem() {
+        assertTrue(theLeftSideEndsNoRun("", """
+                List.length(List.map(x -> x + 1, \
+                List.take(2, List.reverse(List.filter(y -> y < 100, ds))))) >= k"""));
+        assertFalse(theLeftSideEndsNoRun("", """
+                List.length(List.map(x -> x + 1, List.take(2, List.reverse(ds)))) >= k"""),
+                "control");
+    }
+
+    /** An element of what a {@code take} keeps stands where the elements it was handed stand,
+     *  and holds what that place holds, no test kept it or not. */
+    @Test
+    void anElementSomeAreKeptOfWithNoTestHoldsWhatItsPlaceHolds() {
+        String small = "data Small = Int\n    invariant value >= 0 && value <= 100";
+        assertTrue(theLeftSideEndsNoRun(small, "Small",
+                "List.length(List.map(x -> x.value + 1, List.take(2, ds))) >= k"));
     }
 
     @Test

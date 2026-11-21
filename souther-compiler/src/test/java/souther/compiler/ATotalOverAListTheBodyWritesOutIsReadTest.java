@@ -183,6 +183,18 @@ class ATotalOverAListTheBodyWritesOutIsReadTest {
         assertEquals(measured(SUM), report);
     }
 
+    /** The same, the list being what a helper answers: a helper is read where its parameters are
+     *  the values it was handed, and the list it writes is the one the fold walks. */
+    @Test
+    void aFoldOverTheListAHelperWritesAddsItsElementsOneStepAtATime() {
+        String model = MODEL.replace("data No\n", """
+                data No
+                let monthsOf (x: Month, y: Month, z: Month): List<Month> = [x, y, z]
+                """);
+        assertEquals(measured(model, SUM),
+                measured(model, "List.fold((acc, m) -> acc + m.pay, 0, monthsOf(a, b, c))"));
+    }
+
     @Test
     void aTotalThatIsDividedByAWrittenNumberIsTheSumDividedByIt() {
         String report = measured("List.sum(List.map(m -> m.pay, [a, b, c])) / 3");
