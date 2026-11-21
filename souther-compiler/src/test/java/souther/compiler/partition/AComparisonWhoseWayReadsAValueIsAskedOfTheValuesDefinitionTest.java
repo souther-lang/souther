@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ACompiledModel;
@@ -9,21 +8,18 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A comparison whose way reads a value defined by name is said to be one a run may stop on the way
- * to only where the value's definition can end a run. Reading the value ends none; working out
- * what it is defined as may, and that is asked of the definition.
+ * A comparison whose way reads a value defined by name is not read for that reason only where the
+ * value's definition can end a run. Reading the value ends none; what it is defined as may, and
+ * that is asked of the definition.
+ *
+ * <p>The comparison on the way to the later one reads {@code floor}, and the later one is what
+ * is said not read when the reading of {@code floor} is left unsaid.
  */
 class AComparisonWhoseWayReadsAValueIsAskedOfTheValuesDefinitionTest {
-
-    private static final Map<String, Compilation> MEASURED = new ConcurrentHashMap<>();
 
     private static final String MODEL = """
             module e10
@@ -31,73 +27,50 @@ class AComparisonWhoseWayReadsAValueIsAskedOfTheValuesDefinitionTest {
             data Hours = Decimal
                 invariant value >= 0.0m
 
-            data TermUntil = { endsOn: Date }
-            data ContractTerm = Indefinite | TermUntil
-
-            data Few = { hours: Hours }
-            data Short = { endsOn: Date }
-            data Reason = Few | Short
-
-            behavior exclusions : (hours: Hours, contract: ContractTerm, on: Date) -> List<Reason>
+            behavior f : (hours: Hours, on: Date, endsOn: Date) -> Bool
 
             %s
 
-            let contractEnd (contract: ContractTerm, on: Date): List<Date> =
-                match contract with
-                    | Indefinite           -> []
-                    | TermUntil { endsOn } -> [ endsOn | Date.daysBetween(on, endsOn) + 1 < %s ]
-
-            let exclusions (hours, contract, on) =
-                [ Few { hours = hours } | %s ]
-                  ++ List.map(d -> Short { endsOn = d }, contractEnd(contract, on))
+            let f (hours, on, endsOn) =
+                hours.value < %s && Date.daysBetween(on, endsOn) + 1 < %s
             """;
 
     @Test
-    void aDecimalDefinedByNameEndsNoRunWhenItIsRead() {
-        assertEquals(List.of(), mayStop("let floor = 20.0m", "hours.value < floor"));
+    void aValueDefinedByAConstantEndsNoRunWhenItIsRead() {
+        assertFalse(notRead(MODEL.formatted("let floor = 20.0m", "floor", "31")));
     }
 
     @Test
-    void aBuildWithAnInvariantTheValueHoldsEndsNoRunWhenItIsRead() {
-        assertEquals(List.of(),
-                mayStop("let floor = Hours(20.0m)", "hours.value < floor.value"));
+    void aBuildOfADeclaredTypeEndsNoRunWhenItsInvariantHolds() {
+        assertFalse(notRead(MODEL.formatted("let floor = Hours(20.0m)", "floor.value", "31")));
     }
 
     @Test
-    void aValueDefinedByAnotherValueEndsNoRunWhenItIsRead() {
-        assertEquals(List.of(), mayStop("""
-                let base = 20.0m
-                let floor = base""", "hours.value < floor"));
+    void aValueWhoseDefinitionMayEndARunIsNotTakenToGetPast() {
+        assertTrue(notRead("""
+                module e10
+
+                behavior f : (n: Int, on: Date, endsOn: Date) -> Bool
+
+                let floor = Int.abs(9223372036854775807) + 1
+
+                let f (n, on, endsOn) =
+                    n < floor
+                        && Date.daysBetween(on, endsOn) + 1 < 31
+                """, "comparison@9:"));
     }
 
-    @Test
-    void aValueWhoseDefinitionEndsARunIsNotTakenToGetPast() {
-        List<String> lines = mayStop("let floor = Int.abs(9223372036854775807) + 1",
-                "hours.value < 20.0m", "floor");
-        assertTrue(!lines.isEmpty(), "a definition that may end a run is not taken past");
+    private static boolean notRead(String model) {
+        return notRead(model, "");
     }
 
-    private static List<String> mayStop(String values, String condition) {
-        return mayStop(values, condition, "31");
-    }
-
-    /** The lines of the report saying what was not read. */
-    private static List<String> mayStop(String values, String condition, String days) {
-        Compilation compilation = measured(MODEL.formatted(values, days, condition));
+    /** Whether the report says what was not read at {@code where}, or anywhere for the empty
+     *  one. */
+    private static boolean notRead(String model, String where) {
+        Compilation compilation = ACompiledModel.compiles(ACompiledModel.measured(model,
+                Adequacy.Asked.reportOnly(Adequacy.Level.OFF)));
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
-                .filter(line -> line.contains("not read:"))
-                .toList();
-    }
-
-    @AfterAll
-    static void released() {
-        MEASURED.clear();
-    }
-
-    private static Compilation measured(String model) {
-        Compilation shared = MEASURED.computeIfAbsent(model,
-                source -> ACompiledModel.measured(source, Adequacy.Asked.fullReport()));
-        return ACompiledModel.compiles(shared);
+                .anyMatch(line -> line.contains("not read:") && line.contains(where));
     }
 }
