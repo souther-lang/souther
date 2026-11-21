@@ -22,7 +22,6 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
@@ -193,7 +192,6 @@ final class StopAssessment {
             out.add(new Judgement.Unresolved(null, WhyAStopIsNotShown.ON_ROWS_OF_THE_STATEMENT));
         }
         List<LinearForm<NumericTerm>> divisors = divisorsOf(each, read);
-        List<LinearForm<NumericTerm>> known = divisors.stream().filter(Objects::nonNull).toList();
         for (Place place : places) {
             UndividedByARelation.Working working = place.worked().stops().operations();
             WhatAWayLeavesOfAValue left = place.aRowArrives()
@@ -210,8 +208,9 @@ final class StopAssessment {
                 } else if (keptWithinItsEnds(left, operations.get(at))) {
                     out.add(new Judgement.Safe(site, WhyNone.WITHIN_ITS_ENDS));
                 } else {
-                    out.add(aStopIn(each, place, left, site, operations.get(at).origin().node(),
-                            known, within, read));
+                    Core node = operations.get(at).origin().node();
+                    out.add(aStopIn(each, place, left, site, node,
+                            divisorsBefore(each, divisors, divisors.size(), node), within, read));
                 }
             }
         }
@@ -246,6 +245,26 @@ final class StopAssessment {
     }
 
     /**
+     * The divisors of the quotients among the first {@code upTo} of those the comparison always
+     * works out ({@code divisors}, in that order) that a run may work out before what it works out
+     * at {@code node}: every one but those shown to come after it ({@link EvaluationPlaces}). One
+     * whose divisor is no form of the input's numbers is among them as null, a quotient a value is
+     * not shown to get past ({@link #aStopIn}): what is not read of it is not that it does not
+     * stop.
+     */
+    private static List<LinearForm<NumericTerm>> divisorsBefore(
+            ComparisonReadings.Reading each, List<LinearForm<NumericTerm>> divisors, int upTo,
+            Core node) {
+        List<LinearForm<NumericTerm>> out = new ArrayList<>();
+        for (int at = 0; at < upTo; at++) {
+            if (!each.places().comesAfter(each.quotients().get(at), node)) {
+                out.add(divisors.get(at));
+            }
+        }
+        return out;
+    }
+
+    /**
      * What is shown of each quotient the comparison always works out, which a run works out
      * wherever it evaluates the comparison and stops at where the divisor is nought. None stops
      * where the way to the comparison, at each place it is worked out, keeps the divisor from
@@ -274,7 +293,7 @@ final class StopAssessment {
                 continue;
             }
             Site site = new Site.ByNought(divisor);
-            List<LinearForm<NumericTerm>> before = divisors.subList(0, at);
+            Core node = each.quotients().get(at);
             // Wherever the comparison is worked out, along the way to it there.
             if (comparison.stream().allMatch(place -> {
                 WhatAWayLeavesOfAValue left = place.aRowArrives()
@@ -282,15 +301,12 @@ final class StopAssessment {
                 return left == null || left.keepsAwayFromNought(divisor);
             })) {
                 out.add(new Judgement.Safe(site, WhyNone.DIVISOR_AWAY_FROM_NOUGHT));
-            } else if (places.stream().map(Place::way).distinct().count() > 1
-                    || before.contains(null)) {
-                out.add(new Judgement.Unresolved(site, before.contains(null)
-                        ? WhyAStopIsNotShown.NOT_OVER_THE_INPUT
-                        : WhyAStopIsNotShown.NOT_EVERY_OPERATION_TOLD));
+            } else if (places.stream().map(Place::way).distinct().count() > 1) {
+                out.add(new Judgement.Unresolved(site, WhyAStopIsNotShown.NOT_EVERY_OPERATION_TOLD));
             } else {
                 Place there = comparison.getFirst();
                 out.add(aStopIn(each, there, WhatAWayLeavesOfAValue.along(read, there.way()), site,
-                        each.quotients().get(at), before, within, read));
+                        node, divisorsBefore(each, divisors, at, node), within, read));
             }
         }
         return out;
@@ -395,18 +411,21 @@ final class StopAssessment {
         // comparison, and what of the comparison this is not worked out before. One worked out of
         // this comes after it, and so does one the comparison works out past everything of this;
         // neither is got to where it stops. One whose place is not known is asked. One written as
-        // this is, over the input, stops on the very rows this does, so a run past its ends there
-        // stops in this as written all the same, and it is not asked.
+        // this is is not ({@link #toldAgain}), and every quotient a run may work out before this is
+        // ({@link #divisorsBefore}).
         int at = site instanceof Site.PastItsEnds(var operation)
                 ? indexOf(working.operations(), operation) : -1;
-        List<UndividedByARelation.IntOperation> others =
-                new ArrayList<>(earlier.get().operations());
+        List<UndividedByARelation.IntOperation> others = new ArrayList<>();
+        for (UndividedByARelation.IntOperation it : earlier.get().operations()) {
+            if (!toldAgain(it, site)) {
+                others.add(it);
+            }
+        }
         for (int other = 0; other < working.operations().size(); other++) {
             UndividedByARelation.IntOperation it = working.operations().get(other);
             if (other != at && !it.after().contains(at)
                     && !each.places().comesAfter(it.origin().node(), siteNode)
-                    && !(site instanceof Site.PastItsEnds(var operation)
-                            && it.form().equals(operation.form()))) {
+                    && !toldAgain(it, site)) {
                 others.add(it);
             }
         }
@@ -456,6 +475,20 @@ final class StopAssessment {
         return new Judgement.Unresolved(site, tries[0] <= 0
                 ? WhyAStopIsNotShown.NO_VALUE_FOUND_WITHIN_WHAT_IS_TRIED
                 : WhyAStopIsNotShown.NO_VALUE_FOUND);
+    }
+
+    /**
+     * Whether {@code it} is written as the operation {@code site} is past the ends of: the same
+     * form over the input. What is shown of a site is that a run stops in what it works out as
+     * written ({@link Site#written}), at a value, and not at which of the places working that out
+     * it stops: a value past the ends of this takes every place written as this past its ends too,
+     * or past none of them first, so a run with it stops in this as written wherever it stops
+     * first. One written as this is not asked of the value; one written otherwise, or a quotient,
+     * is ({@link #divisorsBefore}).
+     */
+    private static boolean toldAgain(UndividedByARelation.IntOperation it, Site site) {
+        return site instanceof Site.PastItsEnds(var operation)
+                && it.form().equals(operation.form());
     }
 
     /**
