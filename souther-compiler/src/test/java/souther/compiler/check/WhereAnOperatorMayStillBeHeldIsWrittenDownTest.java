@@ -480,6 +480,10 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.partition.ComparisonReadings.wayTo",
                     "reads the right side of a conjunction or a disjunction as run only where the"
                             + " left leaves the answer open, for the way to a call made inside it"),
+            new Held("souther.compiler.partition.WhatARunWorksOutBeforeACount"
+                            + ".choosesInsideAFunctionValue",
+                    "reads the right side of a conjunction or a disjunction as a way chosen, for"
+                            + " whether a way inside a function value takes one"),
 
             // Which of a condition's parts decide the fork, which the two connectives are what
             // divides: either side coming out the wrong way is the whole answer, so a rule about
