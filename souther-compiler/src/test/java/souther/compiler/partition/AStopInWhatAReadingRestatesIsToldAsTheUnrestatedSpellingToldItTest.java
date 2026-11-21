@@ -30,11 +30,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
 
-    /** The note of {@code q + 1}. The number is a field of a record that writes a clause, and no
-     *  run its rules leave it is shown, so no value of the input is shown holding it and the stop
-     *  is one not resolved, with the rows every run getting there stops at. */
-    private static final String THE_STOP = "a run that gets there stops in k.q + 1 where k.q is"
-            + " at least 9223372036854775807, and no such run is shown to exist";
+    /** The note of {@code q + 1}. The number is a field of a record that writes a clause on
+     *  another field, so a value of the record holding the greatest {@code Int} there, with the
+     *  other field at nought, is written down, and the stop is shown. */
+    private static final String THE_STOP = "every run stops in k.q + 1 where k.q is"
+            + " at least 9223372036854775807";
 
     private static final Map<String, String> CONDITIONS = new LinkedHashMap<>();
 
@@ -115,8 +115,8 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
     /** The arms of a choice that is an argument are worked out before the operation picks one. */
     @Test
     void anOperationInAnArmThatIsAnArgumentIsToldWhateverTheOperationPicks() {
-        assertEquals(1, TOLD.get("maxOfAnArm").size(), TOLD.toString());
-        assertEquals(1, TOLD.get("absOfAnArm").size(), TOLD.toString());
+        assertEquals(1, stopsToldOf("maxOfAnArm"), TOLD.toString());
+        assertEquals(1, stopsToldOf("absOfAnArm"), TOLD.toString());
     }
 
     /** A closure is applied to each element, and what a run works out on an arm it takes there
@@ -131,7 +131,7 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
     @Test
     void anArmIsToldThroughTheChoicesAndTheRulesReadInsideIt() {
         assertEquals(1, TOLD.get("nestedArm").size(), TOLD.toString());
-        assertEquals(1, TOLD.get("armOfARule").size(), TOLD.toString());
+        assertEquals(1, stopsToldOf("armOfARule"), TOLD.toString());
     }
 
     /** An arm of a match is told as an arm of an if is. */
@@ -203,6 +203,12 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
         assertEquals(List.of(), TOLD.get("maxOfAnArmNoStop"));
         assertEquals(List.of(), TOLD.get("maxOfAnArmUnreached"));
         assertEquals(List.of(), TOLD.get("matchArmNoStop"));
+    }
+
+    /** How many stops the report says a run may come to in the behavior {@code name}, not
+     *  counting the places it says are not resolved beside them. */
+    private static long stopsToldOf(String name) {
+        return TOLD.get(name).stream().filter(line -> line.contains("may stop a run")).count();
     }
 
     /** The notes of a stop of each behavior, shown or not resolved, each of the conditions read

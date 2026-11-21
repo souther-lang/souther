@@ -381,6 +381,56 @@ class ATiedWayIsReadAsTheProgramRunSaysTest {
         assertTrue(said.contains("stop not resolved"), said);
     }
 
+    /** A record tying the divisor to the other number by {@code tie}, divided by it. */
+    private static String aDivisionBehindAClauseTyingTwoFields(String tie) {
+        return """
+                module demo
+
+                data In = { e: Int, p: Int }
+                    invariant eInRange = e >= 1 && e <= 12
+                    invariant tied = %s
+                data Out = Int
+
+                behavior b : (i: In) -> Out
+                let b (i) = Out { value =
+                    if Rational.toInt(UP, i.e / i.p) >= 2 then 1 else 2 }
+                """.formatted(tie);
+    }
+
+    /**
+     * A clause tying the divisor to another field of its record leaves it nought where the other
+     * is one, and the program stops there: no clause of either field alone says nought is a value
+     * of the divisor, and a value of the record holding both is what shows the stop. Every value
+     * the clause leaves runs, but the one with nought.
+     */
+    @Test
+    void aStopIsShownWhereAClauseTyingTwoFieldsLeavesTheDivisorNought() throws Exception {
+        String model = aDivisionBehindAClauseTyingTwoFields("p == e - 1");
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(model),
+                ATiedWayIsReadAsTheProgramRunSaysTest.class.getClassLoader());
+        Object behavior = Emitted.behavior(loader, "demo", "b").getConstructor().newInstance();
+        for (int e = 1; e <= TOP; e++) {
+            assertEquals(e == 1, ranTo(loader, behavior, e, e - 1) == -1, "e = " + e);
+        }
+        String said = reportOf(model);
+        assertTrue(said.contains("· may stop a run: comparison"), said);
+    }
+
+    /** Where the clause leaves the divisor the other number, which is never nought, the program
+     *  does not stop, and nothing is said to. */
+    @Test
+    void noStopIsShownWhereAClauseTyingTwoFieldsKeepsTheDivisorAwayFromNought() throws Exception {
+        String model = aDivisionBehindAClauseTyingTwoFields("p == e");
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(model),
+                ATiedWayIsReadAsTheProgramRunSaysTest.class.getClassLoader());
+        Object behavior = Emitted.behavior(loader, "demo", "b").getConstructor().newInstance();
+        for (int e = 1; e <= TOP; e++) {
+            assertTrue(ranTo(loader, behavior, e, e) > 0, "e = " + e);
+        }
+        String said = reportOf(model);
+        assertFalse(said.contains("may stop a run"), said);
+    }
+
     private static String reportOf(String model) {
         Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation)

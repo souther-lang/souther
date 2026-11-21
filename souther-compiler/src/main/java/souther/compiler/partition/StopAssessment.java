@@ -514,12 +514,20 @@ final class StopAssessment {
         // ask of the places, which the value looked for is asked to meet with the way.
         Optional<List<TakenConstraint.Affine>> declared =
                 AValueOfTheInput.whatAValueAtThemMeets(read, places);
+        // Where they do not, because the declarations tie the places, each value found is asked
+        // whether a value of the input holds it, and only the places being a number of a record is
+        // asked before the search.
         if (declared.isEmpty()) {
-            return new Judgement.Unresolved(site, WhyAStopIsNotShown.NO_VALUE_SHOWN);
+            Map<TermPath, ExactRatio> anyNumber = new LinkedHashMap<>();
+            places.forEach(asked -> anyNumber.put(asked, null));
+            if (!AValueOfTheInput.holding(read, anyNumber)) {
+                return new Judgement.Unresolved(site, WhyAStopIsNotShown.NO_VALUE_SHOWN);
+            }
+        } else {
+            way.addAll(declared.get());
         }
-        way.addAll(declared.get());
         int[] tries = {MOST_VALUES_TRIED};
-        Before before = new Before(others, quotients, way);
+        Before before = new Before(others, quotients, way, declared.isEmpty() ? read : null);
         Shown shown = aValueItStopsAt(site, before, List.copyOf(numbers), read, tries);
         if (shown != null) {
             return new Judgement.Stops(againstWhatIsKept(shown, kept));
@@ -585,10 +593,14 @@ final class StopAssessment {
     /**
      * What a run that stops at a site has got past before it: the conditions of the way, every
      * operation within its ends and every quotient with its divisor away from nought.
+     *
+     * @param held the input, where its declarations tie the places the numbers are of, so that a
+     *             value found is one only where a value of the input holds it; otherwise null,
+     *             the way saying what the declarations leave each place
      */
     private record Before(List<UndividedByARelation.IntOperation> operations,
                           List<LinearForm<NumericTerm>> divisors,
-                          List<TakenConstraint.Affine> way) {}
+                          List<TakenConstraint.Affine> way, InputReading held) {}
 
     /**
      * A value of the input's {@code numbers} on the way, getting past what is worked out
@@ -720,7 +732,7 @@ final class StopAssessment {
                 return false;
             }
         }
-        return switch (site) {
+        boolean stops = switch (site) {
             case Site.PastItsEnds(var operation) -> {
                 ExactRatio comes = WholeValuesMeeting.valueOf(operation.overTheInput(), at);
                 yield comes != null && !withinItsEnds(comes, operation);
@@ -730,6 +742,7 @@ final class StopAssessment {
                 yield comes != null && comes.signum() == 0;
             }
         };
+        return stops && (before.held() == null || AValueOfTheInput.holdingNumbers(before.held(), at));
     }
 
     private static boolean withinItsEnds(ExactRatio value,

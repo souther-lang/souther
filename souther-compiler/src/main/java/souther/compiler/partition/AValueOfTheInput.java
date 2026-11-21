@@ -4,6 +4,7 @@ import souther.compiler.check.DeclarationMeaning;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.PublishedDeclarationResult;
+import souther.compiler.check.RuleKey;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Shape;
 import souther.compiler.check.SumCases;
@@ -12,6 +13,7 @@ import souther.compiler.check.TypeView;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.Position;
 import souther.compiler.inputs.RuleAddress;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.ExactRatio;
@@ -21,6 +23,7 @@ import souther.compiler.numeric.Rel;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -90,6 +93,166 @@ final class AValueOfTheInput {
     static Optional<Map<TermPath, WholeRun>> wholeNumbersAt(InputReading read,
                                                             Collection<TermPath> places) {
         return runsAt(read, places);
+    }
+
+    /**
+     * Whether a value of the input {@code read} reads exists holding the whole number {@code
+     * numbers} gives at each place it names, shown from the declarations: every part of the value
+     * meets what they leave it, and the places meet them together, which a record whose clause
+     * ties them is shown by a value of it written down with those numbers in it
+     * ({@link FieldDomains#holdsAValueWith}). That it asks one assignment and not every one is what
+     * lets it answer where {@link #whatAValueAtThemMeets} does not.
+     *
+     * <p>A place given no number (null) is asked only whether a number can be put there, as a
+     * place of a record whose clause ties it is; so that a caller learns before it searches whether
+     * any assignment could be shown. False is not that none exists.
+     */
+    static boolean holding(InputReading read, Map<TermPath, ExactRatio> numbers) {
+        int found = 0;
+        for (InputDomain.Parameter each : read.domain().parameters()) {
+            int here = holds(TermPath.of(each.name()), each.type(), numbers, read);
+            if (here < 0) {
+                return false;
+            }
+            found += here;
+        }
+        return found == numbers.size();
+    }
+
+    /** {@link #holding} of the places {@code numbers} are of, each a place of the input. */
+    static boolean holdingNumbers(InputReading read, Map<NumericTerm, ExactRatio> numbers) {
+        Map<TermPath, ExactRatio> at = new LinkedHashMap<>();
+        for (Map.Entry<NumericTerm, ExactRatio> each : numbers.entrySet()) {
+            if (!(each.getKey() instanceof NumericTerm.ValueOf(TermPath place))) {
+                return false;
+            }
+            at.put(place, each.getValue());
+        }
+        return holding(read, at);
+    }
+
+    /**
+     * How many of {@code numbers} the part at {@code at}, of {@code type}, holds, each held at its
+     * number by a value of the part that meets everything its types state, or -1 where that is
+     * not shown.
+     */
+    private static int holds(TermPath at, Type type, Map<TermPath, ExactRatio> numbers,
+                             InputReading read) {
+        RuleReadingSource rules = read.rules();
+        TypeView view = TypeView.of(type, rules.inners(), rules.symbols(), rules.kinds(),
+                rules.sums());
+        if (numbers.containsKey(at)) {
+            WholeRun run = held(view, read);
+            return (run != null && holdsTheNumber(at, run, numbers.get(at), read)) ? 1 : -1;
+        }
+        List<TermPath> below = numbers.keySet().stream().filter(place -> place.steps().size()
+                > at.steps().size() && place.prefix(at.steps().size()).equals(at)).toList();
+        if (below.isEmpty()) {
+            return aValueIsShownToExist(type, read) ? 0 : -1;
+        }
+        if (!view.wrappers().stream().allMatch(name -> writesNoClause(name, rules))
+                || !(view.shape() instanceof Shape.Product product)) {
+            return -1;
+        }
+        if (!writesNoClause(product.name(), rules)) {
+            return holdsBesideItsClauses(at, product, below, numbers, read) ? below.size() : -1;
+        }
+        int found = 0;
+        for (Map.Entry<String, Type> field : product.fields().entrySet()) {
+            int here = holds(at.then(field.getKey()), field.getValue(), numbers, read);
+            if (here < 0) {
+                return -1;
+            }
+            found += here;
+        }
+        return found;
+    }
+
+    /**
+     * Whether a value of the record {@code product} at {@code at}, whose declaration writes a
+     * clause, holds the numbers {@code numbers} gives at {@code below}, the places under it: the
+     * one place its rules leave a run, where that holds the number, and otherwise a value of the
+     * record written down with all of them in it, every rule folding to true.
+     */
+    private static boolean holdsBesideItsClauses(TermPath at, Shape.Product product,
+                                                 List<TermPath> below,
+                                                 Map<TermPath, ExactRatio> numbers,
+                                                 InputReading read) {
+        if (!(product.name() instanceof TypeSymbol.AtModule record)) {
+            return false;
+        }
+        Map<RuleKey, Object> pinned = new LinkedHashMap<>();
+        boolean known = true;
+        for (TermPath place : below) {
+            Position position = read.domain().at(place);
+            RuleAddress named = RuleAddress.of(at, place);
+            if (position == null || named == null
+                    || !(TypeView.shapeOf(position.type(), read.rules().inners(),
+                            read.rules().symbols(), read.rules().kinds(), read.rules().sums())
+                            instanceof Shape.Scalar(Type.Prim prim))
+                    || (prim != Type.Prim.INT && prim != Type.Prim.DECIMAL)) {
+                return false;
+            }
+            ExactRatio number = numbers.get(place);
+            if (number == null) {
+                known = false;
+                continue;
+            }
+            Object constant = constantOf(number, prim);
+            if (constant == null || !withinTheEndsOfThePlace(place, number, read)) {
+                return false;
+            }
+            pinned.put(named.key(), constant);
+        }
+        if (!known) {
+            return true;
+        }
+        if (below.size() == 1 && below.getFirst().steps().size() == at.steps().size() + 1) {
+            RuleAddress named = RuleAddress.of(at, below.getFirst());
+            WholeRun run = wholeOf(DeclaredBounds.wholeRunAt(record, named.key(),
+                    read.ruleReading()));
+            if (run != null && withinTheRun(run, numbers.get(below.getFirst()))) {
+                return true;
+            }
+        }
+        return FieldDomains.of(record, read.ruleReading()).holdsAValueWith(pinned);
+    }
+
+    /** Whether {@code number} is one {@code run} holds, at the place {@code at}, and within the
+     *  ends of what the place's order holds. */
+    private static boolean holdsTheNumber(TermPath at, WholeRun run, ExactRatio number,
+                                          InputReading read) {
+        return number == null || (withinTheRun(run, number)
+                && withinTheEndsOfThePlace(at, number, read));
+    }
+
+    private static boolean withinTheRun(WholeRun run, ExactRatio number) {
+        return number.isWhole()
+                && (run.least() == null || number.compareTo(ExactRatio.of(run.least())) >= 0)
+                && (run.greatest() == null
+                        || number.compareTo(ExactRatio.of(run.greatest())) <= 0);
+    }
+
+    private static boolean withinTheEndsOfThePlace(TermPath place, ExactRatio number,
+                                                   InputReading read) {
+        FormRange ends = FormRange.endsOf(new NumericTerm.ValueOf(place), read);
+        return ends == null
+                || ((ends.least() == null || number.compareTo(ends.least()) >= 0)
+                        && (ends.greatest() == null || number.compareTo(ends.greatest()) <= 0));
+    }
+
+    /** The constant a fold reads for the whole number {@code number} of a place of {@code prim},
+     *  or null where it is not a whole number that fits. */
+    private static Object constantOf(ExactRatio number, Type.Prim prim) {
+        BigInteger whole = number.isWhole() ? number.ceiling().orNull() : null;
+        if (whole == null) {
+            return null;
+        }
+        return switch (prim) {
+            case INT -> whole.bitLength() < Long.SIZE ? (Object) whole.longValue() : null;
+            case DECIMAL -> new BigDecimal(whole);
+            default -> null;
+        };
     }
 
     /**
