@@ -1395,8 +1395,9 @@ final class WorkedOutToReachIt {
         out.addAll(holdingTheCount(seeds, count, ExactRatio.ZERO));
         Attainment theElement = Attainment.always(LinearForm.atom(
                 new NumericTerm.ValueOf(element)));
-        out.addAll(holdingTheCount(answersOfAStep(walk.step().body(), walk.element().binding(),
-                walk.accumulator().binding(), seeds, theElement), count, ExactRatio.ONE));
+        out.addAll(holdingTheCount(answersOfAStep(walk.step().body(), new AStepOverOne(
+                walk.element().binding(), walk.accumulator().binding(), seeds, theElement)),
+                count, ExactRatio.ONE));
         return List.copyOf(out);
     }
 
@@ -1420,54 +1421,55 @@ final class WorkedOutToReachIt {
      * the choice leaves it — the comparison of two such answers, or its denial — as what a row
      * meets for the step to answer it. Nothing where a comparison is of anything else.
      */
-    private List<Attainment> answersOfAStep(Core body, BindingId element, BindingId carried,
-                                            List<Attainment> seeds, Attainment theElement) {
-        switch (Core.withoutStanding(body)) {
-            case Core.Read name -> {
-                return element.equals(name.binding()) ? List.of(theElement)
-                        : carried.equals(name.binding()) ? seeds : List.of();
-            }
-            case Core.If fork -> {
-                if (!(Core.withoutStanding(fork.cond()) instanceof Core.Binary comparison)) {
-                    return List.of();
-                }
-                Rel rel = comparison.op().compares() ? comparison.op().relation() : null;
-                List<Attainment> lefts = rel == null ? List.of()
-                        : answersOfAStep(comparison.left(), element, carried, seeds, theElement);
-                List<Attainment> rights = rel == null ? List.of()
-                        : answersOfAStep(comparison.right(), element, carried, seeds, theElement);
-                List<Attainment> out = new ArrayList<>();
-                for (Attainment left : lefts) {
-                    for (Attainment right : rights) {
-                        LinearForm<NumericTerm> apart = left.form().minus(right.form()).orNull();
-                        if (apart == null) {
-                            return List.of();
-                        }
-                        out.addAll(armsTaken(fork.then(), new TakenConstraint.Affine(apart, rel),
-                                left, right, element, carried, seeds, theElement));
-                        out.addAll(armsTaken(fork.els(),
-                                new TakenConstraint.Affine(apart, rel.denied()), left, right,
-                                element, carried, seeds, theElement));
-                    }
-                }
-                return out;
-            }
-            default -> {
-                return List.of();
-            }
-        }
+    private static List<Attainment> answersOfAStep(Core body, AStepOverOne step) {
+        return switch (Core.withoutStanding(body)) {
+            case Core.Read name -> step.element().equals(name.binding())
+                    ? List.of(step.theElement())
+                    : step.carried().equals(name.binding()) ? step.seeds() : List.of();
+            case Core.If fork -> answersOfAChoice(fork, step);
+            default -> List.of();
+        };
     }
 
-    /** What the arm {@code arm} answers where a row meets {@code taken}, which compares what
-     *  {@code left} and {@code right} come to. */
-    private List<Attainment> armsTaken(Core arm, TakenConstraint.Affine taken, Attainment left,
-                                       Attainment right, BindingId element, BindingId carried,
-                                       List<Attainment> seeds, Attainment theElement) {
+    /** What a step walks one element with: the names it is handed the element and what it
+     *  carried by, and how a row makes each of them a number. */
+    private record AStepOverOne(BindingId element, BindingId carried, List<Attainment> seeds,
+                                Attainment theElement) {}
+
+    /** What either arm of {@code fork} answers, each where a row meets what the comparison it is
+     *  decided by states, or its denial. Nothing where it is decided by anything else. */
+    private static List<Attainment> answersOfAChoice(Core.If fork, AStepOverOne step) {
+        if (!(Core.withoutStanding(fork.cond()) instanceof Core.Binary comparison)
+                || !comparison.op().compares()) {
+            return List.of();
+        }
+        Rel rel = comparison.op().relation();
         List<Attainment> out = new ArrayList<>();
-        for (Attainment answer : answersOfAStep(arm, element, carried, seeds, theElement)) {
+        for (Attainment left : answersOfAStep(comparison.left(), step)) {
+            for (Attainment right : answersOfAStep(comparison.right(), step)) {
+                LinearForm<NumericTerm> apart = left.form().minus(right.form()).orNull();
+                if (apart == null) {
+                    return List.of();
+                }
+                List<TakenConstraint.Affine> holding = new ArrayList<>(left.holding());
+                holding.addAll(right.holding());
+                out.addAll(answeredWhere(fork.then(), new TakenConstraint.Affine(apart, rel),
+                        holding, step));
+                out.addAll(answeredWhere(fork.els(),
+                        new TakenConstraint.Affine(apart, rel.denied()), holding, step));
+            }
+        }
+        return out;
+    }
+
+    /** What {@code arm} answers where a row meets {@code taken} and {@code before}. */
+    private static List<Attainment> answeredWhere(Core arm, TakenConstraint.Affine taken,
+                                                  List<TakenConstraint.Affine> before,
+                                                  AStepOverOne step) {
+        List<Attainment> out = new ArrayList<>();
+        for (Attainment answer : answersOfAStep(arm, step)) {
             List<TakenConstraint.Affine> holding = new ArrayList<>(answer.holding());
-            holding.addAll(left.holding());
-            holding.addAll(right.holding());
+            holding.addAll(before);
             holding.add(taken);
             out.add(new Attainment(answer.form(), holding));
         }
