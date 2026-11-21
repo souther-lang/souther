@@ -513,17 +513,19 @@ final class WhatARunWorksOutBeforeACount {
     /**
      * Whether nothing a run works out before {@code comparison}, a node of {@code root}'s tree,
      * ends it, whatever the input: every part counted as running on some run, the comparison
-     * itself left out ({@link #workedOutUpTo}), is one {@link WhatARunMayEndFor} says ends none.
-     * False where it is not in the tree, stands in a closure, or some part ends a run for what
-     * nothing says ({@link WhatARunMayEndFor.Endings.NotKnown}): that is not that it ends none.
+     * itself left out ({@link #workedOutUpTo}), is one {@code endings} says ends none — a build
+     * of a value answered by its template. False where it is not in the tree, stands in a closure,
+     * or some part ends a run for what nothing says ({@link WhatARunMayEndFor.Endings.NotKnown}):
+     * that is not that it ends none.
      */
-    static boolean nothingBeforeItEndsARun(Core root, Core comparison) {
+    static boolean nothingBeforeItEndsARun(Core root, Core comparison,
+                                           WhatARunMayEndFor.WithDefinitions endings) {
         List<Core> worked = root == null ? null : workedOutUpTo(root, comparison, false);
         if (worked == null) {
             return false;
         }
         for (Core part : worked.subList(0, worked.size() - 1)) {
-            if (!WhatARunMayEndFor.of(part).endsNone()) {
+            if (!endings.of(part).endsNone()) {
                 return false;
             }
         }

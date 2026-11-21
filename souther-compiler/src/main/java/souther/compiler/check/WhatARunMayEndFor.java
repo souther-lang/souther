@@ -9,7 +9,10 @@ import souther.compiler.semantics.Accumulation;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.OptionalInt;
 import java.util.Set;
@@ -100,8 +103,10 @@ public final class WhatARunMayEndFor {
      * <p>Exhaustive over {@link Core}, as {@link AbortSites}' own reading of a site is, so a node
      * kind added later stops the build here and not only there. Where a node's own answer is a site's
      * wherever it stands, it is {@link AbortSites}' answer. Where it is not — a call whose callee's
-     * body is a root of its own, a function value, a construction whose invariant is its
-     * declaration's — what working it out ends a run for is not in this tree.
+     * body is a root of its own, a build of a value, whose template is one too, in either tree a
+     * build is written in, a function value, a construction whose invariant is its declaration's —
+     * what working it out ends a run for is not in this tree. A reader that holds the templates
+     * asks a build of its template ({@link WithDefinitions}).
      */
     public static Endings itself(Core e) {
         return switch (Core.withoutStanding(e)) {
@@ -117,13 +122,84 @@ public final class WhatARunMayEndFor {
                      Core.Reached.OfPublishedValue _ -> new Endings.NotKnown();
             };
             case Core.PreservedCall kept -> ofTheLibrary(kept);
-            case Core.Apply _, Core.Construct _ -> new Endings.NotKnown();
+            case Core.Apply _, Core.Construct _, Core.MaterialisedValue _ -> new Endings.NotKnown();
             case Core.Int _, Core.Decimal _, Core.Str _, Core.Bool _, Core.Temporal _, Core.Read _,
-                 Core.UnitValue _, Core.MaterialisedValue _, Core.OptionNone _,
+                 Core.UnitValue _, Core.OptionNone _,
                  Core.FieldAccess _, Core.FieldProjection _, Core.If _, Core.IfConstructed _,
                  Core.LetIn _, Core.Block _, Core.ListLit _, Core.OptionSome _, Core.Tuple _,
                  Core.TupleGet _, Core.Match _, Core.Widen _ -> NONE;
         };
+    }
+
+    /**
+     * What working a tree out may end a run for, where the template of each value it builds is
+     * known: a build — a reference in the tree an analysis reads, or a call of the value's method
+     * in the tree that runs, each resolved by {@link ValueTemplates#builtBy} — ends a run for what
+     * working its template out does, and everything else for what {@link #itself} says.
+     *
+     * <p>What a template ends a run for is the same wherever it is built, so it is worked out once
+     * for each and kept. A template that builds itself, by way of others, is reached again while
+     * its own answer is being worked out, and that answer is not known.
+     *
+     * <p>Not a proof that a run stops anywhere: {@link Endings.Known} is what working it out may
+     * end a run for, over every run, and no run is shown to end.
+     */
+    public static final class WithDefinitions {
+
+        private final ValueTemplates definitions;
+        private final Map<Core, Endings> ofEach = new IdentityHashMap<>();
+        private final Set<Core> working = Collections.newSetFromMap(new IdentityHashMap<>());
+
+        public WithDefinitions(ValueTemplates definitions) {
+            this.definitions = Objects.requireNonNull(definitions, "the templates, or none");
+        }
+
+        /** What working {@code e} out, and everything under it, may end a run for, a build
+         *  answered by its template ({@link WhatARunMayEndFor#of}). */
+        public Endings of(Core e) {
+            Core node = Core.withoutStanding(e);
+            if (node instanceof Core.IfConstructed attempt) {
+                Endings[] out = {NONE};
+                forEachWorkedOut(attempt, (part, _) -> out[0] = out[0].and(of(part)));
+                return out[0];
+            }
+            Endings[] out = {itself(node)};
+            Core.forEachChild(node, child -> {
+                if (out[0] instanceof Endings.Known) {
+                    out[0] = out[0].and(of(child));
+                }
+            });
+            return out[0];
+        }
+
+        /** What {@code e} itself may end a run for ({@link WhatARunMayEndFor#itself}), a build
+         *  answered by what working its template out may end one for. */
+        public Endings itself(Core e) {
+            Core template = builds(e) ? definitions.builtBy(e) : null;
+            if (template == null) {
+                return WhatARunMayEndFor.itself(e);
+            }
+            Endings known = ofEach.get(template);
+            if (known != null) {
+                return known;
+            }
+            if (!working.add(template)) {
+                return new Endings.NotKnown();
+            }
+            Endings worked = of(template);
+            working.remove(template);
+            ofEach.put(template, worked);
+            return worked;
+        }
+
+        /** Whether {@code e} is a build of a value, in either tree. */
+        private static boolean builds(Core e) {
+            return switch (Core.withoutStanding(e)) {
+                case Core.MaterialisedValue _ -> true;
+                case Core.Call call -> call.fn() instanceof Core.Reached.OfValue;
+                default -> false;
+            };
+        }
     }
 
     /**

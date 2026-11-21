@@ -349,7 +349,7 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "partition/WhatARunWorksOutBeforeACount$Within", "letsThrough",
                 "(" + core + ")Z", Reading.EACH_SUBEXPRESSION, ASKS_EACH);
         row(out, c + "partition/ConstructionStopAssessment", "getsPast",
-                "(" + core + "Ljava/util/List;Ljava/util/List;Ljava/util/function/Function;)Z",
+                "(" + core + "Ljava/util/List;Ljava/util/List;Lsouther/compiler/check/ValueTemplates;)Z",
                 Reading.EACH_SUBEXPRESSION,
                 "asks each node whether working it out may end a run, or is a construction whose"
                         + " condition is read, or a build whose template it asks the same of,"

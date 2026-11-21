@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.DeclaredBounds;
+import souther.compiler.check.ValueTemplates;
 import souther.compiler.check.WhatARunMayEndFor;
 import souther.compiler.core.Core;
 import souther.compiler.core.Evaluated;
@@ -33,7 +34,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.function.Function;
 import java.util.function.IntFunction;
 import java.util.function.Predicate;
 
@@ -175,7 +175,8 @@ final class ConstructionStopAssessment {
                                         : WhyAConstructionStopIsNotShown.REACH_NOT_SHOWN),
                         new WhatAConstructionAsks.OnEveryRule());
                 case AConstructionOnTheWay.Asked.Read(ConstructionAsk ask) ->
-                        judged(one, ask, asks, waysTo, toTheComparison, read, each.templateOf());
+                        judged(one, ask, asks, waysTo, toTheComparison, read,
+                                each.definitions());
             });
         }
         return out;
@@ -195,7 +196,7 @@ final class ConstructionStopAssessment {
                                     List<ConstructionAsk> asks,
                                     Map<Integer, Map<Core, List<OnTheWay>>> waysTo,
                                     Predicate<Proposition> toTheComparison, InputReading read,
-                                    Function<Core.MaterialisedValue, Core> templateOf) {
+                                    ValueTemplates definitions) {
         // What asks nothing, or nothing the way to the comparison does not hold, is safe whatever
         // the tree says, and the tree is walked only for what is left.
         Optional<WhatAConstructionAsks> unheld =
@@ -208,7 +209,7 @@ final class ConstructionStopAssessment {
             AConstructionOnTheWay.Reach reach = one.reaches().get(at);
             Judgement byIt = judgedOn(one, reach, ask, asks,
                     waysTo.getOrDefault(reach.entry(), Map.of()), toTheComparison, read,
-                    templateOf);
+                    definitions);
             judged.add(byIt);
             return switch (byIt) {
                 case Judgement.Safe _ -> ByAWay.SAFE;
@@ -277,7 +278,7 @@ final class ConstructionStopAssessment {
                                       AConstructionOnTheWay.Reach reach, ConstructionAsk ask,
                                       List<ConstructionAsk> asks, Map<Core, List<OnTheWay>> waysTo,
                                       Predicate<Proposition> toTheComparison, InputReading read,
-                                      Function<Core.MaterialisedValue, Core> templateOf) {
+                                      ValueTemplates definitions) {
         Optional<WhatARunWorksOutBeforeACount.BeforeAConstruction> before = reach.before().get();
         if (before.isEmpty()) {
             return unresolved(one, ask, ask.toldOf(is -> toTheComparison.test(is.read())),
@@ -314,7 +315,7 @@ final class ConstructionStopAssessment {
             return new Judgement.Safe(one.made());
         }
         Found found = aStopAt(ask, told.get(), before.get(), both, reach.wayRead().get(), asks,
-                waysTo, read, templateOf);
+                waysTo, read, definitions);
         return switch (found) {
             case Found.AStop(Shown shown) -> new Judgement.Stops(one.made(), shown);
             case Found.None(WhyAConstructionStopIsNotShown why) -> unresolved(one, ask, told, why);
@@ -503,16 +504,16 @@ final class ConstructionStopAssessment {
      * ways {@code waysTo} holds, the way whether it is read — every condition of it held in
      * {@code way} only where {@code wayRead} — and only where all of that is answered is a value
      * looked for. A build among what a run works out first is asked of its template
-     * ({@code templateOf}).
+     * ({@code definitions}).
      */
     private static Found aStopAt(ConstructionAsk ask, WhatAConstructionAsks told,
                                  WhatARunWorksOutBeforeACount.BeforeAConstruction before,
                                  List<OnTheWay> way, boolean wayRead, List<ConstructionAsk> asks,
                                  Map<Core, List<OnTheWay>> waysTo, InputReading read,
-                                 Function<Core.MaterialisedValue, Core> templateOf) {
+                                 ValueTemplates definitions) {
         List<ConstructionAsk> passed = new ArrayList<>();
         for (Core part : before.onSomeRun()) {
-            if (!getsPast(part, asks, passed, templateOf)) {
+            if (!getsPast(part, asks, passed, definitions)) {
                 return new Found.None(WhyAConstructionStopIsNotShown.SOMETHING_BEFORE_IT_MAY_STOP);
             }
         }
@@ -578,25 +579,30 @@ final class ConstructionStopAssessment {
      * which is then added to {@code passed}. The construction an attempt tests takes the other arm
      * where it is refused, and ends nothing ({@link WhatARunMayEndFor#forEachWorkedOut}).
      *
-     * <p>A build of a value works its template out ({@code templateOf}), which is in no tree the
-     * build stands in, so a run gets past the build where it gets past every node of the template.
+     * <p>A build of a value works its template out ({@link ValueTemplates#builtBy}), which is in
+     * no tree the build stands in and {@link WhatARunMayEndFor#itself} does not answer for, so a
+     * run gets past the build where it gets past every node of the template. Asked here and not of
+     * {@link WhatARunMayEndFor.WithDefinitions}: what this asks of a construction is that the value
+     * looked for meets what it asks, which is no ending of a run.
      */
     private static boolean getsPast(Core e, List<ConstructionAsk> asks,
                                     List<ConstructionAsk> passed,
-                                    Function<Core.MaterialisedValue, Core> templateOf) {
+                                    ValueTemplates definitions) {
         Core node = Core.withoutStanding(e);
-        if (node instanceof Core.MaterialisedValue build) {
-            return getsPast(templateOf.apply(build), asks, passed, templateOf);
+        Core template = definitions.builtBy(node);
+        if (template != null) {
+            return getsPast(template, asks, passed, definitions);
         }
         if (node instanceof Core.IfConstructed attempt) {
             boolean[] all = {true};
             WhatARunMayEndFor.forEachWorkedOut(attempt,
-                    (part, _) -> all[0] = all[0] && getsPast(part, asks, passed, templateOf));
+                    (part, _) -> all[0] = all[0] && getsPast(part, asks, passed, definitions));
             return all[0];
         }
         for (Core each : Core.subexpressionsAt(node)) {
-            if (Core.withoutStanding(each) instanceof Core.MaterialisedValue build) {
-                if (!getsPast(templateOf.apply(build), asks, passed, templateOf)) {
+            Core built = definitions.builtBy(each);
+            if (built != null) {
+                if (!getsPast(built, asks, passed, definitions)) {
                     return false;
                 }
             } else if (Core.withoutStanding(each) instanceof Core.Construct) {
@@ -612,7 +618,7 @@ final class ConstructionStopAssessment {
         }
         boolean[] all = {true};
         Core.forEachChild(node, child -> all[0] = all[0]
-                && getsPast(child, asks, passed, templateOf));
+                && getsPast(child, asks, passed, definitions));
         return all[0];
     }
 

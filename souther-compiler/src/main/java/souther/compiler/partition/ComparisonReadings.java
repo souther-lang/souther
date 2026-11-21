@@ -19,6 +19,7 @@ import souther.compiler.check.SeededWalk;
 import souther.compiler.check.StatedComparison;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.ValueTemplates;
+import souther.compiler.check.WhatARunMayEndFor;
 import souther.compiler.core.Core;
 import souther.compiler.core.WhatABodyReads;
 import souther.compiler.coverage.Arrivals;
@@ -347,7 +348,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * @param quotients  the quotients evaluating the comparison always works out, in the order
      *                   it works them out ({@link QuotientsEveryRunWorksOut}): none for an
      *                   application, which states no comparison to evaluate
-     * @param templateOf the template of each value the body builds, which is what working a build
+     * @param definitions the template of each value the body builds, which is what working a build
      *                   out works out, and is in no tree a build stands in
      */
     record Reading(ConstructOccurrence occurrence, Stated statement, Citation at,
@@ -363,7 +364,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                    Supplier<Boolean> beforeIt,
                    Supplier<List<AConstructionOnTheWay>> constructionsOnTheWay,
                    List<Core.Binary> quotients,
-                   Function<Core.MaterialisedValue, Core> templateOf) {
+                   ValueTemplates definitions) {
 
         Reading {
             if (occurrence == null || statement == null || at == null
@@ -372,7 +373,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     || context == null
                     || saidOnTheWay == null || witnesses == null || getsPast == null
                     || asks == null || readsTheElements == null || readOn == null
-                    || beforeIt == null || constructionsOnTheWay == null || templateOf == null) {
+                    || beforeIt == null || constructionsOnTheWay == null || definitions == null) {
                 throw new IllegalArgumentException(
                         "a reading is of some comparison of the model, placed somewhere");
             }
@@ -752,14 +753,27 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
     private static final class Templates {
 
         private final ValueTemplates held;
+        private final WhatARunMayEndFor.WithDefinitions endings;
         private final Map<Core, List<Entry>> entered = new IdentityHashMap<>();
 
         Templates(ValueTemplates held) {
             this.held = held;
+            this.endings = new WhatARunMayEndFor.WithDefinitions(held);
+        }
+
+        /** What working a part of this walk's trees out may end a run for, each build answered by
+         *  its template, worked out once for each template however many readings ask. */
+        WhatARunMayEndFor.WithDefinitions endings() {
+            return endings;
         }
 
         Core bodyOf(Core.MaterialisedValue build) {
             return held.bodyOf(build);
+        }
+
+        /** The template of each value, as every reader of what a build works out asks it. */
+        ValueTemplates definitions() {
+            return held;
         }
 
         void entered(Core template, Core build, Core standsIn, List<OnTheWay> assumed,
@@ -1901,12 +1915,12 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     past.answered(), past.asks(), readsTheElements, readOn,
                     new Pullback.Once<>(() -> in.context().equals(CallContext.OF_THE_BODY)
                             && WhatARunWorksOutBeforeACount.nothingBeforeItEndsARun(in.root(),
-                                    e)),
+                                    e, in.templates().endings())),
                     new Pullback.Once<>(() -> constructionsOnTheWay(e, past.asks(),
                             besideIt.way(), applying, in)),
                     stated.statement() instanceof Stated.AComparison
                             ? QuotientsEveryRunWorksOut.in(e) : List.of(),
-                    in.templates()::bodyOf));
+                    in.templates().definitions()));
         }
         // A fork the reading of the runs takes a way out of, under the closures the walk is in. A
         // value standing as a wider type is no fork, and a fork under it is met one step down.
