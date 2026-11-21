@@ -5190,7 +5190,8 @@ public final class Adequacy {
                 // is answered at cannot arrive somewhere as the wrong one of the three.
                 out.addAll(Coverages.assess(partitioning.along(axis), everyLine, subject, observed,
                         line -> ItemAssessment.WritabilityProjection.ofReading(
-                                partitioning.edgeIsKnownWritable(axis.term(), line)), put,
+                                partitioning.edgeIsKnownWritable(axis.term(), line,
+                                        subject.quantities())), put,
                         partitioning.reaching()));
             }
             out.addAll(Coverages.assessBetween(everyLine, subject, observed, put,

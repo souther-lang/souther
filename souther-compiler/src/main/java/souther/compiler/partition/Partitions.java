@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.check.DeclarationReadings;
 import souther.compiler.check.ClassMembers;
+import souther.compiler.check.DatePartsLeft;
 import souther.compiler.check.HeldClass;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.ReadingPolicy;
@@ -72,6 +73,7 @@ import net.unit8.notation199x.pattern.CodePoints;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.WorkFigure;
 import souther.compiler.semantics.CaseMapping;
+import souther.compiler.semantics.TakenAs;
 import net.unit8.notation199x.pattern.Meter;
 import souther.compiler.regex.PatternPlan;
 import souther.compiler.revision.RevisionKnowledge;
@@ -412,7 +414,7 @@ public final class Partitions {
          * in the corpus over collections that have no values. And false at a number of a string
          * the position's strings do not reach, and wherever a string position may hold no value:
          * a row is a whole value of the input. */
-        public boolean edgeIsKnownWritable(NumericTerm term, Border line) {
+        public boolean edgeIsKnownWritable(NumericTerm term, Border line, Quantities reading) {
             return strings.allowsAnEdgeAt(term, line.cut().cut().at().asANumber())
                     && !uncertain.contains(term) && switch (term) {
                 // What a location holds is what its type holds, so an edge on it is an edge some
@@ -425,7 +427,8 @@ public final class Partitions {
                 // numbers the moved values come to ({@link NumericTerm#intrinsicBounds}), and
                 // every one of them has a date, so the operation's answer holds of them.
                 case NumericTerm.TakenOf taken -> DefaultBoundOperationFacts.get()
-                        .everyAnswerItCanGiveHasASourceValue(taken.operation());
+                        .everyAnswerItCanGiveHasASourceValue(taken.operation())
+                        && aDateHasThePartAt(taken, line, reading);
                 // A string holding any number of the code points of a class is written by
                 // repeating one of them, as a string of any length is — and, counted in what a
                 // conversion makes of it, by repeating one the conversion leaves as it is.
@@ -466,6 +469,42 @@ public final class Partitions {
                 // both, which nothing here has shown the rules leave.
                 case NumericTerm.ProductOf _ -> false;
             };
+        }
+
+        /**
+         * Whether the number {@code taken} is, at the number {@code line} falls at, is shown to be
+         * a number some date the declarations leave comes to. Said of a part of a date only: any
+         * other number is the operation's to say, and is no claim of the calendar.
+         *
+         * <p>Of a part of a date, true only where the calendar shows it ({@link
+         * DatePartsLeft#someDateHas}), with the date moved as the number moves it. What the
+         * declarations leave of the date is what they say of its parts ({@code month == 2}), or
+         * nothing; any other class of it is one nothing here reads, and a walk that shows no date
+         * is no proof that there is none. Neither is a proof, and both leave the edge not known.
+         */
+        private static boolean aDateHasThePartAt(NumericTerm.TakenOf taken, Border line,
+                                                 Quantities reading) {
+            if (!(taken.takenAs() instanceof TakenAs.PartOfDate(TakenAs.DatePart part))) {
+                return true;
+            }
+            DatePartsLeft left = switch (reading.region().classAt(
+                    new NumericTerm.ValueOf(taken.position()))) {
+                case HeldClass.None _ -> DatePartsLeft.EVERY_DATE;
+                case HeldClass.OfDays(DatePartsLeft parts) -> parts;
+                case HeldClass.OfResidues _, HeldClass.NoValue _ -> null;
+            };
+            ExactRatio at = line.cut().cut().at().asANumber();
+            // What the declarations hold the number to, of every rule they write on it, is a bound
+            // the number's edge lies within: a rule of two parts of the date shows in it where it
+            // shows nowhere in the class.
+            return left != null && at != null && at.isWhole()
+                    && reading.projectionOfTheDeclarations(taken)
+                            instanceof NumericDomain.FormProjection.Within(
+                                    NumericDomain.Bounds bounds) && bounds.admits(at)
+                    && at.floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger whole)
+                    && whole.bitLength() < Integer.SIZE
+                    && left.someDateHas(part, whole.intValueExact(),
+                            taken.transformation().translation());
         }
 
         /**

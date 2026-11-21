@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.numeric.DateTranslation;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.semantics.TakenAs;
@@ -126,6 +127,42 @@ public record DatePartsLeft(Map<TakenAs.DatePart, NumericDomain.Bounds> byPart,
             }
         }
         return true;
+    }
+
+    /** What the rules leave of a date they say nothing of: every date the calendar has. */
+    public static final DatePartsLeft EVERY_DATE =
+            new DatePartsLeft(Map.of(TakenAs.DatePart.YEAR, NumericDomain.Bounds.OPEN));
+
+    /** How many of the days these leave are met before a search for a date with a part, once
+     *  moved, gives up: more than a leap cycle of years, and a date a day leaves that the move
+     *  brings to the part is met long before in every class the rules write today. */
+    private static final int MOST_DAYS_MET = 4_096;
+
+    /**
+     * Whether a date these leave, moved as {@code moved} moves it, has {@code part} at
+     * {@code value}, shown by a day met: one of these the move is defined at and brings to the
+     * part. The search is over the days the move is defined at, and for a year over the days whose
+     * moved date is in it, so it starts where such a day can be and not at the calendar's first.
+     * A search that gave up shows none and says nothing of whether there are some, so false here
+     * is that this shows no such date and never that there is none.
+     */
+    public boolean someDateHas(TakenAs.DatePart part, int value, DateTranslation moved) {
+        long from = moved.first();
+        long to = moved.last();
+        if (part == TakenAs.DatePart.YEAR) {
+            if (value < LocalDate.MIN.getYear() || value > LocalDate.MAX.getYear()) {
+                return false;
+            }
+            from = Math.max(from, LocalDate.of(value, 1, 1).toEpochDay() - moved.offsetDays());
+            to = Math.min(to, LocalDate.of(value, 12, 31).toEpochDay() - moved.offsetDays());
+        }
+        for (long day : walk(BigInteger.valueOf(from), BigInteger.valueOf(to), true,
+                MOST_DAYS_MET).days()) {
+            if (part.of(LocalDate.ofEpochDay(day + moved.offsetDays())) == value) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Whether the date {@code day} counts to has parts these leave. */
