@@ -49,9 +49,10 @@ class AProvedEdgeOfADatePartIsAPartSomeDateHasTest {
                                        else (if Date.day(d.value) >= 29 then 2 else 3) }
             """;
 
-    /** The days a date of the model has: a February has the first to the twenty-ninth. */
+    /** The days a date of the model has: a February has the first to the twenty-ninth, which
+     *  four years, one of them a leap year, show. */
     private static boolean someFebruaryHas(int day) {
-        for (int year = 2000; year < 2400; year++) {
+        for (int year = 2000; year < 2004; year++) {
             if (day >= 1 && day <= LocalDate.of(year, 2, 1).lengthOfMonth()) {
                 return true;
             }
@@ -109,10 +110,11 @@ class AProvedEdgeOfADatePartIsAPartSomeDateHasTest {
     }
 
     /** The months the dates {@code holds} leaves come to, moved {@code movedBy} days on, worked
-     *  out of the rule as written over a cycle of the calendar. */
+     *  out of the rule as written over four years, one of them a leap year: a rule of the month
+     *  and the day turns on the year only at the twenty-ninth of February. */
     private static Set<Integer> monthsOf(Predicate<LocalDate> holds, int movedBy) {
         Set<Integer> out = new TreeSet<>();
-        for (LocalDate date = LocalDate.of(2000, 1, 1); date.getYear() < 2400;
+        for (LocalDate date = LocalDate.of(2000, 1, 1); date.getYear() < 2004;
                 date = date.plusDays(1)) {
             if (holds.test(date)) {
                 out.add(date.plusDays(movedBy).getMonthValue());
@@ -134,8 +136,8 @@ class AProvedEdgeOfADatePartIsAPartSomeDateHasTest {
                 invariant Date.day(value) - Date.month(value) >= 28
             """;
 
-    /** February is between the months the rule leaves, and no date of it holds the rule: a month
-     *  some date of the rule has is proved, and one none has is not. */
+    /** February is between the months the rule leaves, and no date of it holds the rule: one line
+     *  at March has March on it and February beside it, and only March is proved. */
     @Test
     void aMonthARuleOfTwoPartsRulesOutIsNotProved() throws Exception {
         Set<Integer> held = monthsOf(
@@ -145,8 +147,7 @@ class AProvedEdgeOfADatePartIsAPartSomeDateHasTest {
                 data Out = Int
 
                 behavior go : (d: Day) -> Out
-                let go (d) = Out { value = if Date.month(d.value) >= 3 then 1
-                                           else (if Date.month(d.value) >= 2 then 2 else 3) }
+                let go (d) = Out { value = if Date.month(d.value) >= 3 then 1 else 2 }
                 """);
         for (String each : proved) {
             assertTrue(someNumberIn(each, held), "proved at " + each + ", which no Day has");
@@ -175,11 +176,18 @@ class AProvedEdgeOfADatePartIsAPartSomeDateHasTest {
         assertTrue(proved.contains("2"), proved::toString);
     }
 
+    /** The report of {@code model}, measured as far as what the rules say without running
+     *  anything, which is where a point is proved writable: what the arms took is not asked. */
+    private static JsonNode reportOf(String model) throws Exception {
+        Compilation compilation = ACompiledModel.measured(model,
+                Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
+        return JsonMapper.builder().build().readTree(AdequacyReport.of(compilation)
+                .json(SourceRendering.namedByIdentity(compilation.texts())));
+    }
+
     /** What the report proves writable, by the number or run it is at. */
     private static List<String> provedAt(String model) throws Exception {
-        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
-        JsonNode report = JsonMapper.builder().build().readTree(AdequacyReport.of(compilation)
-                .json(SourceRendering.namedByIdentity(compilation.texts())));
+        JsonNode report = reportOf(model);
         List<String> out = new ArrayList<>();
         for (JsonNode each : report.findParents("knownWritable")) {
             if (each.get("knownWritable").asBoolean() && each.toString().contains("it_is_proved")
@@ -193,9 +201,7 @@ class AProvedEdgeOfADatePartIsAPartSomeDateHasTest {
     /** The points proved writable on a part of a date, as the report writes the number they are
      *  at. */
     private static List<String> provedPoints(String model) throws Exception {
-        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
-        JsonNode report = JsonMapper.builder().build().readTree(AdequacyReport.of(compilation)
-                .json(SourceRendering.namedByIdentity(compilation.texts())));
+        JsonNode report = reportOf(model);
         List<String> out = new ArrayList<>();
         for (JsonNode each : report.findParents("knownWritable")) {
             JsonNode against = each.path("against");
