@@ -27,6 +27,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.BooleanSupplier;
+import java.util.stream.IntStream;
 
 /**
  * How a row for one border came to be looked for where it is: every condition on the way, in the
@@ -207,10 +208,20 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
     static Set<Integer> yearsLeaving(BigInteger moved, int divisor, WholeNumberRuns leaves) {
         int shift = moved.mod(BigInteger.valueOf(divisor)).intValueExact();
         Set<Integer> years = new TreeSet<>();
-        for (int left = 0; left < divisor; left++) {
-            if (leaves.holds(BigInteger.valueOf(left))) {
-                years.add(Math.floorMod(left - shift, divisor));
+        BigInteger last = BigInteger.valueOf(divisor - 1L);
+        // Each run is taken between the remainders there are, which is as many numbers as the
+        // divisor and no more, whatever the ends of the run are.
+        for (WholeNumberRuns.Run run : leaves.runs()) {
+            if ((run.from() != null && run.from().compareTo(last) > 0)
+                    || (run.to() != null && run.to().signum() < 0)) {
+                continue;
             }
+            int from = (run.from() == null || run.from().signum() < 0) ? 0
+                    : run.from().intValueExact();
+            int to = (run.to() == null || run.to().compareTo(last) > 0) ? divisor - 1
+                    : run.to().intValueExact();
+            IntStream.rangeClosed(from, to)
+                    .forEach(left -> years.add(Math.floorMod(left - shift, divisor)));
         }
         return years;
     }
