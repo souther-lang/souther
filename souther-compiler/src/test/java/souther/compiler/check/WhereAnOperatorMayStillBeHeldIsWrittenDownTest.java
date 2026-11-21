@@ -509,10 +509,6 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "asks the enum whether the operator compares, which is what a count set"
                             + " against a number the body writes is made into the ways it comes"
                             + " out by"),
-            new Held("souther.compiler.reading.WaysOfACount.relationOf",
-                    "names the six comparisons as the relations they state, so that which counts"
-                            + " bring a comparison out a given way is the relation's own answer"
-                            + " and no table of six written beside it"),
             new Held("souther.compiler.reading.ValueChoices.of",
                     "asks the enum whether the operator stops early, which a conjunction does and"
                             + " a comparison does not: what an if decides by is one comparison only"
@@ -582,6 +578,10 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.partition.WorkedOutToReachIt.aTotalWithinAnInt",
                     "works out where a total lies: what each element comes to times the most"
                             + " elements there are"),
+            new Held("souther.compiler.partition.WorkedOutToReachIt.answersOfAStep",
+                    "asks the enum whether the operator compares, and what relation it states,"
+                            + " which is what a step of a walk that chooses by a comparison of"
+                            + " the element and what it carried answers of them where that holds"),
             new Held("souther.compiler.partition.WorkedOutToReachIt.whatItComesTo",
                     "hands the operator a run works out to the arithmetic of the numbers its"
                             + " operands come to, for whether it passes its type"),
@@ -758,8 +758,6 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                             + " handed: a number computed, or a statement of how they stand"),
             new Held("souther.compiler.proof.Reading.negated",
                     "names the subtraction from nought a negation is"),
-            new Held("souther.compiler.proof.Reading.relationOf",
-                    "the order or equality each comparing operator states"),
             new Held("souther.compiler.proof.Reading.number",
                     "names the addition and the subtraction a number of a proof is a sum of"),
             new Held("souther.compiler.proof.Collect.visit",

@@ -76,6 +76,12 @@ class AStopOverAValueARunWorksOutIsShownByAListTheProgramRunsIntoTest {
         STOPPING.put("theSeedOfAWalkOverNone", new Form(
                 "List.fold((w, l) -> if l > w then l else w, 9223372036854775807, ds) + 1 >= 3",
                 List.of(), List.of(new InputFact.ListLength(DS, 0))));
+        // a walk over one comes to what its step answers of the seed and that element: the
+        // element where the arm that keeps it is the one taken
+        STOPPING.put("theElementOfAWalkOverOne", new Form(
+                "List.fold((w, l) -> if l > w then l else w, 0, ds) + 1 <= 10", List.of(),
+                List.of(new InputFact.ListLength(DS, 1),
+                        new InputFact.ListElement(DS, 0, GREATEST))));
 
         // what a list written out holds keeps the operation within the type
         NOT_SHOWN.put("aListWrittenOutKeptWithin",
@@ -84,6 +90,10 @@ class AStopOverAValueARunWorksOutIsShownByAListTheProgramRunsIntoTest {
         NOT_SHOWN.put("aTestOfEveryElementKeepsItWithin",
                 "List.all(x -> x < 9223372036854775807, ds) && "
                         + "Option.withDefault(0, List.max(ds)) + 1 <= 10");
+        // a walk that keeps only what is below nought comes to a number the operation keeps
+        // within the type, whichever arm of its step is taken
+        NOT_SHOWN.put("aWalkKeepingWhatIsBelowNought",
+                "List.fold((w, l) -> if l < 0 then l else w, 0, ds) + 1 <= 10");
         // the arm that opens the element is worked out where the list holds none, which it never
         // is there
         NOT_SHOWN.put("anArmNoRunTakes",

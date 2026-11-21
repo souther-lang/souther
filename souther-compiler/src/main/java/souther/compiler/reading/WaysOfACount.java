@@ -2,7 +2,6 @@ package souther.compiler.reading;
 
 import souther.compiler.core.Core;
 import souther.compiler.numeric.Rel;
-import souther.compiler.types.BinOp;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -46,7 +45,7 @@ final class WaysOfACount {
         }
         Core.Call call;
         long than;
-        Rel relation = relationOf(comparison.op());
+        Rel relation = comparison.op().relation();
         if (Core.withoutStanding(comparison.left()) instanceof Core.Call counted
                 && Core.withoutStanding(comparison.right()) instanceof Core.Int number) {
             call = counted;
@@ -95,16 +94,4 @@ final class WaysOfACount {
         return ways.isEmpty() ? null : ways;
     }
 
-    /** The relation a comparison operator writes, read with its left side first. */
-    private static Rel relationOf(BinOp op) {
-        return switch (op) {
-            case EQ -> Rel.EQ;
-            case NE -> Rel.NE;
-            case LT -> Rel.LT;
-            case LE -> Rel.LE;
-            case GT -> Rel.GT;
-            case GE -> Rel.GE;
-            default -> throw new IllegalArgumentException(op + " is no comparison");
-        };
-    }
 }

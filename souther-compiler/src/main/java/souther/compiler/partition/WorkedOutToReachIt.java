@@ -1352,7 +1352,7 @@ final class WorkedOutToReachIt {
                     ? attainmentsAtAPlace(at, arms) : List.of();
         }
         if (written instanceof Core.PreservedCall) {
-            return attainmentsOfAWalkOverNone(value, arms);
+            return attainmentsOfAWalk(value, arms);
         }
         if (!(written instanceof Core.Read name)) {
             return List.of();
@@ -1368,17 +1368,21 @@ final class WorkedOutToReachIt {
 
     /**
      * How a row makes a walk from a seed come to a number, where it walks a container of the
-     * input that holds none: the seed, whatever the step is. A walk over elements comes to what
-     * the step makes of them, which is not said here.
+     * input and the step answers the element it is handed or what it carried
+     * ({@link #answersTheElementOrWhatItCarried}): over none, the seed, whatever the step is; over
+     * one, what the step answers of the seed and that element. A walk over more comes to what the
+     * step makes of each in turn, which is not said here.
      */
-    private List<Attainment> attainmentsOfAWalkOverNone(Denotation value, ArmsTaken arms) {
+    private List<Attainment> attainmentsOfAWalk(Denotation value, ArmsTaken arms) {
         Denotation met = value.at().denotes(Core.withoutStanding(value.value()),
                 read.rules().symbols(), read.rules().newtypes());
         SeededWalk walk = met == null ? null : SeededWalk.of(met.value(), closure ->
                 Core.withoutStanding(closure) instanceof Core.Block block ? block : null);
         if (walk == null || !(met.at().everyElementOf(walk.container(), read.rules().newtypes())
                 instanceof ValuesHeld.At(TermPath element))
-                || !AValueOfTheInput.ofTheOnlyElement(element)) {
+                || !AValueOfTheInput.ofTheOnlyElement(element)
+                || !answersTheElementOrWhatItCarried(walk.step().body(),
+                        walk.element().binding(), walk.accumulator().binding())) {
             return List.of();
         }
         NumericTerm count = AValueOfTheInput.howMany(
@@ -1386,14 +1390,88 @@ final class WorkedOutToReachIt {
         if (count == null) {
             return List.of();
         }
-        TakenConstraint.Affine none = new TakenConstraint.Affine(LinearForm.atom(count), Rel.EQ);
+        List<Attainment> seeds = attainmentsOf(new Denotation(walk.seed(), met.at()), arms);
         List<Attainment> out = new ArrayList<>();
-        for (Attainment seed : attainmentsOf(new Denotation(walk.seed(), met.at()), arms)) {
-            List<TakenConstraint.Affine> holding = new ArrayList<>(seed.holding());
-            holding.add(none);
-            out.add(new Attainment(seed.form(), holding));
-        }
+        out.addAll(holdingTheCount(seeds, count, ExactRatio.ZERO));
+        Attainment theElement = Attainment.always(LinearForm.atom(
+                new NumericTerm.ValueOf(element)));
+        out.addAll(holdingTheCount(answersOfAStep(walk.step().body(), walk.element().binding(),
+                walk.accumulator().binding(), seeds, theElement), count, ExactRatio.ONE));
         return List.copyOf(out);
+    }
+
+    /** Each of {@code of}, for the rows where the list {@code count} counts holds {@code size}. */
+    private static List<Attainment> holdingTheCount(List<Attainment> of, NumericTerm count,
+                                                    ExactRatio size) {
+        TakenConstraint.Affine exactly = new TakenConstraint.Affine(
+                LinearForm.atomMinusConstant(count, size), Rel.EQ);
+        List<Attainment> out = new ArrayList<>(of.size());
+        for (Attainment each : of) {
+            List<TakenConstraint.Affine> holding = new ArrayList<>(each.holding());
+            holding.add(exactly);
+            out.add(new Attainment(each.form(), holding));
+        }
+        return out;
+    }
+
+    /**
+     * What a step answers of the seed {@code carried} stands for and the element {@code element}
+     * stands for: the one it answers by name, or either of the arms of a choice, each with what
+     * the choice leaves it — the comparison of two such answers, or its denial — as what a row
+     * meets for the step to answer it. Nothing where a comparison is of anything else.
+     */
+    private List<Attainment> answersOfAStep(Core body, BindingId element, BindingId carried,
+                                            List<Attainment> seeds, Attainment theElement) {
+        switch (Core.withoutStanding(body)) {
+            case Core.Read name -> {
+                return element.equals(name.binding()) ? List.of(theElement)
+                        : carried.equals(name.binding()) ? seeds : List.of();
+            }
+            case Core.If fork -> {
+                if (!(Core.withoutStanding(fork.cond()) instanceof Core.Binary comparison)) {
+                    return List.of();
+                }
+                Rel rel = comparison.op().compares() ? comparison.op().relation() : null;
+                List<Attainment> lefts = rel == null ? List.of()
+                        : answersOfAStep(comparison.left(), element, carried, seeds, theElement);
+                List<Attainment> rights = rel == null ? List.of()
+                        : answersOfAStep(comparison.right(), element, carried, seeds, theElement);
+                List<Attainment> out = new ArrayList<>();
+                for (Attainment left : lefts) {
+                    for (Attainment right : rights) {
+                        LinearForm<NumericTerm> apart = left.form().minus(right.form()).orNull();
+                        if (apart == null) {
+                            return List.of();
+                        }
+                        out.addAll(armsTaken(fork.then(), new TakenConstraint.Affine(apart, rel),
+                                left, right, element, carried, seeds, theElement));
+                        out.addAll(armsTaken(fork.els(),
+                                new TakenConstraint.Affine(apart, rel.denied()), left, right,
+                                element, carried, seeds, theElement));
+                    }
+                }
+                return out;
+            }
+            default -> {
+                return List.of();
+            }
+        }
+    }
+
+    /** What the arm {@code arm} answers where a row meets {@code taken}, which compares what
+     *  {@code left} and {@code right} come to. */
+    private List<Attainment> armsTaken(Core arm, TakenConstraint.Affine taken, Attainment left,
+                                       Attainment right, BindingId element, BindingId carried,
+                                       List<Attainment> seeds, Attainment theElement) {
+        List<Attainment> out = new ArrayList<>();
+        for (Attainment answer : answersOfAStep(arm, element, carried, seeds, theElement)) {
+            List<TakenConstraint.Affine> holding = new ArrayList<>(answer.holding());
+            holding.addAll(left.holding());
+            holding.addAll(right.holding());
+            holding.add(taken);
+            out.add(new Attainment(answer.form(), holding));
+        }
+        return out;
     }
 
     /** What {@code place} holds, where that is known ({@link #atAPlace}). */

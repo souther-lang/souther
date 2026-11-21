@@ -378,23 +378,13 @@ final class Reading {
             case ADD, SUB, MUL, DIV -> new Value.Arithmetic(op, left, right);
             case CONCAT -> new Value.Joined(left, right);
             case LT, LE, GT, GE -> new Value.Statement(Props.compared(number(left),
-                    relationOf(op), number(right)));
+                    op.relation(), number(right)));
             case EQ, NE -> {
                 LawProposition<Value> alike = isNumber(left) || isNumber(right)
                         ? Props.compared(number(left), Rel.EQ, number(right))
                         : same(left, right);
                 yield new Value.Statement(op == BinOp.EQ ? alike : alike.denied());
             }
-        };
-    }
-
-    private static Rel relationOf(BinOp op) {
-        return switch (op) {
-            case LT -> Rel.LT;
-            case LE -> Rel.LE;
-            case GT -> Rel.GT;
-            case GE -> Rel.GE;
-            default -> throw new IllegalArgumentException(op + " orders nothing");
         };
     }
 
