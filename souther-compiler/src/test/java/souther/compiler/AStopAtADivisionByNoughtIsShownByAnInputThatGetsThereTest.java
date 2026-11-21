@@ -66,6 +66,14 @@ class AStopAtADivisionByNoughtIsShownByAnInputThatGetsThereTest {
                 .noneMatch(each -> each.operation().startsWith("division")));
     }
 
+    /** The outer quotient is worked out after one whose divisor is no form of the numbers, and a
+     *  run that stops in that one does not get to it: no stop is shown at the outer. */
+    @Test
+    void noStopIsShownPastAQuotientWhoseDivisorIsNotRead() {
+        assertTrue(shownIn("if Rational.toInt(UP, (e / (p * q)) / p) >= 2 then 1 else 2").stream()
+                .noneMatch(each -> each.operation().equals("division by p")));
+    }
+
     @Test
     void aWayThatKeepsTheDivisorFromNoughtShowsNone() {
         assertEquals(List.of(), shownIn("if p >= 1 then (if " + QUOTIENT + " then 1 else 2)"
