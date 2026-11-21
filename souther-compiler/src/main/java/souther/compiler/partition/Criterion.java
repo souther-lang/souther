@@ -117,20 +117,6 @@ public sealed interface Criterion {
         }
 
         /**
-         * A place of {@code carrier} this item accepts, or null where nothing composed one.
-         *
-         * <p>The item's own values, held to what the rules leave the position, asked of the order
-         * the position is on, from the end this point is named for. Which is the same question a border's point over a form asks of the
-         * order its levels are on, and it is asked the same way — one run, and the order says what
-         * it has inside it. Written twice instead, the two disagreed about a run whose ends are
-         * lines the quantity stands at no value of: what was in it was decided exactly, and what was
-         * looked for was found by stepping past it (issues #901, #903).
-         */
-        public Place somewhereInside(Carrier carrier, Endpoint min, Endpoint max) {
-            return somewhereIn(region(), away, carrier, min, max);
-        }
-
-        /**
          * A place of {@code carrier} in {@code region}, held to what the rules leave the position,
          * or null where nothing composed one.
          *

@@ -974,9 +974,9 @@ public sealed interface ElementValue {
      *
      * <p>The number a closure makes of an element by multiplying its fields, or by rounding what
      * it made of them. A product is no form of the fields, but it is linear in each field taken
-     * alone: with every other field fixed it is a form of the one left
-     * ({@link ElementValue#withOnly}), so a total of it is reached by fixing all of an element's
-     * fields but one and solving for that one, as a total of a form is.
+     * alone: with every other field fixed it is a form of the one left, a rounding being taken as
+     * the number it rounds ({@link ElementValue#solvedThrough}), so a total of it is reached by
+     * fixing all of an element's fields but one and solving for that one, as a total of a form is.
      *
      * <p>One value however it was written. The terms are a mapping to their weights, so
      * {@code q·p·(1 − d)} and {@code p·q − d·q·p} are one value, and the arithmetic that adds and
@@ -1045,25 +1045,11 @@ public sealed interface ElementValue {
     }
 
     /**
-     * What the sum of products {@code form} comes to with every field but {@code free} at the
-     * number {@code fixed} holds of it, as a form of {@code free}; or null where {@code fixed}
-     * holds no number at a field the sum reads, or the exact arithmetic cannot hold one.
-     *
-     * <p>A form of the fields is a sum of products of one field each, and fixing all of its
-     * fields but one leaves it a form of that one as well.
-     */
-    static LinearForm<ElementProjection> withOnly(LinearForm<Monomial> form,
-                                                  ElementProjection free,
-                                                  Map<ElementProjection, ExactRatio> fixed) {
-        return heldStill(form, free, fixed, false);
-    }
-
-    /**
      * What a total of {@code form} is solved for {@code free} through, with every other field at
-     * the number {@code fixed} holds of it: {@link #withOnly}, with a rounding of a number that
-     * reads {@code free} taken as the number it rounds — or null where {@code fixed} holds no
-     * number at a field the sum reads, a rounding rounds what is no form or sum of products, or the
-     * exact arithmetic cannot hold one.
+     * the number {@code fixed} holds of it: the sum of products as a form of {@code free}, with a
+     * rounding of a number that reads {@code free} taken as the number it rounds — or null where
+     * {@code fixed} holds no number at a field the sum reads, a rounding rounds what is no form or
+     * sum of products, or the exact arithmetic cannot hold one.
      *
      * <p>A rounding answers what it rounds wherever that lies on the steps it rounds to, so an
      * element whose number does is written by solving through it, and the row is read back for
@@ -1073,23 +1059,12 @@ public sealed interface ElementValue {
     static LinearForm<ElementProjection> solvedThrough(LinearForm<Monomial> form,
                                                        ElementProjection free,
                                                        Map<ElementProjection, ExactRatio> fixed) {
-        return heldStill(form, free, fixed, true);
-    }
-
-    /**
-     * {@link #withOnly}, or {@link #solvedThrough} where {@code throughRoundings}.
-     */
-    private static LinearForm<ElementProjection> heldStill(LinearForm<Monomial> form,
-                                                           ElementProjection free,
-                                                           Map<ElementProjection, ExactRatio> fixed,
-                                                           boolean throughRoundings) {
         ExactAnswer<LinearForm<ElementProjection>> total =
                 ExactAnswer.held(LinearForm.constant(form.constant()));
         for (Map.Entry<Monomial, ExactRatio> each : form.coefs().entrySet()) {
             Rounding rounding = each.getKey().rounding();
             if (rounding != null) {
-                LinearForm<ElementProjection> rounded = roundingHeldStill(rounding, free, fixed,
-                        throughRoundings);
+                LinearForm<ElementProjection> rounded = roundingHeldStill(rounding, free, fixed);
                 if (rounded == null) {
                     return null;
                 }
@@ -1121,22 +1096,21 @@ public sealed interface ElementValue {
     /**
      * What {@code rounding} comes to with every field but {@code free} at the number {@code fixed}
      * holds of it: the number it rounds to where it reads none but fixed fields, and where it reads
-     * {@code free} and {@code through}, what it rounds held the same way — or null otherwise.
+     * {@code free}, what it rounds held the same way — or null otherwise.
      */
     private static LinearForm<ElementProjection> roundingHeldStill(
-            Rounding rounding, ElementProjection free, Map<ElementProjection, ExactRatio> fixed,
-            boolean through) {
+            Rounding rounding, ElementProjection free, Map<ElementProjection, ExactRatio> fixed) {
         if (!rounding.inner().reads().contains(free)) {
             ExactAnswer<ExactRatio> rounded = rounding.at(new HeldAt(fixed));
             return rounded == null ? null : rounded.map(LinearForm::<ElementProjection>constant)
                     .orNull();
         }
-        LinearForm<Monomial> inner = !through ? null : switch (rounding.inner()) {
+        LinearForm<Monomial> inner = switch (rounding.inner()) {
             case Affine affine -> asProducts(affine);
             case Multilinear products -> products.form();
             case Choose _, Indexed _, OfItsCase _, SumOfChoices _ -> null;
         };
-        return inner == null ? null : heldStill(inner, free, fixed, true);
+        return inner == null ? null : solvedThrough(inner, free, fixed);
     }
 
     /** An element holding the numbers {@code fixed} holds and nothing else. */

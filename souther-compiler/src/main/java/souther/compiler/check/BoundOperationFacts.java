@@ -1136,11 +1136,6 @@ public final class BoundOperationFacts {
         return one(BoundOperationFact.AgreesWithAnotherWhereItIsGivenText.class, operation);
     }
 
-    /** The operations that agree with another where they are given a string. */
-    public Set<ValueName> agreeWhereTheyAreGivenText() {
-        return ones(BoundOperationFact.AgreesWithAnotherWhereItIsGivenText.class);
-    }
-
     /** The emptiness checks. */
     public Set<ValueName> meansTheSameAsASizeOfNought() {
         return ones(BoundOperationFact.MeansTheSameAsASizeOfNought.class);

@@ -310,50 +310,6 @@ final class StringsHeld {
                 () -> asOneSet(held, PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter()));
     }
 
-    /**
-     * A bound on the code points of every string {@code at} holds, or null where nothing ends
-     * them: the least of the end the rules leave its length ({@link HowManyAPlaceHolds}) and the
-     * longest string of the set it admits.
-     *
-     * <p>No string {@code at} holds is longer, and none need be this long, so it asks for less
-     * than {@link #at} does. The end a rule leaves the length holds of every value whether or not
-     * the rules are read whole, and the set admitted is wider than the values in every reading
-     * ({@link AdmissibleSet#approximation}); neither asks that the length be the one number bound.
-     * The end is held as a number, so a length no language is written out to is still an end.
-     */
-    static BigInteger lengthBoundAt(Position at) {
-        return leastOf(HowManyAPlaceHolds.atMost(at), longestOf(at.admitted().approximation()));
-    }
-
-    /** The longest string of {@code set}, or null where it has none or holds strings of every
-     *  length. */
-    private static BigInteger longestOf(ValueSet set) {
-        return switch (set) {
-            case ValueSet.Finite finite -> {
-                BigInteger longest = BigInteger.ZERO;
-                for (Value each : finite.values()) {
-                    if (!(each instanceof Value.Text(String text))) {
-                        yield null;
-                    }
-                    longest = longest.max(
-                            BigInteger.valueOf(text.codePointCount(0, text.length())));
-                }
-                yield longest;
-            }
-            case ValueSet.Matching(Language language) -> {
-                Language.Ends lengths = language.lengths();
-                yield lengths == null || lengths.most() == null ? null
-                        : BigInteger.valueOf(lengths.most());
-            }
-            case ValueSet.Cofinite _, ValueSet.WholeRuns _, ValueSet.WholeSteps _ -> null;
-        };
-    }
-
-    /** The lesser of two ceilings, either of which may be none. */
-    private static BigInteger leastOf(BigInteger one, BigInteger other) {
-        return one == null ? other : other == null ? one : one.min(other);
-    }
-
     /** The lengths {@code bounds} leave, or null where an end is not a whole count. */
     private static LengthsPastTheWay.Lengths lengthsOf(NumericDomain.Bounds bounds) {
         if (bounds == null) {

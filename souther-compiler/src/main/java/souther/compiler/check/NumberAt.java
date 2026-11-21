@@ -109,22 +109,10 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
         return new NumberAt<>(position, new OfWhatNumber.OfTheWholeUnitsOf(operation));
     }
 
-    /** How many elements of the container {@code position} stands inside hold there what the
-     *  element under consideration holds. */
-    public static <P> NumberAt<P> multiplicityOf(P position) {
-        return new NumberAt<>(position, OfWhatNumber.MULTIPLICITY);
-    }
-
     /** How many of the values standing at {@code position}, in every container it stands inside,
      *  are what the value under consideration is. */
     public static <P> NumberAt<P> occurrencesOf(P position) {
         return new NumberAt<>(position, OfWhatNumber.OCCURRENCES_IN_EVERY_CONTAINER);
-    }
-
-    /** How many of the values standing at {@code position}, in every container it stands inside,
-     *  are what the value spelled {@code key} is. */
-    public static <P> NumberAt<P> occurrencesOfAKey(P position, String key) {
-        return new NumberAt<>(position, new OfWhatNumber.OfTheOccurrencesOfAKey(key));
     }
 
     /** The {@code extreme} of what the elements of the container {@code position} stands inside

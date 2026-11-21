@@ -280,8 +280,7 @@ public final class ExactRatio implements Comparable<ExactRatio> {
      * which says so instead.
      *
      * <p>Everything a reasoning step asks of the two numbers is asked of this type instead:
-     * {@link #numeratorMod} and {@link #denominatorMod} for a residue, {@link #numeratorAsRatio} for
-     * the one above the line as a value to go on computing with,
+     * {@link #numeratorMod} and {@link #denominatorMod} for a residue,
      * {@link #timesWhatItStandsOver} for a product with the one below it,
      * {@link #spread} for the part of the denominator no finite decimal divides. Each of those
      * answers from the factors and builds nothing.
@@ -317,12 +316,6 @@ public final class ExactRatio implements Comparable<ExactRatio> {
         }
         return ExactAnswer.of(() -> ExactArithmetic.written(numeratorWithoutUnits(),
                 ExactArithmetic.aboveTheLine(twos()), ExactArithmetic.aboveTheLine(fives())));
-    }
-
-    /** The number above this ratio's line, as a ratio — so that a caller going on to compute with it
-     *  is handed the factors rather than the digits. */
-    ExactRatio numeratorAsRatio() {
-        return from(parts.numeratorOverOne(Math.max(twos(), 0), Math.max(fives(), 0)));
     }
 
     /**

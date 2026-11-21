@@ -40,18 +40,6 @@ public record CellSelection(InteractionCells.Cell cell, List<ControlClaim> claim
         }
     }
 
-    /**
-     * What {@code seen} did not do of what this names.
-     *
-     * <p>Empty is the certification. Which of them were missed is kept rather than reduced to
-     * whether any were, because that is what says where the reading and the run parted — a row that
-     * never reached the meeting misses the way in, and one that reached it and went the other way
-     * misses an outcome, and those are different things to be told.
-     */
-    public List<ControlClaim> missedBy(AlignedObservation seen) {
-        return claims.stream().filter(claim -> !claim.satisfiedBy(seen)).toList();
-    }
-
     /** Whether {@code seen} did everything this names. */
     public boolean certifiedBy(AlignedObservation seen) {
         return claims.stream().allMatch(claim -> claim.satisfiedBy(seen));

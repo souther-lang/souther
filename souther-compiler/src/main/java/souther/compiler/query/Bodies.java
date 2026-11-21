@@ -1996,8 +1996,8 @@ public final class Bodies {
     }
 
     /**
-     * The definitions {@code from} publishes among {@code wanted}, together with every recursive
-     * helper of {@code from} they reach.
+     * What travels with {@code roots}, which are definitions of {@code from} it hands over: each
+     * closed over its own module, and every recursive helper of {@code from} they reach.
      *
      * <p>Closing a body leaves every name of the declaring module in it qualified, and the ones that
      * stay are a recursive helper's, which is a method and stays a call, and a value's, which stays a
@@ -2005,21 +2005,10 @@ public final class Bodies {
      * since one may name another, so does everything it reaches in turn. A mutually-recursive group
      * therefore arrives whole: each member is reached from the others, so following the names
      * collects all of them.
-     */
-    public static Map<String, Hir.FnDef> publishedClosure(Hir.Module from,
-                                                          Collection<PublishedHelper> allowed,
-                                                          Expanding.Of against) {
-        return carriedClosure(from, bodiesOf(from, allowed), against);
-    }
-
-    /**
-     * What travels with {@code roots}, which are definitions of {@code from} it hands over: each
-     * closed over its own module, and every recursive helper of {@code from} they reach.
      *
-     * <p>The one computation of what a reader is given. The reader asks it for the definitions it
-     * holds leave to read ({@link #publishedClosure}); the module that publishes asks it for the
-     * ones it exposes, to hold what it ships to the question of whether another module can run it.
-     * Two computations of one set would agree only until the closing changed.
+     * <p>The one computation of what a reader is given and of what the module that publishes
+     * exposes, to hold what it ships to the question of whether another module can run it. Two
+     * computations of one set would agree only until the closing changed.
      */
     public static Map<String, Hir.FnDef> carriedClosure(Hir.Module from,
                                                         Collection<Hir.FnDef> roots,

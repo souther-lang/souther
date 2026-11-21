@@ -68,14 +68,6 @@ final class TruthOutcomes {
             return this == only(value);
         }
 
-        /** Whether it is the same whatever the input. */
-        boolean isFixed() {
-            return switch (this) {
-                case ONLY_TRUE, ONLY_FALSE, FIXED_UNNAMED -> true;
-                case EITHER, UNKNOWN -> false;
-            };
-        }
-
         Outcomes denied() {
             return switch (this) {
                 case ONLY_TRUE -> ONLY_FALSE;

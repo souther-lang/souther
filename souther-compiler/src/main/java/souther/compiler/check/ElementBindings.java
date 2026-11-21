@@ -773,21 +773,6 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
     }
 
     /**
-     * The one element every list {@code body} may answer is written with, or null where the lists
-     * it answers are written with none or with more than one.
-     *
-     * <p>Read through the choices of the body: {@code if keep(x) then [x] else []} answers {@code x}
-     * where it answers anything, and so does a {@code match} whose arms answer {@code [x]} or
-     * {@code []}. Two arms writing the same expression are one element; two writing different ones
-     * are two, and a list written with a second element or answered by a call is a list this does
-     * not see inside.
-     */
-    public static Core theOneElementWritten(Core body) {
-        ElementWritten written = theOneElementWrittenAfter(body);
-        return written == null ? null : written.element();
-    }
-
-    /**
      * The one element a list is written with, and what decided the arm that writes it, outermost
      * first: the attempt that held, the case taken, the condition that came out one way.
      *
@@ -803,8 +788,15 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
     }
 
     /**
-     * {@link #theOneElementWritten}, with the decisions of the arm that writes it, or null where
-     * the lists are written with none or with more than one.
+     * The one element every list {@code body} may answer is written with, with the decisions of
+     * the arm that writes it, or null where the lists it answers are written with none or with
+     * more than one.
+     *
+     * <p>Read through the choices of the body: {@code if keep(x) then [x] else []} answers {@code x}
+     * where it answers anything, and so does a {@code match} whose arms answer {@code [x]} or
+     * {@code []}. Two arms writing the same expression are one element; two writing different ones
+     * are two, and a list written with a second element or answered by a call is a list this does
+     * not see inside.
      */
     public static ElementWritten theOneElementWrittenAfter(Core body) {
         Core written = Core.withoutStanding(body);

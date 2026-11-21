@@ -252,10 +252,6 @@ class AChoicesClassesClaimsAndDecisionsAreAllOfThatChoiceTest {
 
     /**
      * A combination is certified by a run that did everything it names, and by nothing less.
-     *
-     * <p>What is missing is answered rather than only whether anything is: a row that did not take
-     * the way in and a row that took it and settled a factor the other way are two different things
-     * to be told, and a reading that answered `no` to both would send the same sentence for each.
      */
     @Test
     void aCombinationIsCertifiedByARunThatDidEverythingItNames() {
@@ -265,10 +261,10 @@ class AChoicesClassesClaimsAndDecisionsAreAllOfThatChoiceTest {
         CellSelection selection = GenerationFixtures.firstWay(group, 0);
 
         assertTrue(selection.certifiedBy(lit(9, 10)), "a run that did both did this combination");
-        assertEquals(List.of(at(10)), selection.missedBy(lit(9, 11)),
-                "a run that reached the meeting and settled the factor the other way missed that");
-        assertEquals(List.of(at(9)), selection.missedBy(lit(10)),
-                "and one that settled the factor without taking the way in missed the way in");
-        assertFalse(selection.certifiedBy(lit(9)), "neither of which certifies it");
+        assertFalse(selection.certifiedBy(lit(9, 11)),
+                "a run that reached the meeting and settled the factor the other way is not certified");
+        assertFalse(selection.certifiedBy(lit(10)),
+                "nor one that settled the factor without taking the way in");
+        assertFalse(selection.certifiedBy(lit(9)), "nor one that took the way in alone");
     }
 }

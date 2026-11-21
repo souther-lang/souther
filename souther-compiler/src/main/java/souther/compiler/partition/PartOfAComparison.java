@@ -40,11 +40,6 @@ public final class PartOfAComparison {
         return line;
     }
 
-    /** Whether this is the comparison itself, which its author drew as one line. */
-    public boolean isTheComparison() {
-        return line.arms().isEmpty();
-    }
-
     @Override
     public boolean equals(Object other) {
         return other instanceof PartOfAComparison that && hash == that.hash

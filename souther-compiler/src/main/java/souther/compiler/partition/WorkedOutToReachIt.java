@@ -2028,25 +2028,21 @@ final class WorkedOutToReachIt {
     }
 
     /**
-     * The parts of {@code written} whose ending a run is the ending of a run of it: what
-     * {@link Evaluated#inOrder} says is evaluated, and every branch and arm, which are not
-     * evaluated by reaching the node but one of which is, so that all of them are asked.
-     *
-     * <p>A function value is made and not run where it is written, so its body is not a part. The
-     * construction an {@code if} tests for is a part by its fields alone: a refusal of its
-     * invariant is the branch the {@code if} takes and ends nothing.
-     */
-    static List<Core> whatIsRunWith(Core written) {
-        return partsOf(written).stream().map(Part::expression).toList();
-    }
-
-    /**
      * A part of what a run works out to reach a value, and which arm of the value it is, as
      * {@link Choice} numbers them; {@code arm} is below nought where it is no arm.
      */
     record Part(Core expression, int arm) {}
 
-    /** The parts {@link #whatIsRunWith} lists, each arm with its number. */
+    /**
+     * The parts of {@code written} whose ending a run is the ending of a run of it: what
+     * {@link Evaluated#inOrder} says is evaluated, and every branch and arm, which are not
+     * evaluated by reaching the node but one of which is, so that all of them are asked. Each
+     * arm comes with its number.
+     *
+     * <p>A function value is made and not run where it is written, so its body is not a part. The
+     * construction an {@code if} tests for is a part by its fields alone: a refusal of its
+     * invariant is the branch the {@code if} takes and ends nothing.
+     */
     static List<Part> partsOf(Core written) {
         List<Part> parts = new ArrayList<>();
         Core fork = Core.withoutStanding(written);
