@@ -438,7 +438,8 @@ public final class GuardThresholds {
                                             each.stopsIn(), read,
                                             before, each.statedAsACondition().isPresent(),
                                             decides -> regionsOf(toItself.toACase()
-                                                    .apply(decides)));
+                                                    .apply(decides)),
+                                            each.places());
                             // And whether a run that gets to it works out something of which
                             // neither is shown, beside a stop shown in something else.
                             List<AStopNotShown> stopsNotShown =
@@ -1370,12 +1371,14 @@ public final class GuardThresholds {
     private static List<EveryRunStops> everyRunStops(
             ComparisonAssessment arrived, Optional<List<Cutting.OnAnApplication>> onEach,
             Optional<StopEvidence> stopsIn, InputReading read, List<SearchRegion> before,
-            boolean casesPutOnTheWay, Function<Proposition, List<SearchRegion>> beforeACase) {
+            boolean casesPutOnTheWay, Function<Proposition, List<SearchRegion>> beforeACase,
+            EvaluationPlaces places) {
         Set<EveryRunStops> out = new LinkedHashSet<>();
         if (onEach.isEmpty()) {
             arrived.relationsRead().forEach(relation ->
-                    out.addAll(relation.everyRunStopsIn(read, before)));
-            stopsIn.ifPresent(stops -> out.addAll(stops.everyRunStopsIn(read, before, List.of())));
+                    out.addAll(relation.everyRunStopsIn(read, before, places)));
+            stopsIn.ifPresent(stops -> out.addAll(
+                    stops.everyRunStopsIn(read, before, List.of(), places)));
             return List.copyOf(out);
         }
         List<Cutting.OnAnApplication> applications = onEach.get();
@@ -1402,7 +1405,7 @@ public final class GuardThresholds {
             }
             if (othersTold) {
                 out.addAll(it.stops().everyRunStopsIn(read,
-                        everywhere ? before : beforeACase.apply(it.reached()), others));
+                        everywhere ? before : beforeACase.apply(it.reached()), others, places));
             }
         }
         return List.copyOf(out);

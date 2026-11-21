@@ -317,8 +317,7 @@ final class StopAssessment {
             }
             for (int other = 0; other < working.operations().size(); other++) {
                 UndividedByARelation.IntOperation it = working.operations().get(other);
-                if (other != at && !it.after().contains(at)
-                        && !each.places().comesAfter(it.origin().node(), node)
+                if (working.mayComeBefore(other, at, node, each.places())
                         && !site.sameStopAs(new Site.PastItsEnds(it))) {
                     operations.add(it);
                 }
