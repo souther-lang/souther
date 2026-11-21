@@ -216,17 +216,23 @@ public final class Evaluated {
     /**
      * What a run has not got to where it stops at a site ({@link #workedOutAfter}), asked of a
      * node as its own step and as the whole of what it works out.
+     *
+     * <p>It says what is shown to be after the site, so a node it does not name is one it does not
+     * show to be after, which is not that it is before. An answer for a site holds what
+     * {@link #entirely} has worked out for that site, for one reader at a time and as long as the
+     * reader holds it. {@link #NONE} is shared by every site and holds nothing.
      */
     public static final class WorkedOutAfter {
 
-        /** Nothing is known to be after the site. */
-        public static final WorkedOutAfter NONE = new WorkedOutAfter(Set.of());
+        /** Nothing is shown to be after the site. */
+        public static final WorkedOutAfter NONE = new WorkedOutAfter(Set.of(), Map.of());
 
         private final Set<Core> steps;
-        private final Map<Core, Boolean> whole = new IdentityHashMap<>();
+        private final Map<Core, Boolean> whole;
 
-        private WorkedOutAfter(Set<Core> steps) {
+        private WorkedOutAfter(Set<Core> steps, Map<Core, Boolean> whole) {
             this.steps = steps;
+            this.whole = whole;
         }
 
         /**
@@ -244,7 +250,9 @@ public final class Evaluated {
          * is asked once for the site.
          */
         public boolean entirely(Core node) {
-            if (node == null) {
+            // The own step of a node is among what it works out, so with no step after the site
+            // none is entirely after it, and nothing is held for the answer.
+            if (node == null || steps.isEmpty()) {
                 return false;
             }
             Core bare = Core.withoutStanding(node);
@@ -317,7 +325,8 @@ public final class Evaluated {
             }
             Set<Core> out = Collections.newSetFromMap(new IdentityHashMap<>());
             after.stream().filter(node -> !notAfter.contains(node)).forEach(out::add);
-            return new WorkedOutAfter(out);
+            return out.isEmpty() ? WorkedOutAfter.NONE
+                    : new WorkedOutAfter(out, new IdentityHashMap<>());
         }
     }
 

@@ -102,6 +102,15 @@ class WhatARunHasNotGotToWhereASiteStopsIsFoundInTheOrderItWorksNodesOutTest {
         assertEquals(Set.of(), after(binary(BinOp.ADD, site, past), null));
     }
 
+    /** The answer where nothing is after the site is shared by every site, and holds nothing. */
+    @Test
+    void nothingIsEntirelyAfterASiteThatIsNotFoundAndTheAnswerHoldsNothing() {
+        Core.Binary site = binary(BinOp.ADD, one(), one());
+        Core.Binary past = binary(BinOp.ADD, one(), one());
+        assertFalse(Evaluated.workedOutAfter(List.of(past), site).entirely(past));
+        assertFalse(Evaluated.workedOutAfter(List.of(past), null).entirely(past));
+    }
+
     /**
      * The body of a function value runs when it is applied, after the arguments of the call that
      * applies it and each time it is, so nothing is after a site in it, though {@code past} is
