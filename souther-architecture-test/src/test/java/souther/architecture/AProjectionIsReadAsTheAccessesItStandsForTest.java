@@ -780,6 +780,12 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "asks each node what it ends a run for, and goes down to its parts and along the"
                         + " names it reads: a name read off a value ends none, so what a projection"
                         + " may end one for is what its base may");
+        row(out, c + "check/WhatARunMayEndFor$WithDefinitions", "of", "(" + core + ")L" + c
+                        + "check/WhatARunMayEndFor$Endings;", Reading.STRUCTURE,
+                "asks each node what it ends a run for, as the walk without the templates does, and"
+                        + " a build of a value what its template ends one for: a name read off a"
+                        + " value ends none, so what a projection may end one for is what its base"
+                        + " may");
         row(out, c + "check/WhatARunMayEndFor", "endsNoneBeneathApart",
                 "(" + core + "Ljava/util/Set;)Z", Reading.STRUCTURE,
                 "asks each node what it ends a run for, and goes down to its parts apart from those"
