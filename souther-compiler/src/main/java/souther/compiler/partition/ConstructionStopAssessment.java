@@ -554,19 +554,21 @@ final class ConstructionStopAssessment {
         }
         // A value of the input holding them exists where they meet what the input's declarations
         // ask of the places, which the value looked for is asked to meet with the way.
-        Optional<List<TakenConstraint.Affine>> declared =
+        Optional<AValueOfTheInput.Meets> declared =
                 AValueOfTheInput.whatAValueAtThemMeets(read, places);
         if (declared.isEmpty()) {
             return new Found.None(WhyAConstructionStopIsNotShown.NO_VALUE_SHOWN);
         }
-        taken.addAll(declared.get());
+        taken.addAll(declared.get().constraints());
         Map<NumericTerm, List<ExactRatio>> tried = new LinkedHashMap<>();
         for (NumericTerm number : numbers) {
             tried.put(number, valuesToTry(number, taken, first, ask, read));
         }
         int[] left = {MOST_VALUES_TRIED};
         Shown shown = tryingEach(List.copyOf(numbers), 0, new LinkedHashMap<>(), tried, left,
-                values -> stopsAt(values, taken, first, ask) ? new Shown(told, values) : null);
+                values -> (stopsAt(values, taken, first, ask)
+                        && declared.get().tiesHoldAt(values))
+                        ? new Shown(told, values) : null);
         if (shown != null) {
             return new Found.AStop(shown);
         }

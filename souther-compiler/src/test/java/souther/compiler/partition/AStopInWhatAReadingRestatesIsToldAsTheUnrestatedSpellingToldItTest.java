@@ -16,6 +16,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -30,11 +31,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
 
-    /** The note of {@code q + 1}. The number is a field of a record that writes a clause, and no
-     *  run its rules leave it is shown, so no value of the input is shown holding it and the stop
-     *  is one not resolved, with the rows every run getting there stops at. */
-    private static final String THE_STOP = "a run that gets there stops in k.q + 1 where k.q is"
-            + " at least 9223372036854775807, and no such run is shown to exist";
+    /** The note of {@code q + 1}. The number is a field of a record that writes a clause on
+     *  another field, so a value of the record holding the greatest {@code Int} there, with the
+     *  other field at nought, is written down, and the stop is shown. */
+    private static final String THE_STOP = "every run stops in k.q + 1 where k.q is"
+            + " at least 9223372036854775807";
 
     private static final Map<String, String> CONDITIONS = new LinkedHashMap<>();
 
@@ -115,8 +116,8 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
     /** The arms of a choice that is an argument are worked out before the operation picks one. */
     @Test
     void anOperationInAnArmThatIsAnArgumentIsToldWhateverTheOperationPicks() {
-        assertEquals(1, TOLD.get("maxOfAnArm").size(), TOLD.toString());
-        assertEquals(1, TOLD.get("absOfAnArm").size(), TOLD.toString());
+        assertToldOnceAndLeftOnly("maxOfAnArm", NO_OPERATION_TOLD);
+        assertToldOnceAndLeftOnly("absOfAnArm", NO_OPERATION_TOLD);
     }
 
     /** A closure is applied to each element, and what a run works out on an arm it takes there
@@ -131,7 +132,7 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
     @Test
     void anArmIsToldThroughTheChoicesAndTheRulesReadInsideIt() {
         assertEquals(1, TOLD.get("nestedArm").size(), TOLD.toString());
-        assertEquals(1, TOLD.get("armOfARule").size(), TOLD.toString());
+        assertToldOnceAndLeftOnly("armOfARule");
     }
 
     /** An arm of a match is told as an arm of an if is. */
@@ -203,6 +204,30 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
         assertEquals(List.of(), TOLD.get("maxOfAnArmNoStop"));
         assertEquals(List.of(), TOLD.get("maxOfAnArmUnreached"));
         assertEquals(List.of(), TOLD.get("matchArmNoStop"));
+    }
+
+    /** Why a run is not said to stop at an operation that is none this compiler tells apart. */
+    private static final String NO_OPERATION_TOLD =
+            "it is none of the operations this compiler tells apart";
+
+    /**
+     * That the behavior {@code name} is told of one stop a run may come to, and of one place not
+     * resolved beside it for {@code why}, or of none where there is no {@code why}. The stop at
+     * {@code q + 1} is shown, so the input being not built is not among the reasons, and the
+     * same stop left unresolved at another place is not said again.
+     */
+    private static void assertToldOnceAndLeftOnly(String name, String... why) {
+        List<String> stops = TOLD.get(name).stream()
+                .filter(line -> line.contains("may stop a run")).toList();
+        List<String> left = TOLD.get(name).stream()
+                .filter(line -> line.contains("stop not resolved")).toList();
+        assertEquals(1, stops.size(), TOLD.toString());
+        assertEquals(why.length, left.size(), TOLD.toString());
+        for (int at = 0; at < why.length; at++) {
+            assertTrue(left.get(at).contains(why[at]), TOLD.toString());
+            assertFalse(left.get(at).contains("no input meeting them is built"),
+                    TOLD.toString());
+        }
     }
 
     /** The notes of a stop of each behavior, shown or not resolved, each of the conditions read
