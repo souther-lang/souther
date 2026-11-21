@@ -578,20 +578,14 @@ final class StopAssessment {
         }
         // A value of the input holding them exists where they meet what the input's declarations
         // ask of the places, which the value looked for is asked to meet with the way.
-        Optional<List<TakenConstraint.Affine>> declared =
+        Optional<AValueOfTheInput.Meets> declared =
                 AValueOfTheInput.whatAValueAtThemMeets(read, places);
-        // Where they do not, because the declarations tie the places, each value found is asked
-        // whether a value of the input holds it, and nothing is looked for where no value of the
-        // input is shown to exist beside the places.
         if (declared.isEmpty()) {
-            if (!AValueOfTheInput.canShowHolding(read, places)) {
-                return new Judgement.Unresolved(site, WhyAStopIsNotShown.NO_VALUE_SHOWN);
-            }
-        } else {
-            way.addAll(declared.get());
+            return new Judgement.Unresolved(site, WhyAStopIsNotShown.NO_VALUE_SHOWN);
         }
+        way.addAll(declared.get().constraints());
         int[] tries = {MOST_VALUES_TRIED};
-        Before before = new Before(others, quotients, way, declared.isEmpty() ? read : null);
+        Before before = new Before(others, quotients, way, declared.get());
         Shown shown = aValueItStopsAt(site, before, List.copyOf(numbers), read, tries);
         if (shown != null) {
             return new Judgement.Stops(againstWhatIsKept(shown, kept));
@@ -658,13 +652,12 @@ final class StopAssessment {
      * What a run that stops at a site has got past before it: the conditions of the way, every
      * operation within its ends and every quotient with its divisor away from nought.
      *
-     * @param held the input, where its declarations tie the places the numbers are of, so that a
-     *             value found is one only where a value of the input holds it; otherwise null,
-     *             the way saying what the declarations leave each place
+     * @param declared what a value of the input holding the numbers has to meet: the way holds
+     *                 its constraints, and its ties are asked of each value found
      */
     private record Before(List<UndividedByARelation.IntOperation> operations,
                           List<LinearForm<NumericTerm>> divisors,
-                          List<TakenConstraint.Affine> way, InputReading held) {}
+                          List<TakenConstraint.Affine> way, AValueOfTheInput.Meets declared) {}
 
     /**
      * A value of the input's {@code numbers} on the way, getting past what is worked out
@@ -806,7 +799,7 @@ final class StopAssessment {
                 yield comes != null && comes.signum() == 0;
             }
         };
-        return stops && (before.held() == null || AValueOfTheInput.holdingNumbers(before.held(), at));
+        return stops && before.declared().tiesHoldAt(at);
     }
 
     private static boolean withinItsEnds(ExactRatio value,

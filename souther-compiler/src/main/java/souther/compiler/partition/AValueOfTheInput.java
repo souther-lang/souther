@@ -62,15 +62,18 @@ final class AValueOfTheInput {
      * every count between the calendar's first day and its last is a day there is; a case of an
      * enumeration is where it stands on the order its cases are declared in, and every place on
      * that order is a case.
+     *
+     * <p>Where a record's clause ties two or more of the places, the numbers within their runs are
+     * not all a value holds, and the numbers held to the constraints are a value's only where they
+     * meet the ties as well ({@link Meets#tiesHoldAt}).
      */
-    static Optional<List<TakenConstraint.Affine>> whatAValueAtThemMeets(InputReading read,
-                                                                       Collection<TermPath> places) {
-        Optional<Map<TermPath, WholeRun>> runs = runsAt(read, places);
-        if (runs.isEmpty()) {
+    static Optional<Meets> whatAValueAtThemMeets(InputReading read, Collection<TermPath> places) {
+        Optional<Found> found = runsAt(read, places);
+        if (found.isEmpty()) {
             return Optional.empty();
         }
         List<TakenConstraint.Affine> out = new ArrayList<>();
-        runs.get().forEach((place, run) -> {
+        found.get().runs().forEach((place, run) -> {
             NumericTerm number = new NumericTerm.ValueOf(place);
             if (run.least() != null) {
                 out.add(new TakenConstraint.Affine(LinearForm.atomMinusConstant(number,
@@ -81,233 +84,60 @@ final class AValueOfTheInput {
                         ExactRatio.of(run.greatest())), Rel.LE));
             }
         });
-        return Optional.of(List.copyOf(out));
+        return Optional.of(new Meets(List.copyOf(out), found.get().ties()));
     }
+
+    /**
+     * What a value holding numbers at places has to meet: each number within what its place holds
+     * ({@code constraints}), and the numbers together as the clauses of a record leave them
+     * ({@code ties}). A value exists holding numbers that meet both, and not otherwise.
+     */
+    record Meets(List<TakenConstraint.Affine> constraints, List<Tie> ties) {
+
+        /** Whether every tie holds of {@code numbers}, which gives a number at every place. */
+        boolean tiesHoldAt(Map<NumericTerm, ExactRatio> numbers) {
+            return ties.stream().allMatch(tie -> tie.holdsAt(numbers));
+        }
+    }
+
+    /**
+     * The places under one record whose clauses tie them, and what the record leaves them: a value
+     * of the record is written down with a number at each, every rule folding to true
+     * ({@link FieldDomains#holdsAValueWith}). Made only where the record is shown to hold a value.
+     */
+    record Tie(FieldDomains domains, List<Placed> placed) {
+
+        boolean holdsAt(Map<NumericTerm, ExactRatio> numbers) {
+            Map<RuleKey, Object> pinned = new LinkedHashMap<>();
+            for (Placed each : placed) {
+                ExactRatio number = numbers.get(new NumericTerm.ValueOf(each.place()));
+                Object constant = number == null ? null : constantOf(number, each.prim());
+                if (constant == null) {
+                    return false;
+                }
+                pinned.put(each.key(), constant);
+            }
+            return domains.holdsAValueWith(pinned);
+        }
+    }
+
+    /** A number under a record, as the record's rules name it, and what it is a number of. */
+    record Placed(TermPath place, RuleKey key, Type.Prim prim) {}
 
     /**
      * The whole numbers a value of the input {@code read} reads holds at each of {@code places},
      * every combination of which, one at each, some value holds together
      * ({@link #whatAValueAtThemMeets}): within the ends of what each place holds, and within those
-     * this says, each none where there is none. Nothing where that is not shown.
+     * this says, each none where there is none. Nothing where that is not shown, as where a clause
+     * ties places, whose combinations are not all a value's.
      */
     static Optional<Map<TermPath, WholeRun>> wholeNumbersAt(InputReading read,
                                                             Collection<TermPath> places) {
-        return runsAt(read, places);
+        return runsAt(read, places).filter(found -> found.ties().isEmpty()).map(Found::runs);
     }
 
-    /**
-     * Whether a value of the input {@code read} reads exists holding the whole number {@code
-     * numbers} gives at each place it names, shown from the declarations: every part of the value
-     * meets what they leave it, and the places meet them together, which a record whose clause
-     * ties them is shown by a value of it written down with those numbers in it
-     * ({@link FieldDomains#holdsAValueWith}). That it asks one assignment and not every one is what
-     * lets it answer where {@link #whatAValueAtThemMeets} does not.
-     *
-     * <p>True is that such a value exists. False is that it is not shown to, which is not that
-     * none does.
-     */
-    static boolean holding(InputReading read, Map<TermPath, ExactRatio> numbers) {
-        if (numbers.containsValue(null)) {
-            throw new IllegalArgumentException("a number is given at every place: "
-                    + numbers.keySet());
-        }
-        return walkedFor(new Asked.Held(numbers), read);
-    }
-
-    /** {@link #holding} of the places {@code numbers} are of, each a place of the input. */
-    static boolean holdingNumbers(InputReading read, Map<NumericTerm, ExactRatio> numbers) {
-        Map<TermPath, ExactRatio> at = new LinkedHashMap<>();
-        for (Map.Entry<NumericTerm, ExactRatio> each : numbers.entrySet()) {
-            if (!(each.getKey() instanceof NumericTerm.ValueOf(TermPath place))) {
-                return false;
-            }
-            at.put(place, each.getValue());
-        }
-        return holding(read, at);
-    }
-
-    /**
-     * Whether {@link #holding} is a question that can be answered at {@code places}, and a value of
-     * the input is shown to exist beside them: every place is a number {@code holding} reads,
-     * and every record that writes a clause on some of them is shown to hold a value. Which numbers
-     * they are held at is not asked, so that this is true where some are held at and some are not,
-     * and says nothing of which.
-     *
-     * <p>What a caller asks before it looks for numbers to ask {@link #holding} of: where this is
-     * false, no numbers are looked for, and where it is true the input exists and no more.
-     */
-    static boolean canShowHolding(InputReading read, Collection<TermPath> places) {
-        return walkedFor(new Asked.Answerable(Set.copyOf(places)), read);
-    }
-
-    /** Whether {@code asked} holds of every place it names and of every other part of the input. */
-    private static boolean walkedFor(Asked asked, InputReading read) {
-        int found = 0;
-        for (InputDomain.Parameter each : read.domain().parameters()) {
-            int here = holds(TermPath.of(each.name()), each.type(), asked, read);
-            if (here < 0) {
-                return false;
-            }
-            found += here;
-        }
-        return found == asked.places().size();
-    }
-
-    /** What is asked of the places of the input: the one walk that reads its parts says which part
-     *  is which, and what each place or record asks of is answered by the question. */
-    private sealed interface Asked {
-
-        Set<TermPath> places();
-
-        /** Whether the place {@code at}, a number holding {@code run} of the numbers its rules
-         *  leave it, answers. */
-        boolean ofANumber(TermPath at, WholeRun run, InputReading read);
-
-        /** Whether the record {@code record} at {@code at}, which writes a clause, answers at
-         *  {@code placed}, the numbers under it. */
-        boolean ofARecord(TypeSymbol.AtModule record, TermPath at, List<Placed> placed,
-                          InputReading read);
-
-        /** Which numbers are asked, and that some value of the input exists holding them
-         *  somewhere. */
-        record Answerable(Set<TermPath> places) implements Asked {
-
-            @Override
-            public boolean ofANumber(TermPath at, WholeRun run, InputReading read) {
-                return true;
-            }
-
-            @Override
-            public boolean ofARecord(TypeSymbol.AtModule record, TermPath at,
-                                     List<Placed> placed, InputReading read) {
-                return FieldDomains.of(record, read.ruleReading()).shownToHoldAValue();
-            }
-        }
-
-        /** The number held at each place, and that a value of the input exists holding them. */
-        record Held(Map<TermPath, ExactRatio> numbers) implements Asked {
-
-            @Override
-            public Set<TermPath> places() {
-                return numbers.keySet();
-            }
-
-            @Override
-            public boolean ofANumber(TermPath at, WholeRun run, InputReading read) {
-                ExactRatio number = numbers.get(at);
-                return withinTheRun(run, number) && withinTheEndsOfThePlace(at, number, read);
-            }
-
-            /**
-             * The one place its rules leave a run, where that holds the number, and otherwise a
-             * value of the record written down with all of them in it, every rule folding to true.
-             */
-            @Override
-            public boolean ofARecord(TypeSymbol.AtModule record, TermPath at,
-                                     List<Placed> placed, InputReading read) {
-                Map<RuleKey, Object> pinned = new LinkedHashMap<>();
-                for (Placed each : placed) {
-                    ExactRatio number = numbers.get(each.place());
-                    Object constant = constantOf(number, each.prim());
-                    if (constant == null || !withinTheEndsOfThePlace(each.place(), number, read)) {
-                        return false;
-                    }
-                    pinned.put(each.key(), constant);
-                }
-                if (placed.size() == 1 && placed.getFirst().place().steps().size()
-                        == at.steps().size() + 1) {
-                    Placed only = placed.getFirst();
-                    WholeRun run = wholeOf(DeclaredBounds.wholeRunAt(record, only.key(),
-                            read.ruleReading()));
-                    if (run != null && withinTheRun(run, numbers.get(only.place()))) {
-                        return true;
-                    }
-                }
-                return FieldDomains.of(record, read.ruleReading()).holdsAValueWith(pinned);
-            }
-        }
-    }
-
-    /** A number under a record, as the record's rules name it, and what it is a number of. */
-    private record Placed(TermPath place, RuleKey key, Type.Prim prim) {}
-
-    /**
-     * How many of the places {@code asked} names the part at {@code at}, of {@code type}, holds,
-     * each answered by a value of the part that meets everything its types state, or -1 where that
-     * is not shown.
-     */
-    private static int holds(TermPath at, Type type, Asked asked, InputReading read) {
-        RuleReadingSource rules = read.rules();
-        TypeView view = TypeView.of(type, rules.inners(), rules.symbols(), rules.kinds(),
-                rules.sums());
-        if (asked.places().contains(at)) {
-            WholeRun run = held(view, read);
-            return (run != null && asked.ofANumber(at, run, read)) ? 1 : -1;
-        }
-        List<TermPath> below = asked.places().stream().filter(place -> place.steps().size()
-                > at.steps().size() && place.prefix(at.steps().size()).equals(at)).toList();
-        if (below.isEmpty()) {
-            return aValueIsShownToExist(type, read) ? 0 : -1;
-        }
-        if (!view.wrappers().stream().allMatch(name -> writesNoClause(name, rules))
-                || !(view.shape() instanceof Shape.Product product)) {
-            return -1;
-        }
-        if (!writesNoClause(product.name(), rules)) {
-            return holdsBesideItsClauses(at, product, below, asked, read) ? below.size() : -1;
-        }
-        int found = 0;
-        for (Map.Entry<String, Type> field : product.fields().entrySet()) {
-            int here = holds(at.then(field.getKey()), field.getValue(), asked, read);
-            if (here < 0) {
-                return -1;
-            }
-            found += here;
-        }
-        return found;
-    }
-
-    /**
-     * Whether {@code asked} holds of the record {@code product} at {@code at}, whose declaration
-     * writes a clause, at {@code below}, the places under it: each a number the record's rules
-     * name, which is all the question is put over.
-     */
-    private static boolean holdsBesideItsClauses(TermPath at, Shape.Product product,
-                                                 List<TermPath> below, Asked asked,
-                                                 InputReading read) {
-        if (!(product.name() instanceof TypeSymbol.AtModule record)) {
-            return false;
-        }
-        List<Placed> placed = new ArrayList<>();
-        for (TermPath place : below) {
-            Position position = read.domain().at(place);
-            RuleAddress named = RuleAddress.of(at, place);
-            if (position == null || named == null
-                    || !(TypeView.shapeOf(position.type(), read.rules().inners(),
-                            read.rules().symbols(), read.rules().kinds(), read.rules().sums())
-                            instanceof Shape.Scalar(Type.Prim prim))
-                    || (prim != Type.Prim.INT && prim != Type.Prim.DECIMAL)) {
-                return false;
-            }
-            placed.add(new Placed(place, named.key(), prim));
-        }
-        return asked.ofARecord(record, at, List.copyOf(placed), read);
-    }
-
-    private static boolean withinTheRun(WholeRun run, ExactRatio number) {
-        return number.isWhole()
-                && (run.least() == null || number.compareTo(ExactRatio.of(run.least())) >= 0)
-                && (run.greatest() == null
-                        || number.compareTo(ExactRatio.of(run.greatest())) <= 0);
-    }
-
-    private static boolean withinTheEndsOfThePlace(TermPath place, ExactRatio number,
-                                                   InputReading read) {
-        FormRange ends = FormRange.endsOf(new NumericTerm.ValueOf(place), read);
-        return ends == null
-                || ((ends.least() == null || number.compareTo(ends.least()) >= 0)
-                        && (ends.greatest() == null || number.compareTo(ends.greatest()) <= 0));
-    }
+    /** What {@code places} each hold, and the ties among them. */
+    private record Found(Map<TermPath, WholeRun> runs, List<Tie> ties) {}
 
     /** The constant a fold reads for the whole number {@code number} of a place of {@code prim},
      *  or null where it is not a whole number that fits. */
@@ -334,12 +164,12 @@ final class AValueOfTheInput {
 
     /** What {@code places} each hold, as the walk of the input finds it, or nothing where a value
      *  holding any whole number within that at each is not shown. */
-    private static Optional<Map<TermPath, WholeRun>> runsAt(InputReading read,
-                                                            Collection<TermPath> places) {
+    private static Optional<Found> runsAt(InputReading read, Collection<TermPath> places) {
         Map<TermPath, WholeRun> out = new LinkedHashMap<>();
+        List<Tie> ties = new ArrayList<>();
         Set<TermPath> asked = Set.copyOf(places);
         for (InputDomain.Parameter each : read.domain().parameters()) {
-            if (walk(TermPath.of(each.name()), each.type(), asked, read, out) < 0) {
+            if (walk(TermPath.of(each.name()), each.type(), asked, read, out, ties) < 0) {
                 return Optional.empty();
             }
         }
@@ -356,7 +186,7 @@ final class AValueOfTheInput {
             }
             each.setValue(run);
         }
-        return Optional.of(out);
+        return Optional.of(new Found(out, List.copyOf(ties)));
     }
 
     /** {@code run} held within {@code ends}, the ends of what its place's order holds, or null
@@ -378,10 +208,11 @@ final class AValueOfTheInput {
 
     /**
      * The walk of the part at {@code at}, of {@code type}: how many of {@code places} it found
-     * there, what each holds put on {@code out}, or -1 where no value is shown.
+     * there, what each holds put on {@code out} and the ties among them on {@code ties}, or -1
+     * where no value is shown.
      */
     private static int walk(TermPath at, Type type, Set<TermPath> places, InputReading read,
-                            Map<TermPath, WholeRun> out) {
+                            Map<TermPath, WholeRun> out, List<Tie> ties) {
         RuleReadingSource rules = read.rules();
         TypeView view = TypeView.of(type, rules.inners(), rules.symbols(), rules.kinds(),
                 rules.sums());
@@ -403,11 +234,11 @@ final class AValueOfTheInput {
             return -1;
         }
         if (!writesNoClause(product.name(), rules)) {
-            return heldBesideItsClauses(at, product, places, read, out) ? 1 : -1;
+            return heldBesideItsClauses(at, product, places, read, out, ties);
         }
         int found = 0;
         for (Map.Entry<String, Type> field : product.fields().entrySet()) {
-            int here = walk(at.then(field.getKey()), field.getValue(), places, read, out);
+            int here = walk(at.then(field.getKey()), field.getValue(), places, read, out, ties);
             if (here < 0) {
                 return -1;
             }
@@ -421,30 +252,50 @@ final class AValueOfTheInput {
      * clause, holds any whole number of a run at the one place of {@code places} below it, put on
      * {@code out}: the place a field of it holding a number, and the run the one its rules leave
      * the field, every number of which is that field of some value they all hold of
-     * ({@link DeclaredBounds#wholeRunAt}), as they call it ({@link RuleAddress#of}). Not
-     * shown where two places are asked below it,
-     * which a run of each alone says nothing of together.
+     * ({@link DeclaredBounds#wholeRunAt}), as they call it ({@link RuleAddress#of}). Where two or
+     * more places are asked below it, or that run is not shown, a run of each alone says nothing
+     * of them together: each is a number of any run, and the record is tied to them ({@link Tie}),
+     * which is made only where the record is shown to hold a value.
+     *
+     * @return how many of {@code places} it holds, or -1 where no value is shown
      */
-    private static boolean heldBesideItsClauses(TermPath at, Shape.Product product,
-                                                Set<TermPath> places, InputReading read,
-                                                Map<TermPath, WholeRun> out) {
+    private static int heldBesideItsClauses(TermPath at, Shape.Product product,
+                                            Set<TermPath> places, InputReading read,
+                                            Map<TermPath, WholeRun> out, List<Tie> ties) {
         List<TermPath> below = places.stream().filter(place -> place.steps().size()
                 > at.steps().size() && place.prefix(at.steps().size()).equals(at)).toList();
-        if (below.size() != 1 || below.getFirst().steps().size() != at.steps().size() + 1
-                || !(below.getFirst().steps().getLast() instanceof TermPath.Step.Field(String f))
-                || !(product.name() instanceof TypeSymbol.AtModule record)
-                || !(product.fields().get(f) instanceof Type.Prim prim)
-                || (prim != Type.Prim.INT && prim != Type.Prim.DECIMAL)) {
-            return false;
+        if (!(product.name() instanceof TypeSymbol.AtModule record)) {
+            return -1;
         }
-        RuleAddress named = RuleAddress.of(at, below.getFirst());
-        WholeRun run = named == null ? null
-                : wholeOf(DeclaredBounds.wholeRunAt(record, named.key(), read.ruleReading()));
-        if (run == null) {
-            return false;
+        List<Placed> placed = new ArrayList<>();
+        for (TermPath place : below) {
+            Position position = read.domain().at(place);
+            RuleAddress named = RuleAddress.of(at, place);
+            if (position == null || named == null
+                    || !(TypeView.shapeOf(position.type(), read.rules().inners(),
+                            read.rules().symbols(), read.rules().kinds(), read.rules().sums())
+                            instanceof Shape.Scalar(Type.Prim prim))
+                    || (prim != Type.Prim.INT && prim != Type.Prim.DECIMAL)) {
+                return -1;
+            }
+            placed.add(new Placed(place, named.key(), prim));
         }
-        out.put(below.getFirst(), run);
-        return true;
+        if (placed.size() == 1 && placed.getFirst().place().steps().size()
+                == at.steps().size() + 1) {
+            WholeRun run = wholeOf(DeclaredBounds.wholeRunAt(record, placed.getFirst().key(),
+                    read.ruleReading()));
+            if (run != null) {
+                out.put(placed.getFirst().place(), run);
+                return 1;
+            }
+        }
+        FieldDomains domains = FieldDomains.of(record, read.ruleReading());
+        if (!domains.shownToHoldAValue()) {
+            return -1;
+        }
+        below.forEach(place -> out.put(place, WholeRun.OPEN));
+        ties.add(new Tie(domains, List.copyOf(placed)));
+        return below.size();
     }
 
     /** The whole numbers of {@code run}, every one between its least and greatest, or null where
