@@ -364,29 +364,37 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
          * <p>Put together as they are asked for and not all at once. The ways of several values
          * are as many as the product of how many each has, and a reader that spends a figure on
          * every one it looks at must not be handed the whole product before it has spent any.
+         *
+         * @return false where some value's ways were left unmade for want of the figure
+         *         ({@link Attainments#leftUnmade}), which no visit says: all of them that were made
+         *         may have been visited
          */
-        void forEachAttained(Predicate<Attainment> visit) {
+        boolean forEachAttained(Predicate<Attainment> visit) {
             LinearForm<NumericTerm> alone = overTheInput();
             if (alone != null) {
                 visit.test(Attainment.always(alone));
-                return;
+                return true;
             }
             List<Map.Entry<IntOperand, ExactRatio>> operands = List.copyOf(form.coefs().entrySet());
             List<List<Attainment>> ways = new ArrayList<>(operands.size());
+            boolean complete = true;
+            boolean none = false;
             for (Map.Entry<IntOperand, ExactRatio> operand : operands) {
-                List<Attainment> some = switch (operand.getKey()) {
+                Attainments some = switch (operand.getKey()) {
                     case IntOperand.OfTheInput(NumericTerm term) ->
-                            List.of(Attainment.always(LinearForm.atom(term)));
+                            Attainments.of(List.of(Attainment.always(LinearForm.atom(term))));
                     case IntOperand.OfAValueWorkedOut worked -> worked.attainments();
-                    default -> List.of();
+                    default -> Attainments.NONE;
                 };
-                if (some.isEmpty()) {
-                    return;
-                }
-                ways.add(some);
+                complete &= !some.leftUnmade();
+                none |= some.isEmpty();
+                ways.add(some.ways());
             }
-            puttingTogether(operands, ways, 0,
-                    Attainment.always(LinearForm.constant(form.constant())), visit);
+            if (!none) {
+                puttingTogether(operands, ways, 0,
+                        Attainment.always(LinearForm.constant(form.constant())), visit);
+            }
+            return complete;
         }
 
         /** Each way of the operands from {@code at} on, after {@code sofar}, visited in turn;
@@ -570,13 +578,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
          * is none it is not.
          */
         record OfAValueWorkedOut(NumericTerm atom, WhereAValueComesFrom origin,
-                                 List<Attainment> attainments) implements IntOperand {
+                                 Attainments attainments) implements IntOperand {
 
             public OfAValueWorkedOut {
                 Objects.requireNonNull(atom, "the value as the reading held it aside");
                 Objects.requireNonNull(origin, "an operation over a value is told where what it "
                         + "comes to is known");
-                attainments = List.copyOf(attainments);
+                Objects.requireNonNull(attainments, "the ways a row makes the value a number");
             }
 
             @Override

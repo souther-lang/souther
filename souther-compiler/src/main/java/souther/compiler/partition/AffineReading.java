@@ -3652,7 +3652,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              *  where the range is not known. */
             private WhereAValueComesFrom origin;
             /** How a row makes the expression come to a number, where that is known. */
-            private List<Attainment> attainments = List.of();
+            private Attainments attainments = Attainments.NONE;
             /** The bound value the derivation reads the expression as, where an operation of
              *  whole numbers can be over it; null otherwise. */
             private UndividedByARelation.IntOperand.OfABinding bound;
@@ -3681,7 +3681,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             }
 
             /** That the expression comes to what {@code origin} says, from where it says. */
-            void originIs(WhereAValueComesFrom origin, List<Attainment> attainments) {
+            void originIs(WhereAValueComesFrom origin, Attainments attainments) {
                 this.origin = origin;
                 this.range = origin == null ? null : origin.range();
                 this.attainments = attainments;

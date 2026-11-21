@@ -1,11 +1,14 @@
 package souther.compiler;
 
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import souther.compiler.inputs.AStopShown;
 import souther.compiler.inputs.InputFact;
 import souther.compiler.inputs.RuleWhereARunMayStop;
+import souther.compiler.inputs.RuleWhereAStopIsNotShown;
+import souther.compiler.inputs.WhyAStopIsNotShown;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.WhatIsShownOfAStop;
 import souther.compiler.partition.Partitions;
@@ -90,7 +93,10 @@ class AStopOverAValueARunWorksOutIsShownByAListTheProgramRunsIntoTest {
     /** Comparisons no row is shown to stop in, each with the types it is over. */
     private static final Map<String, Form> NOT_SHOWN = new LinkedHashMap<>();
 
-    private static final String WALK = "List.fold((w, l) -> if l > w then l else w, 0, ds)";
+    private static final String MORE_WAYS_THAN_THE_FIGURE =
+            "aListWrittenOutOfMoreElementsThanTheFigure";
+
+    private static final String WALK ="List.fold((w, l) -> if l > w then l else w, 0, ds)";
 
     /** A type no value of exists: no whole number is the sum and the product of two others. */
     private static final String NO_VALUE =
@@ -107,6 +113,18 @@ class AStopOverAValueARunWorksOutIsShownByAListTheProgramRunsIntoTest {
         STOPPING.put("theGreatestOfAListWrittenOut", new Form(
                 "Option.withDefault(0, List.max([q, 3])) + 1 >= 3",
                 "Option.withDefault(0, List.max([q, 3])) >= 3",
+                List.of(new AStopShown.NumberAt(Q, GREATEST)), List.of()));
+        // a value of the most ways a stop is looked for by is looked for by them all
+        STOPPING.put("theMostWaysAStopIsLookedForBy", new Form(
+                "Option.withDefault(0, List.max([q, 1, 2, 3, 4, 5, 6, 7])) + 1 >= 3",
+                "Option.withDefault(0, List.max([q, 1, 2, 3, 4, 5, 6, 7])) >= 3",
+                List.of(new AStopShown.NumberAt(Q, GREATEST)), List.of()));
+        // what makes up the list is worked out before the operation over its greatest, so a run
+        // that stops making it stops there and is no run that stops in the operation: the stop
+        // shown is the one in the element, which nothing is worked out before
+        STOPPING.put("anElementOfAListWrittenOutWorkedOutFirst", new Form(
+                "Option.withDefault(0, List.max([q + 1, 3])) + 1 >= 3",
+                "Option.withDefault(0, List.max([q, 3])) >= 3", "i.q + 1",
                 List.of(new AStopShown.NumberAt(Q, GREATEST)), List.of()));
         // a walk over none comes to its seed
         STOPPING.put("theSeedOfAWalkOverNone", new Form(
@@ -156,8 +174,8 @@ class AStopOverAValueARunWorksOutIsShownByAListTheProgramRunsIntoTest {
         NOT_SHOWN.put("aListLongerThanAListIs", new Form(
                 "List.length(ds) * 4294967296 >= 1", null, List.of(), null));
         // a value of more ways than a site is looked at by is no more than the figure of ways
-        NOT_SHOWN.put("aListWrittenOutOfMoreElementsThanTheFigure", new Form(
-                "Option.withDefault(0, List.max([q, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10])) + 1 >= 3",
+        NOT_SHOWN.put(MORE_WAYS_THAN_THE_FIGURE, new Form(
+                "Option.withDefault(0, List.max([q, 1, 2, 3, 4, 5, 6, 7, 8])) + 1 >= 3",
                 null, List.of(), null));
     }
 
@@ -193,6 +211,14 @@ class AStopOverAValueARunWorksOutIsShownByAListTheProgramRunsIntoTest {
                         "what is worked out before the operation, on the same input, " + each);
             }
         }
+    }
+
+    /** A value made more ways than the figure of a site's search allows is a search cut short, and
+     *  is said so: it is no value that no way is known for. */
+    @Test
+    void aValueOfMoreWaysThanTheFigureIsLeftUnresolvedForWantOfIt() {
+        assertEquals(List.of(WhyAStopIsNotShown.NO_VALUE_FOUND_WITHIN_WHAT_IS_TRIED),
+                Run.of(NOT_SHOWN.get(MORE_WAYS_THAN_THE_FIGURE)).whyNotShown());
     }
 
     /** Whether the list a stop rests on is one this builds and runs: a list of numbers no longer
@@ -246,6 +272,20 @@ class AStopOverAValueARunWorksOutIsShownByAListTheProgramRunsIntoTest {
 
         private static String onTheInput(String text) {
             return text.replaceAll("\\bds\\b", "i.ds").replaceAll("\\bq\\b", "i.q");
+        }
+
+        /** Why a stop of the behavior {@code b} is not shown, where it is one the report says is
+         *  not. */
+        List<WhyAStopIsNotShown> whyNotShown() {
+            Partitions.Partitioning divided =
+                    compilation.db().ask(new Adequacy.Divided("demo", "b" + at)).value();
+            List<WhyAStopIsNotShown> out = new ArrayList<>();
+            for (WhatIsShownOfAStop each : divided.stopsShown()) {
+                if (each instanceof RuleWhereAStopIsNotShown open) {
+                    open.notShown().forEach(one -> out.add(one.why()));
+                }
+            }
+            return out;
         }
 
         /** Every stop shown of the behavior {@code b}. */

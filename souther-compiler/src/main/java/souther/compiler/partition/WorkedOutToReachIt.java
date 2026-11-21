@@ -1338,29 +1338,31 @@ final class WorkedOutToReachIt {
      * Each way a row can make {@code value} come to a number of the input, as far as it is known
      * ({@link Attainment}): a number written, what a place holds, what a name was given, and the
      * element a call answers where that is one a row makes the only one, or the greatest or least
-     * of a list written out. Nothing where the value is anything else: the numbers it may come to
-     * ({@link #originOf}) say none of them is one a row gets.
+     * of a list written out. None where the value is anything else: the numbers it may come to
+     * ({@link #originOf}) say none of them is one a row gets. Some left unmade where a rule
+     * says how and the ways are more than a stop is looked for by ({@link Attainments}).
      */
-    List<Attainment> attainmentsOf(Denotation value) {
+    Attainments attainmentsOf(Denotation value) {
         return attainmentsOf(value, onTheWay);
     }
 
-    private List<Attainment> attainmentsOf(Denotation value, ArmsTaken arms) {
+    private Attainments attainmentsOf(Denotation value, ArmsTaken arms) {
         Core written = Core.withoutStanding(value.value());
         Symbols symbols = read.rules().symbols();
         DeclarationNewtypes newtypes = read.rules().newtypes();
         if (value.at().folded(written, symbols, newtypes).orElse(null) instanceof Long number) {
-            return List.of(Attainment.always(LinearForm.constant(ExactRatio.of(number))));
+            return Attainments.of(List.of(Attainment.always(
+                    LinearForm.constant(ExactRatio.of(number)))));
         }
         if (written instanceof Core.FieldAccess || written instanceof Core.FieldProjection) {
             return value.at().pathOf(written, newtypes) instanceof ValuesAt.At(var at)
-                    ? attainmentsAtAPlace(at, arms) : List.of();
+                    ? attainmentsAtAPlace(at, arms) : Attainments.NONE;
         }
         if (written instanceof Core.PreservedCall) {
             return attainmentsOfAWalk(value, arms);
         }
         if (!(written instanceof Core.Read name)) {
-            return List.of();
+            return Attainments.NONE;
         }
         List<Denotation> given = boundTo(value);
         if (given.isEmpty()) {
@@ -1368,7 +1370,7 @@ final class WorkedOutToReachIt {
                     ? attainmentsAtAPlace(at, arms)
                     : attainmentsOfAnOpenedElement(name, value.at(), arms);
         }
-        return given.size() == 1 ? attainmentsOf(given.getFirst(), arms) : List.of();
+        return given.size() == 1 ? attainmentsOf(given.getFirst(), arms) : Attainments.NONE;
     }
 
     /**
@@ -1378,7 +1380,7 @@ final class WorkedOutToReachIt {
      * one, what the step answers of the seed and that element. A walk over more comes to what the
      * step makes of each in turn, which is not said here.
      */
-    private List<Attainment> attainmentsOfAWalk(Denotation value, ArmsTaken arms) {
+    private Attainments attainmentsOfAWalk(Denotation value, ArmsTaken arms) {
         Denotation met = value.at().denotes(Core.withoutStanding(value.value()),
                 read.rules().symbols(), read.rules().newtypes());
         SeededWalk walk = met == null ? null : SeededWalk.of(met.value(), closure ->
@@ -1388,22 +1390,25 @@ final class WorkedOutToReachIt {
                 || !AValueOfTheInput.ofTheOnlyElement(element)
                 || !answersTheElementOrWhatItCarried(walk.step().body(),
                         walk.element().binding(), walk.accumulator().binding())) {
-            return List.of();
+            return Attainments.NONE;
         }
         NumericTerm count = AValueOfTheInput.howMany(
                 element.prefix(element.steps().size() - 1), read);
         if (count == null) {
-            return List.of();
+            return Attainments.NONE;
         }
-        List<Attainment> seeds = attainmentsOf(new Denotation(walk.seed(), met.at()), arms);
+        Attainments seeds = attainmentsOf(new Denotation(walk.seed(), met.at()), arms);
+        if (seeds.leftUnmade()) {
+            return Attainments.TOO_MANY;
+        }
         List<Attainment> out = new ArrayList<>();
-        out.addAll(holdingTheCount(seeds, count, ExactRatio.ZERO));
+        out.addAll(holdingTheCount(seeds.ways(), count, ExactRatio.ZERO));
         Attainment theElement = Attainment.always(LinearForm.atom(
                 new NumericTerm.ValueOf(element)));
         out.addAll(holdingTheCount(answersOfAStep(walk.step().body(), new AStepOverOne(
-                walk.element().binding(), walk.accumulator().binding(), seeds, theElement)),
+                walk.element().binding(), walk.accumulator().binding(), seeds.ways(), theElement)),
                 count, ExactRatio.ONE));
-        return List.copyOf(out);
+        return Attainments.of(out);
     }
 
     /** Each of {@code of}, for the rows where the list {@code count} counts holds {@code size}. */
@@ -1482,25 +1487,26 @@ final class WorkedOutToReachIt {
     }
 
     /** What {@code place} holds, where that is known ({@link #atAPlace}). */
-    private List<Attainment> attainmentsAtAPlace(TermPath place, ArmsTaken arms) {
-        return atAPlace(place, arms) == null ? List.of()
-                : List.of(Attainment.always(LinearForm.atom(new NumericTerm.ValueOf(place))));
+    private Attainments attainmentsAtAPlace(TermPath place, ArmsTaken arms) {
+        return atAPlace(place, arms) == null ? Attainments.NONE
+                : Attainments.of(List.of(Attainment.always(
+                        LinearForm.atom(new NumericTerm.ValueOf(place)))));
     }
 
     /** The element an arm opened over the answer of a call, as {@link #originOfAnOpenedElement}
      *  reads it. */
-    private List<Attainment> attainmentsOfAnOpenedElement(Core.Read name, InputReads at,
-                                                            ArmsTaken arms) {
+    private Attainments attainmentsOfAnOpenedElement(Core.Read name, InputReads at,
+                                                     ArmsTaken arms) {
         InputReads.ElementOpened opened = at.elementOpenedBy(name.binding());
         if (opened == null || !(AnOperationApplied.of(Core.withoutStanding(opened.call().value()))
                 instanceof AnOperationApplied answered)) {
-            return List.of();
+            return Attainments.NONE;
         }
         var facts = DefaultBoundOperationFacts.get();
         var container = facts.answersAnElementOf(answered.operation());
         Core of = container == null ? null : answered.argument(container);
         if (of == null) {
-            return List.of();
+            return Attainments.NONE;
         }
         BoundOperationFacts.Extremity extremity = facts.answersAnExtremeElementOf(
                 answered.operation());
@@ -1517,31 +1523,34 @@ final class WorkedOutToReachIt {
      * one to answer. Of the elements at a place, the number a row's only element holds, which
      * {@link AValueOfTheInput} asks of a list of one element and no other.
      */
-    private List<Attainment> attainmentsOfAnElementOf(Denotation container, ArmsTaken arms,
-                                                        BoundOperationFacts.End end) {
+    private Attainments attainmentsOfAnElementOf(Denotation container, ArmsTaken arms,
+                                                 BoundOperationFacts.End end) {
         List<Denotation> written = elementsWrittenOut(container);
         if (written == null) {
             return switch (container.at().everyElementOf(container.value(),
                     read.rules().newtypes())) {
                 case ValuesHeld.At(TermPath at) -> attainmentsAtAPlace(at, arms);
-                case ValuesHeld.MayStandAt _, ValuesHeld.NotAPosition _ -> List.of();
+                case ValuesHeld.MayStandAt _, ValuesHeld.NotAPosition _ -> Attainments.NONE;
             };
         }
         // A stop is looked for by no more ways than the figure of the search allows
         // ({@link StopAssessment}), and each of these is made of a comparison with every other.
         if (written.size() > MOST_WAYS_LOOKED_AT) {
-            return List.of();
+            return Attainments.TOO_MANY;
         }
         List<Attainment> each = new ArrayList<>(written.size());
         for (Denotation element : written) {
-            List<Attainment> one = attainmentsOf(element, arms);
-            if (one.size() != 1) {
-                return List.of();
+            Attainments one = attainmentsOf(element, arms);
+            if (one.leftUnmade()) {
+                return Attainments.TOO_MANY;
             }
-            each.add(one.getFirst());
+            if (one.ways().size() != 1) {
+                return Attainments.NONE;
+            }
+            each.add(one.ways().getFirst());
         }
         if (end == null) {
-            return each.size() == 1 ? each : List.of();
+            return each.size() == 1 ? Attainments.of(each) : Attainments.NONE;
         }
         List<Attainment> out = new ArrayList<>(each.size());
         for (int chosen = 0; chosen < each.size(); chosen++) {
@@ -1555,13 +1564,13 @@ final class WorkedOutToReachIt {
                         ? each.get(chosen).form().minus(each.get(other).form()).orNull()
                         : each.get(other).form().minus(each.get(chosen).form()).orNull();
                 if (past == null) {
-                    return List.of();
+                    return Attainments.NONE;
                 }
                 holding.add(new TakenConstraint.Affine(past, Rel.GE));
             }
             out.add(new Attainment(each.get(chosen).form(), holding));
         }
-        return List.copyOf(out);
+        return Attainments.of(out);
     }
 
     /** What {@link #originOf} answered of each expression, wherever it was read, for as long as

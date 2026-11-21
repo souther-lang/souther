@@ -593,16 +593,24 @@ final class StopAssessment {
             judged.add(one);
             return !(one instanceof Judgement.Stops);
         };
-        switch (site) {
+        boolean everyWayMade = switch (site) {
             case Site.PastItsEnds(var operation) -> operation.forEachAttained(lookFor);
             case Site.ByNought(var divisor) -> {
                 if (divisor != null) {
                     lookFor.test(Attainment.always(divisor));
                 }
+                yield true;
             }
+        };
+        // A way of a value that was not made for want of the figure is left undone as one not
+        // visited is, and is said as that and not as a value no way is known for.
+        if (!everyWayMade) {
+            tries.leftSomethingUndone();
         }
         if (judged.isEmpty()) {
-            return new Judgement.Unresolved(site, WhyAStopIsNotShown.NOT_OVER_THE_INPUT);
+            return new Judgement.Unresolved(site, tries.cutShort()
+                    ? WhyAStopIsNotShown.NO_VALUE_FOUND_WITHIN_WHAT_IS_TRIED
+                    : WhyAStopIsNotShown.NOT_OVER_THE_INPUT);
         }
         Judgement last = judged.getLast();
         if (last instanceof Judgement.Stops) {
@@ -625,10 +633,20 @@ final class StopAssessment {
      * spent and the search was done: that a search used all it was given says nothing of whether
      * it left anything.
      */
-    private static final class Tries {
+    static final class Tries {
 
-        private int left = MOST_VALUES_TRIED;
+        private int left;
         private boolean refused;
+
+        /** A site's figure. */
+        Tries() {
+            this(MOST_VALUES_TRIED);
+        }
+
+        /** Of {@code figure} units. */
+        Tries(int figure) {
+            this.left = figure;
+        }
 
         /** Whether a unit is spent: one is, where there is one, and where there is none that is
          *  asked for and refused. */
