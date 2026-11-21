@@ -116,7 +116,6 @@ import java.util.PriorityQueue;
 import java.util.SequencedMap;
 import java.util.SequencedSet;
 import java.util.Set;
-import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -1211,7 +1210,7 @@ final class Coverages {
             List<Border> lines, List<Border> everyLine,
             souther.compiler.partition.MeasuredInput subject,
             souther.compiler.query.Adequacy.RowReading observed,
-            BiFunction<Border, Criterion, ItemAssessment.WritabilityProjection> projection,
+            Function<Criterion, ItemAssessment.WritabilityProjection> projection,
             RowsPutToTheLines put, ReachingCuts reaching) {
         // One entry per reading and not per line. A guard inside a non-recursive helper is read once
         // per call of that helper, and the rows do not owe the same border twice for having been
@@ -1222,8 +1221,7 @@ final class Coverages {
         List<ReadingOfALine> out = new ArrayList<>();
         MeasuredInput.Lines read = subject.lines();
         for (Border each : lines) {
-            out.add(assessed(each, reading(read.at(each),
-                            criterion -> projection.apply(each, criterion),
+            out.add(assessed(each, reading(read.at(each), projection,
                             elsewhere(lines, each),
                             otherReadingsOfTheComparison(everyLine, each, read),
                             wayTo(each, reaching), subject.quantities().region()),

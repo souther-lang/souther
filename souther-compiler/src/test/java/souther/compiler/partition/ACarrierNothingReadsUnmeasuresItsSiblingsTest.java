@@ -114,7 +114,7 @@ class ACarrierNothingReadsUnmeasuresItsSiblingsTest {
                         .filter(role -> border.demand(role).criterion() != null)
                         .map(role -> role + " "
                                 + border.demand(role).criterion().asked(border.cut().of()).substring(2)
-                                + (read.partitioning().pointIsKnownWritable(axis.term(), border,
+                                + (read.partitioning().pointIsKnownWritable(axis.term(),
                                         border.demand(role).criterion(), read.reading())
                                         ? " writable" : " not known to be writable")))
                 .sorted().toList();

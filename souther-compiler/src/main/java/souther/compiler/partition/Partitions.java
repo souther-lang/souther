@@ -393,14 +393,17 @@ public final class Partitions {
             return along.getOrDefault(axis.id(), List.of());
         }
 
-        /** Whether the point {@code asked} names of {@code line}, a line drawn on this term, holds
-         *  a value some row could carry. A line at a level that is no number is asked nothing of
-         *  its place.
+        /** Whether the values {@code asked} names of this term, a point of a line drawn on it,
+         *  hold one some row could carry. A point at a level that is no number is shown nothing of.
          *
-         * <p>Of the point and not of the line, where the term is a part of a date: the values the
-         * declarations leave it can have a hole beside the line, and a date at the line says
-         * nothing of the value beside it or of the run past it. Every other term is answered of
-         * the line, whose values here have no hole the answer could fall in.
+         * <p>Of the point and not of the line it is of. The values a term may take can have a hole
+         * beside a line, so a value at the line says nothing of the value beside it or of the run
+         * past it, and a run is shown by any value of it. A part of a date is asked of the dates
+         * the declarations leave ({@link #aDateHasThePartIn}), and a number of a string of the
+         * numbers its strings have ({@link StringsReached#allowsAPointIn}). Each other arm answers
+         * of every value of its order or of none, so it says the same of every point: what a
+         * location holds is every value between its ends unless a rule the bounds do not state
+         * leaves the term uncertain, and the rest are said below.
          *
          * <p>False where a rule reaching the value the term is taken of was not read in full. Every
          * edge here is then where the rules this could read stop, and a rule it could not read can
@@ -423,9 +426,9 @@ public final class Partitions {
          * in the corpus over collections that have no values. And false at a number of a string
          * the position's strings do not reach, and wherever a string position may hold no value:
          * a row is a whole value of the input. */
-        public boolean pointIsKnownWritable(NumericTerm term, Border line, Criterion asked,
+        public boolean pointIsKnownWritable(NumericTerm term, Criterion asked,
                                             Quantities reading) {
-            return strings.allowsAnEdgeAt(term, line.cut().cut().at().asANumber())
+            return asked != null && strings.allowsAPointIn(term, asked.region())
                     && !uncertain.contains(term) && switch (term) {
                 // What a location holds is what its type holds, so an edge on it is an edge some
                 // value stands at by the type having been declared.

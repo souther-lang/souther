@@ -32,8 +32,4 @@ public sealed interface DateRules {
     record NotWhole() implements DateRules {}
 
     DateRules NOT_WHOLE = new NotWhole();
-
-    /** What no declaration says anything of: every date the calendar has. */
-    DateRules EVERY_DATE = new Whole(DatePartsLeft.FIRST_DAY, DatePartsLeft.LAST_DAY,
-            HeldClass.NONE, List.of());
 }

@@ -2735,9 +2735,7 @@ public final class FieldDomains {
                 most = most.min(ends.most());
                 continue;
             }
-            // A range of one part, which the class holds. A hole in it is no range.
-            if (weighsOnly(rule, parts.keySet()) && rule.form().coefs().size() == 1
-                    && !(rule instanceof AffineConstraint.Disequality)) {
+            if (aRangeOfOneOf(rule, parts.keySet())) {
                 continue;
             }
             RuleOfDateParts read = ruleOfTheParts(rule, parts);
@@ -2771,6 +2769,14 @@ public final class FieldDomains {
      *  moved is made of the date. */
     private static boolean mentions(Term term, Term place) {
         return term.equals(place) || term.parts().stream().anyMatch(each -> mentions(each, place));
+    }
+
+    /** Whether {@code rule} bounds one of {@code these} on its own, which the class holds. A hole
+     *  in it is no range. */
+    private static boolean aRangeOfOneOf(AffineConstraint<FactSubject> rule,
+                                         Set<FactSubject> these) {
+        return rule.form().coefs().size() == 1 && weighsOnly(rule, these)
+                && !(rule instanceof AffineConstraint.Disequality);
     }
 
     /** Whether every number {@code rule} weighs is one of {@code these}. */

@@ -55,12 +55,10 @@ final class DatesTheDeclarationsLeave {
                                                             DateTranslation moved) {
         boolean noneHold = true;
         for (LevelInterval run : asked.parts()) {
-            BigInteger least = run.low() == null ? null : wholeInside(run.low(), true);
-            BigInteger most = run.high() == null ? null : wholeInside(run.high(), false);
-            DatesThatHoldEveryStatement.Answer answer =
-                    (run.low() != null && least == null) || (run.high() != null && most == null)
+            LevelInterval.WholeNumbers whole = run.wholeNumbers();
+            DatesThatHoldEveryStatement.Answer answer = whole == null
                     ? DatesThatHoldEveryStatement.Otherwise.NOT_SHOWN
-                    : withThePartIn(left, rules, days, part, least, most, moved);
+                    : withThePartIn(left, rules, days, part, whole.least(), whole.most(), moved);
             if (answer instanceof DatesThatHoldEveryStatement.Found) {
                 return answer;
             }
@@ -68,21 +66,6 @@ final class DatesTheDeclarationsLeave {
         }
         return noneHold ? DatesThatHoldEveryStatement.Otherwise.NONE_HOLD
                 : DatesThatHoldEveryStatement.Otherwise.NOT_SHOWN;
-    }
-
-    /** The nearest whole number {@code end} admits on the run's side of it, or null where it
-     *  names no number: the run's least where {@code lower}, and its greatest otherwise. */
-    private static BigInteger wholeInside(Bound end, boolean lower) {
-        ExactRatio at = end.at().exactly();
-        if (at == null) {
-            return null;
-        }
-        if (lower) {
-            return end.inclusive() ? at.ceiling().orNull()
-                    : at.floor().map(whole -> whole.add(BigInteger.ONE)).orNull();
-        }
-        return end.inclusive() ? at.floor().orNull()
-                : at.ceiling().map(whole -> whole.subtract(BigInteger.ONE)).orNull();
     }
 
     /** The same, of the part from {@code least} to {@code most}, both counted, where null is no

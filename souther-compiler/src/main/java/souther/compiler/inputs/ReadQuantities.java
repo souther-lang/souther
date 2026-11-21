@@ -3671,10 +3671,14 @@ final class ReadQuantities implements Quantities {
 
     /**
      * What the declarations hold the date at {@code place} to ({@link FieldDomains#rulesOfTheDateAt}),
-     * read where {@link #classDeclaredAt} reads the class: under the context the date is asked in,
-     * and every date where no declarations reach it or the context does not hold where they were
-     * opened. Refused where no value this reading holds is around the place: "every date" would be
-     * said of a place this reading has never been.
+     * under the context the date is asked in. Refused where no value this reading holds is around
+     * the place: an answer would be said of a place this reading has never been.
+     *
+     * <p>Whole only where the context the date is asked in is the one its declarations were opened
+     * under. Not where the date stands under two cases no row is in at once, which is no value at
+     * all ({@link #asking}), and not where the declarations were opened under another: whether
+     * their rules are then no rules of the date or the date is no value here is not told apart,
+     * and of a proof that a date exists the wide answer is the one never given for want of one.
      */
     @Override
     public DateRules rulesOfTheDateAt(TermPath place) {
@@ -3684,13 +3688,11 @@ final class ReadQuantities implements Quantities {
                     + " so there is nothing here to say what its rules hold its date to");
         }
         OpenedRules opened = byRoot.get(at.root());
-        if (opened == null) {
-            return DateRules.EVERY_DATE;
-        }
-        return (asking(Set.of(new NumericTerm.ValueOf(place)))
-                instanceof StructuralContext.Merge.Together(StructuralContext under)
+        return (opened != null
+                && asking(Set.of(new NumericTerm.ValueOf(place)))
+                        instanceof StructuralContext.Merge.Together(StructuralContext under)
                 && under.holds(opened.opening()))
-                ? opened.rules().bounds().rulesOfTheDateAt(at.named()) : DateRules.EVERY_DATE;
+                ? opened.rules().bounds().rulesOfTheDateAt(at.named()) : DateRules.NOT_WHOLE;
     }
 
     /** The magnitude of the divisor {@code taken} is a remainder by, or null where it is no

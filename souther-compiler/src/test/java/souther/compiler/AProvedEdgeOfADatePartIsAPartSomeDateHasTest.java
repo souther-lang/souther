@@ -144,17 +144,15 @@ class AProvedEdgeOfADatePartIsAPartSomeDateHasTest {
     void aMonthARuleOfTwoPartsRulesOutIsNotProved() throws Exception {
         Set<Integer> held = monthsOf(
                 AProvedEdgeOfADatePartIsAPartSomeDateHasTest::twentyEightDaysPastTheMonth, 0);
-        List<String> proved = provedPoints(TWENTY_EIGHT_DAYS_PAST_THE_MONTH + """
+        Points points = pointsOf(TWENTY_EIGHT_DAYS_PAST_THE_MONTH + """
 
                 data Out = Int
 
                 behavior go : (d: Day) -> Out
                 let go (d) = Out { value = if Date.month(d.value) >= 3 then 1 else 2 }
                 """);
-        for (String each : proved) {
-            assertTrue(someNumberIn(each, held), "proved at " + each + ", which no Day has");
-        }
-        assertTrue(proved.contains("3"), proved::toString);
+        provesOnly(points, held, "2");
+        assertTrue(points.proved().contains("3"), points::toString);
     }
 
     /** The same rule, the date a day on: the thirty-first of January is the first of February,
@@ -163,7 +161,7 @@ class AProvedEdgeOfADatePartIsAPartSomeDateHasTest {
     void aMonthARuleOfTwoPartsRulesOutOnceMovedIsNotProved() throws Exception {
         Set<Integer> held = monthsOf(
                 AProvedEdgeOfADatePartIsAPartSomeDateHasTest::twentyEightDaysPastTheMonth, 1);
-        List<String> proved = provedPoints(TWENTY_EIGHT_DAYS_PAST_THE_MONTH + """
+        Points points = pointsOf(TWENTY_EIGHT_DAYS_PAST_THE_MONTH + """
 
                 data Out = Int
 
@@ -171,11 +169,8 @@ class AProvedEdgeOfADatePartIsAPartSomeDateHasTest {
                 let go (d) = Out { value = if Date.month(Date.addDays(1, d.value)) >= 3 then 1
                                            else 2 }
                 """);
-        for (String each : proved) {
-            assertTrue(someNumberIn(each, held),
-                    "proved at " + each + ", which no Day a day on has");
-        }
-        assertTrue(proved.contains("2"), proved::toString);
+        provesOnly(points, held, "3");
+        assertTrue(points.proved().contains("2"), points::toString);
     }
 
     /** The values of {@code part} the dates {@code holds} leaves come to, over four years as
@@ -198,7 +193,7 @@ class AProvedEdgeOfADatePartIsAPartSomeDateHasTest {
     void aMonthARuleOfAMovedPartRulesOutIsNotProved() throws Exception {
         Set<Integer> held = valuesOf(date -> date.plusDays(1).getMonthValue() == 2,
                 LocalDate::getMonthValue);
-        List<String> proved = provedPoints("""
+        provesOnly(pointsOf("""
                 module demo
 
                 data Day = Date
@@ -208,10 +203,7 @@ class AProvedEdgeOfADatePartIsAPartSomeDateHasTest {
 
                 behavior go : (d: Day) -> Out
                 let go (d) = Out { value = if Date.month(d.value) >= 3 then 1 else 2 }
-                """);
-        for (String each : proved) {
-            assertTrue(someNumberIn(each, held), "proved at " + each + ", which no Day has");
-        }
+                """), held, "3");
     }
 
     /** A part of the date moved, held to another field: the dates a day before a January are the
@@ -220,7 +212,7 @@ class AProvedEdgeOfADatePartIsAPartSomeDateHasTest {
     void aMonthARuleTyingAMovedPartToAnotherPlaceRulesOutIsNotProved() throws Exception {
         Set<Integer> held = valuesOf(date -> date.plusDays(1).getMonthValue() <= 1,
                 LocalDate::getMonthValue);
-        List<String> proved = provedPoints("""
+        provesOnly(pointsOf("""
                 module demo
 
                 data Span = { start: Date, n: Int }
@@ -231,10 +223,7 @@ class AProvedEdgeOfADatePartIsAPartSomeDateHasTest {
 
                 behavior go : (s: Span) -> Out
                 let go (s) = Out { value = if Date.month(s.start) >= 3 then 1 else 2 }
-                """);
-        for (String each : proved) {
-            assertTrue(someNumberIn(each, held), "proved at " + each + ", which no Span has");
-        }
+                """), held, "3");
     }
 
     /** The date held by its own ends to the last days of February 2020 and the first of March:
@@ -246,7 +235,7 @@ class AProvedEdgeOfADatePartIsAPartSomeDateHasTest {
                 date = date.plusDays(1)) {
             held.add(date.getDayOfMonth());
         }
-        List<String> proved = provedPoints("""
+        provesOnly(pointsOf("""
                 module demo
 
                 data Day = Date
@@ -256,10 +245,7 @@ class AProvedEdgeOfADatePartIsAPartSomeDateHasTest {
 
                 behavior go : (d: Day) -> Out
                 let go (d) = Out { value = if Date.day(d.value) >= 15 then 1 else 2 }
-                """);
-        for (String each : proved) {
-            assertTrue(someNumberIn(each, held), "proved at " + each + ", which no Day has");
-        }
+                """), held, "15", "14");
     }
 
     /** A choice of two days: the tenth and the ninth are days the calendar has, and no date of
@@ -268,7 +254,7 @@ class AProvedEdgeOfADatePartIsAPartSomeDateHasTest {
     void aDayAChoiceOfDaysRulesOutIsNotProved() throws Exception {
         Set<Integer> held = valuesOf(date -> date.getDayOfMonth() == 1
                 || date.getDayOfMonth() == 15, LocalDate::getDayOfMonth);
-        List<String> proved = provedPoints("""
+        provesOnly(pointsOf("""
                 module demo
 
                 data Day = Date
@@ -278,10 +264,7 @@ class AProvedEdgeOfADatePartIsAPartSomeDateHasTest {
 
                 behavior go : (d: Day) -> Out
                 let go (d) = Out { value = if Date.day(d.value) >= 10 then 1 else 2 }
-                """);
-        for (String each : proved) {
-            assertTrue(someNumberIn(each, held), "proved at " + each + ", which no Day has");
-        }
+                """), held, "10", "9");
     }
 
     /** The report of {@code model} with no rows measured: a point is proved writable by what the
@@ -309,16 +292,50 @@ class AProvedEdgeOfADatePartIsAPartSomeDateHasTest {
     /** The points proved writable on a part of a date, as the report writes the number they are
      *  at. */
     private static List<String> provedPoints(String model) throws Exception {
+        return pointsOf(model).proved();
+    }
+
+    /**
+     * The points the report says something of on a part of a date, and those of them it proves
+     * writable, by the number or run each is at.
+     *
+     * @param shown  every point the report holds whether a row can be written at
+     * @param proved those of them the rules prove one can, in the order the report holds them
+     */
+    private record Points(Set<String> shown, List<String> proved) {
+
+        /** Whether the report holds {@code at} and does not prove it. */
+        boolean shownAndNotProved(String at) {
+            return shown.contains(at) && !proved.contains(at);
+        }
+    }
+
+    private static Points pointsOf(String model) throws Exception {
         JsonNode report = reportOf(model);
-        List<String> out = new ArrayList<>();
+        Set<String> shown = new TreeSet<>();
+        List<String> proved = new ArrayList<>();
         for (JsonNode each : report.findParents("knownWritable")) {
             JsonNode against = each.path("against");
-            if (each.get("knownWritable").asBoolean() && each.toString().contains("it_is_proved")
-                    && against.isString() && POINT.matcher(against.asString()).matches()) {
-                out.add(against.asString());
+            if (!against.isString() || !POINT.matcher(against.asString()).matches()) {
+                continue;
+            }
+            shown.add(against.asString());
+            if (each.get("knownWritable").asBoolean() && each.toString().contains("it_is_proved")) {
+                proved.add(against.asString());
             }
         }
-        return out;
+        return new Points(shown, proved);
+    }
+
+    /** Every point proved is a number of {@code held}, and each of {@code unproved} is in the
+     *  report and not proved. */
+    private static void provesOnly(Points points, Set<Integer> held, String... unproved) {
+        for (String each : points.proved()) {
+            assertTrue(someNumberIn(each, held), () -> "proved at " + each + ", which none has");
+        }
+        for (String each : unproved) {
+            assertTrue(points.shownAndNotProved(each), () -> each + " in " + points);
+        }
     }
 
     /** Whether some day of a February is among the days {@code written} says, a day or a run. */
