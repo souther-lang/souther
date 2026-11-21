@@ -323,6 +323,7 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                         + " evaluated: a projection's base is the one child there is to go down to");
         row(out, c + "partition/ComparisonReadings", "workedOut",
                 "(" + core + reads + "Ljava/util/function/Function;L" + c
+                        + "check/WhatARunMayEndFor$WithDefinitions;L" + c
                         + "partition/UndividedByARelation$Working;)L" + c
                         + "partition/UndividedByARelation$Working;", Reading.STRUCTURE,
                 "goes down only through nodes that end no run of themselves, to hand the rest whole"
@@ -360,9 +361,12 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "partition/WhatARunWorksOutBeforeACount$Within", "letsThrough",
                 "(" + core + ")Z", Reading.EACH_SUBEXPRESSION, ASKS_EACH);
         row(out, c + "partition/ConstructionStopAssessment", "getsPast",
-                "(" + core + "Ljava/util/List;Ljava/util/List;)Z", Reading.EACH_SUBEXPRESSION,
+                "(" + core + "Ljava/util/List;Ljava/util/List;Lsouther/compiler/check/ValueTemplates;"
+                        + "Ljava/util/Set;)Z",
+                Reading.EACH_SUBEXPRESSION,
                 "asks each node whether working it out may end a run, or is a construction whose"
-                        + " condition is read, which no field access is");
+                        + " condition is read, or a build whose template it asks the same of,"
+                        + " which no field access is");
         row(out, c + "partition/StopPastTheRepresentation", "collect",
                 "(" + core + "Ljava/util/Set;)V", Reading.EACH_SUBEXPRESSION,
                 "asks each node whether it is an operation that ends a run only past what the"
@@ -789,6 +793,12 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "asks each node what it ends a run for, and goes down to its parts and along the"
                         + " names it reads: a name read off a value ends none, so what a projection"
                         + " may end one for is what its base may");
+        row(out, c + "check/WhatARunMayEndFor$WithDefinitions", "of", "(" + core + ")L" + c
+                        + "check/WhatARunMayEndFor$Endings;", Reading.STRUCTURE,
+                "asks each node what it ends a run for, as the walk without the templates does, and"
+                        + " a build of a value what its template ends one for: a name read off a"
+                        + " value ends none, so what a projection may end one for is what its base"
+                        + " may");
         row(out, c + "check/WhatARunMayEndFor", "endsNoneBeneathApart",
                 "(" + core + "Ljava/util/Set;)Z", Reading.STRUCTURE,
                 "asks each node what it ends a run for, and goes down to its parts apart from those"

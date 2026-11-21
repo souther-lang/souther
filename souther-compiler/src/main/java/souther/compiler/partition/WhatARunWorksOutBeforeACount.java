@@ -367,6 +367,135 @@ final class WhatARunWorksOutBeforeACount {
         return List.copyOf(out);
     }
 
+    /** Every construction under {@code e}, each once: what a call is handed, all of which is
+     *  worked out before the body it goes into runs. Not the construction an attempt tests, as
+     *  above. */
+    static List<Core.Construct> everyConstructionUnder(Core e) {
+        Set<Core> met = Collections.newSetFromMap(new IdentityHashMap<>());
+        List<Core.Construct> out = new ArrayList<>();
+        constructionsUnder(e, null, null, met, out);
+        return List.copyOf(out);
+    }
+
+    /**
+     * The function value on the way down from {@code root} to {@code node} that no call it is
+     * handed to applies ({@link #workedOutUpTo}), with the node it stands under, the outermost
+     * where there are several — or null where there is none, or {@code node} is not in the tree.
+     */
+    static NotHanded notHandedOnTheWay(Core root, Core node) {
+        List<Core> way = root == null ? null : wayDownTo(root, node);
+        if (way == null) {
+            return null;
+        }
+        for (int i = 0; i < way.size(); i++) {
+            switch (way.get(i)) {
+                case Core.Block block -> {
+                    Core above = i == 0 ? null : way.get(i - 1);
+                    if (above == null || Within.argumentsOf(above).stream()
+                            .noneMatch(arg -> Core.withoutStanding(arg) == block)) {
+                        return new NotHanded(block, above);
+                    }
+                }
+                // A value standing as a wider type is a step of the way of its own, and the
+                // function value it holds is met one step down.
+                case Core.Widen _ -> { }
+                default -> { }
+            }
+        }
+        return null;
+    }
+
+    /** A function value no call it is handed to applies, and what it stands under: a
+     *  {@code let} binding it to a name, or anything else that holds it. */
+    record NotHanded(Core.Block closure, Core above) {}
+
+    /**
+     * Whether the way down from {@code from} to {@code node} goes into the body of a function
+     * value, where what a run meets is met on each application and is not on the way the walk
+     * carries alone: true as well where {@code node} is not under {@code from}.
+     */
+    static boolean goesIntoAFunctionValue(Core from, Core node) {
+        List<Core> way = wayDownTo(from, node);
+        if (way == null) {
+            return true;
+        }
+        for (Core each : way.subList(0, way.size() - 1)) {
+            switch (each) {
+                case Core.Block _ -> {
+                    return true;
+                }
+                // A value standing as a wider type is a step of the way of its own, and the
+                // function value it holds is met one step down.
+                case Core.Widen _ -> { }
+                default -> { }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * What a run works out going into another body at {@code at}, a node of {@code root}'s tree:
+     * everything it works out before {@code at} ({@link #workedOutUpTo}), and everything
+     * {@code at} is handed but a function value, which a call works out before it applies the
+     * function it is handed ({@link Evaluated#inOrder}); the body of such a function runs where it
+     * is applied and is none of it. Empty where the way to {@code at} is not read.
+     */
+    static Optional<BeforeAConstruction> workedOutGoingIn(Core root, Core at) {
+        List<Core> some = root == null ? null : workedOutUpTo(root, at, false);
+        List<Core> every = root == null ? null : workedOutUpTo(root, at, true);
+        if (some == null || every == null) {
+            return Optional.empty();
+        }
+        List<Core> onSomeRun = new ArrayList<>(some.subList(0, some.size() - 1));
+        List<Core> onEveryRun = new ArrayList<>(every.subList(0, every.size() - 1));
+        for (Evaluated.Step step : Evaluated.inOrder(at)) {
+            workedOut(onSomeRun, step.expression());
+            if (step instanceof Evaluated.Step.Always) {
+                workedOut(onEveryRun, step.expression());
+            }
+        }
+        return Optional.of(new BeforeAConstruction(onSomeRun, onEveryRun));
+    }
+
+    /**
+     * What a run works out before {@code made}, a construction in what {@code at}, a node of
+     * {@code root}'s tree where a run goes into another body, is handed: what the run works out
+     * before {@code at}, and then, down from {@code at}, as {@link #workedOutBeforeAConstruction}
+     * reads it — every run that works {@code at} out works what it is handed out before going in,
+     * and a run gets to {@code made} on the runs the conditions on the way to it say. Empty where
+     * a function value stands above {@code made}, whose body runs where it is applied, or the way
+     * is not read.
+     */
+    static Optional<BeforeAConstruction> workedOutBeforeEntering(Core root, Core at,
+                                                                Core.Construct made) {
+        List<Core> toIt = wayDownTo(at, made);
+        if (root == null || toIt == null || toIt.size() < 2) {
+            return Optional.empty();
+        }
+        for (int i = 0; i + 1 < toIt.size(); i++) {
+            if (Evaluated.makesAFunction(toIt.get(i))
+                    || !entersOnSomeRun(toIt.get(i), toIt.get(i + 1), made)) {
+                return Optional.empty();
+            }
+        }
+        List<Core> someUpTo = workedOutUpTo(root, at, false);
+        List<Core> everyUpTo = workedOutUpTo(root, at, true);
+        List<Core> someIn = workedOutUpTo(at, made, false);
+        List<Core> everyIn = workedOutUpTo(at, made, true);
+        if (someUpTo == null || everyUpTo == null || someIn == null || everyIn == null) {
+            return Optional.empty();
+        }
+        List<Core> ofIt = Evaluated.inOrder(made).stream().map(Evaluated.Step::expression)
+                .toList();
+        List<Core> onSomeRun = new ArrayList<>(someUpTo.subList(0, someUpTo.size() - 1));
+        onSomeRun.addAll(someIn.subList(0, someIn.size() - 1));
+        onSomeRun.addAll(ofIt);
+        List<Core> onEveryRun = new ArrayList<>(everyUpTo.subList(0, everyUpTo.size() - 1));
+        onEveryRun.addAll(everyIn.subList(0, everyIn.size() - 1));
+        onEveryRun.addAll(ofIt);
+        return Optional.of(new BeforeAConstruction(onSomeRun, onEveryRun));
+    }
+
     /** Every construction under {@code e} but {@code tested}, the construction the attempt above
      *  it tests, and nothing under {@code apart}, into {@code out}, each once. */
     private static void constructionsUnder(Core e, Core apart, Core tested, Set<Core> met,
@@ -384,13 +513,16 @@ final class WhatARunWorksOutBeforeACount {
     /**
      * What a run may work out before {@code comparison}, a node of {@code root}'s tree, that may
      * end it: every part counted as running on some run, the comparison itself left out
-     * ({@link #workedOutUpTo}), but those {@link WhatARunMayEndFor} says end none. Null where it is
-     * not in the tree.
+     * ({@link #workedOutUpTo}), but those {@code endings} says end none — a build of a value
+     * answered by its template. Null where it is not in the tree. A part that ends a run for what
+     * nothing says ({@link WhatARunMayEndFor.Endings.NotKnown}) is among them: that is not that it
+     * ends none.
      */
-    static List<Core> whatMayEndARunBefore(Core root, Core comparison) {
+    static List<Core> whatMayEndARunBefore(Core root, Core comparison,
+                                           WhatARunMayEndFor.WithDefinitions endings) {
         List<Core> worked = root == null ? null : workedOutUpTo(root, comparison, false);
         return worked == null ? null : worked.subList(0, worked.size() - 1).stream()
-                .filter(part -> !WhatARunMayEndFor.of(part).endsNone()).toList();
+                .filter(part -> !endings.of(part).endsNone()).toList();
     }
 
     /**
@@ -471,6 +603,18 @@ final class WhatARunWorksOutBeforeACount {
         BeforeAConstruction {
             onSomeRun = List.copyOf(onSomeRun);
             onEveryRun = List.copyOf(onEveryRun);
+        }
+
+        /** Nothing worked out first: a run starting here. */
+        static final BeforeAConstruction NOTHING = new BeforeAConstruction(List.of(), List.of());
+
+        /** What this says is worked out first, and then what {@code after} says. */
+        BeforeAConstruction then(BeforeAConstruction after) {
+            List<Core> some = new ArrayList<>(onSomeRun);
+            some.addAll(after.onSomeRun());
+            List<Core> every = new ArrayList<>(onEveryRun);
+            every.addAll(after.onEveryRun());
+            return new BeforeAConstruction(some, every);
         }
     }
 
