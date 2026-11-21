@@ -330,6 +330,26 @@ class ATiedWayIsReadAsTheProgramRunSaysTest {
         assertFalse(said.contains("whether a run stops in division by p"), said);
     }
 
+    /**
+     * The same through the report a user reads: where {@code q} is the greatest {@code Int},
+     * {@code q + 1} stops every run that gets to it, and a run stops at the division by
+     * {@code p} before it does, so the report says a run stops.
+     */
+    @Test
+    void aStopAtADivisionIsShownInTheReportWhereAnOperationAfterItWouldStopEveryRun() {
+        String said = reportOf("""
+                module demo
+
+                data Out = Int
+
+                behavior b : (e: Int, p: Int, q: Int) -> Out
+                let b (e, p, q) = Out { value =
+                    if q >= 9223372036854775807 then
+                        (if Rational.toInt(DOWN, (e / p) / (q + 1)) >= 2 then 1 else 2) else 3 }
+                """);
+        assertTrue(said.contains("· may stop a run: comparison"), said);
+    }
+
     /** {@code (e / p) / q} compared, on the way where {@code way} holds. */
     private static String quotientOfAQuotient(String way) {
         return """

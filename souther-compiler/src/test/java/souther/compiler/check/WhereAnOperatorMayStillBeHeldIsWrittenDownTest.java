@@ -547,7 +547,7 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "asks whether every operation a closure applied to each element works out is"
                             + " an addition or a product by a written number, whose numbers then"
                             + " lie between nought and what the closure answers"),
-            new Held("souther.compiler.partition.AffineReading.1.isAQuotientByAValue",
+            new Held("souther.compiler.partition.AffineReading.isAQuotientByAValue",
                     "asks whether the stopped expression is a quotient and where the operator's"
                             + " own account says it answers, so that its operands are told with"
                             + " the rest and its own stop is the quotient's"),

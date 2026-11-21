@@ -541,80 +541,28 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *                    place, which no row of a line is at. Told only of what a run works out
      *                    ({@link StopEvidence}), and carried wherever the working is, so that a
      *                    reading that stands in for another does not leave it behind
-     * @param quotientsUntold whether what is left untold is quotients by a value and nothing
-     *                    else, and which they are: their operands are told, and the stop of each
-     *                    is its own ({@link QuotientsEveryRunWorksOut}), asked where the
-     *                    quotients the comparison always works out are
+     * @param leftUntold what the operations told and {@code aStopUntold} leave out, as one value:
+     *                    nothing exactly where {@code told} says every operation is told and no
+     *                    stop is left untold, and otherwise the stops of some quotients by a
+     *                    value, whose operands are told, or something else. A reader that asks
+     *                    those quotients takes the first as accounted for ({@link
+     *                    #leavesUntoldBeyond})
      */
     record Working(List<IntOperation> operations, WhatARelationLeavesUndivided.Told told,
                    boolean onEveryRun, List<NumericTerm> partials, boolean aStopUntold,
-                   QuotientsUntold quotientsUntold) {
+                   NotAccountedFor leftUntold) {
 
+        /** A working whose left-untold part is said by the other components: nothing where they
+         *  say there is none, and something else where they do not. */
         Working(List<IntOperation> operations, WhatARelationLeavesUndivided.Told told,
                 boolean onEveryRun, List<NumericTerm> partials, boolean aStopUntold) {
-            this(operations, told, onEveryRun, partials, aStopUntold, QuotientsUntold.NONE);
+            this(operations, told, onEveryRun, partials, aStopUntold, null);
         }
 
-        /**
-         * The quotients by a value a reading left untold, where it left no other operation and no
-         * other stop untold. Where it left more, or nothing, none are said to be the whole of
-         * it. Which quotient is which is the node of the expression, by identity, and is no part
-         * of what a working is: any two are equal.
-         */
-        static final class QuotientsUntold {
-
-            /** Nothing is left untold but what is untold otherwise. */
-            static final QuotientsUntold NONE = new QuotientsUntold(false, List.of());
-
-            private final boolean only;
-            private final List<Core.Binary> nodes;
-
-            QuotientsUntold(boolean only, List<Core.Binary> nodes) {
-                this.only = only;
-                this.nodes = only ? List.copyOf(nodes) : List.of();
-            }
-
-            /** Whether what is left untold is these quotients and nothing else. */
-            boolean only() {
-                return only;
-            }
-
-            /** The same, beside {@code other}, where the quotients are what is untold of both. */
-            QuotientsUntold beside(QuotientsUntold other, boolean bothOnly) {
-                if (!bothOnly) {
-                    return NONE;
-                }
-                List<Core.Binary> both = new ArrayList<>(nodes);
-                both.addAll(other.nodes);
-                return new QuotientsUntold(true, both);
-            }
-
-            /** Whether each is one of {@code quotients}, which is asked by the node it is. */
-            boolean areAmong(List<Core.Binary> quotients) {
-                return nodes.stream().allMatch(each -> quotients.stream()
-                        .anyMatch(one -> one == each));
-            }
-
-            @Override
-            public boolean equals(Object other) {
-                return other instanceof QuotientsUntold;
-            }
-
-            @Override
-            public int hashCode() {
-                return 0;
-            }
-        }
-
-        /** Whether every operation that can stop a run is told but for quotients among
-         *  {@code quotients}, whose stop each is asked of for itself. */
-        boolean exactButForAmong(List<Core.Binary> quotients) {
-            return exact() || (quotientsUntold.only() && quotientsUntold.areAmong(quotients));
-        }
-
-        /** Whether a stop is left untold that is none of the stops of {@code quotients}. */
-        boolean aStopUntoldBeyond(List<Core.Binary> quotients) {
-            return aStopUntold && !(quotientsUntold.only() && quotientsUntold.areAmong(quotients));
+        /** Whether what the operations told and {@code aStopUntold} leave out is not accounted
+         *  for by the stops of {@code asked}. */
+        boolean leavesUntoldBeyond(List<Core.Binary> asked) {
+            return !leftUntold.isAccountedForBy(asked);
         }
 
         Working(List<IntOperation> operations, WhatARelationLeavesUndivided.Told told) {
@@ -669,23 +617,46 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 return UNREAD.leavingAStopUntold(untold);
             }
             // Whether every run reaches the relation is no part of what is told of it: readings
-            // that tell alike tell that, and the relation is on every run only if each is.
-            return (readings.stream().allMatch(Working::onEveryRun) ? first
-                    : first.notOnEveryRun()).leavingAStopUntold(untold);
+            // that tell alike tell that, and the relation is on every run only if each is. What
+            // any of them leaves out is left out of the readings together.
+            NotAccountedFor left = NotAccountedFor.NOTHING;
+            for (Working each : readings) {
+                left = left.join(each.leftUntold);
+            }
+            return new Working(first.operationsAtThePlacesAllAgreeOn(readings), first.told,
+                    readings.stream().allMatch(Working::onEveryRun), first.partials, untold,
+                    left);
         }
 
-        /** The same, with {@code untold} as whether a stop is left that no reading tells. */
+        /**
+         * The operations, each at the node every one of {@code readings} tells it at, and at no
+         * node where they tell it at different ones. Two operations are the same operation
+         * wherever they are worked out, and where one is worked out is no more than that said of
+         * the reading it was told in.
+         */
+        private List<IntOperation> operationsAtThePlacesAllAgreeOn(List<Working> readings) {
+            List<IntOperation> out = new ArrayList<>();
+            for (IntOperation each : operations) {
+                boolean agreed = readings.stream().allMatch(other -> other.operations.stream()
+                        .anyMatch(one -> one.sameOperationAs(each)
+                                && one.origin().node() == each.origin().node()));
+                out.add(agreed ? each : each.workedOutAt(null));
+            }
+            return out;
+        }
+
+        /** The same, with {@code untold} as whether a stop is left that no reading tells, which
+         *  is not told to be a quotient's own where it is newly left. */
         private Working leavingAStopUntold(boolean untold) {
             return untold == aStopUntold ? this
                     : new Working(operations, told, onEveryRun, partials, untold,
-                            quotientsUntold);
+                            untold ? NotAccountedFor.SOMETHING_ELSE : leftUntold);
         }
 
         /** Whether this tells the operations {@code other} does, each once or more, and as much
          *  of what can stop a run. */
         private boolean tellsWhat(Working other) {
             return told == other.told && partials.equals(other.partials)
-                    && quotientsUntold.only() == other.quotientsUntold.only()
                     && operationsWorkedOut().equals(other.operationsWorkedOut());
         }
 
@@ -707,6 +678,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 throw new IllegalArgumentException(
                         "a total left to its running totals leaves some untold: " + partials);
             }
+            // Nothing is left out exactly where every operation is told and no stop is left
+            // untold, and where one of them says otherwise something is.
+            leftUntold = told == WhatARelationLeavesUndivided.Told.EVERY && !aStopUntold
+                    ? NotAccountedFor.NOTHING
+                    : leftUntold == null || leftUntold.kind() == NotAccountedFor.Kind.NOTHING
+                            ? NotAccountedFor.SOMETHING_ELSE : leftUntold;
         }
 
         /** Whether what is untold is at most the running totals of the walks in {@link #partials}. */
@@ -751,26 +728,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     : WhatARelationLeavesUndivided.Told.SOME,
                     earlier.onEveryRun && onEveryRun, bothPartials,
                     earlier.aStopUntold || aStopUntold,
-                    quotientsUntold.beside(earlier.quotientsUntold,
-                            !everyOne && earlier.exactButForQuotients()
-                                    && exactButForQuotients()));
+                    earlier.leftUntold.join(leftUntold));
         }
 
         /** The same operations, for a relation not every run that gets to the comparison reaches. */
         Working notOnEveryRun() {
-            return new Working(operations, told, false, partials, aStopUntold,
-                    quotientsUntold);
+            return new Working(operations, told, false, partials, aStopUntold, leftUntold);
         }
 
         /** Whether every operation that can stop a run is told. */
         boolean exact() {
             return told == WhatARelationLeavesUndivided.Told.EVERY;
-        }
-
-        /** Whether every operation that can stop a run is told, but for quotients by a value
-         *  whose stop each quotient states for itself ({@link #quotientsUntold}). */
-        private boolean exactButForQuotients() {
-            return exact() || quotientsUntold.only();
         }
 
     }

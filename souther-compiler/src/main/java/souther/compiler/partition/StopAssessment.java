@@ -172,7 +172,8 @@ final class StopAssessment {
             UndividedByARelation.Working working = place.worked().stops().operations();
             WhatAWayLeavesOfAValue left = place.aRowArrives()
                     ? WhatAWayLeavesOfAValue.along(read, place.way()) : null;
-            if (left != null && working.aStopUntoldBeyond(each.quotients())) {
+            if (left != null && working.aStopUntold()
+                    && working.leavesUntoldBeyond(each.quotients())) {
                 out.add(new Judgement.Unresolved(null, WhyAStopIsNotShown.NO_OPERATION_TOLD));
             }
             List<UndividedByARelation.IntOperation> operations = working.operations();
@@ -323,10 +324,9 @@ final class StopAssessment {
         // A working is not on every run where the expression the comparison was stopped at may
         // end a run before the operations it tells. A quotient is worked out wherever the
         // comparison is ({@link QuotientsEveryRunWorksOut}), so only an operation is asked of the
-        // rest being worked out on every run. A quotient left untold by the walk is one of those
-        // asked here, so it does not leave what is worked out untold.
-        if (!working.exactButForAmong(each.quotients())
-                || working.aStopUntoldBeyond(each.quotients())
+        // rest being worked out on every run. The stop of a quotient that is among those asked
+        // is not left untold: a witness is asked to get past it.
+        if (working.leavesUntoldBeyond(each.quotients())
                 || (site instanceof Site.PastItsEnds && !working.onEveryRun())) {
             return new Judgement.Unresolved(site, WhyAStopIsNotShown.NOT_EVERY_OPERATION_TOLD);
         }
