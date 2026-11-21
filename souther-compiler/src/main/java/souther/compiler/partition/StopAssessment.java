@@ -380,7 +380,7 @@ final class StopAssessment {
                 var comparison))) {
             return false;
         }
-        Predicate<Core> says = node -> !(node instanceof Core.Call)
+        Predicate<Core> says = node -> !(Core.withoutStanding(node) instanceof Core.Call)
                 || WhatARunMayEndFor.itself(node) instanceof WhatARunMayEndFor.Endings.Known;
         return each.places().everyNodeNotAfter(comparison.left(), siteNode, says)
                 && each.places().everyNodeNotAfter(comparison.right(), siteNode, says);
