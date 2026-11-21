@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * A value of a declaration, written down, that every rule of the declaration holds of.
@@ -117,7 +118,8 @@ final class ADeclarationsWitness {
      * @param rules   every rule that holds of the fields {@code writing}, over the bindings of the
      *                declaration's fields
      * @param pinned the constants some places are held to, by the fields that reach them, as the
-     *               fold reads a constant
+     *               fold reads a constant. A value is written holding every one of them, so
+     *               none is found where one is held at a place the value has no slot at
      */
     static Map<List<String>, Object> written(RuleReadingSource source,
                                              TypeSymbol.AtModule declared, Set<String> writing,
@@ -243,6 +245,11 @@ final class ADeclarationsWitness {
                     unread.add(slot);
                 }
             }
+        }
+        // A constant held at a place the value has no slot at is one it is not written holding.
+        if (!slots.stream().map(Slot::place).collect(Collectors.toSet())
+                .containsAll(pinned.keySet())) {
+            return null;
         }
         Map<List<String>, Core> held = new LinkedHashMap<>();
         for (Slot slot : slots) {

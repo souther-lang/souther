@@ -254,7 +254,8 @@ final class AValueOfTheInput {
      * the field, every number of which is that field of some value they all hold of
      * ({@link DeclaredBounds#wholeRunAt}), as they call it ({@link RuleAddress#of}). Where two or
      * more places are asked below it, or that run is not shown, a run of each alone says nothing
-     * of them together: each is a number of any run, and the record is tied to them ({@link Tie}),
+     * of them together: each is a number within the run its rules leave it alone, which a value of
+     * the record meets whatever the others are, and the record is tied to them ({@link Tie}),
      * which is made only where the record is shown to hold a value.
      *
      * @return how many of {@code places} it holds, or -1 where no value is shown
@@ -293,7 +294,13 @@ final class AValueOfTheInput {
         if (!domains.shownToHoldAValue()) {
             return -1;
         }
-        below.forEach(place -> out.put(place, WholeRun.OPEN));
+        // What the rules leave each place alone holds of every value of the record, tied or not:
+        // a necessary condition on its number, and the ties are what is left of the numbers.
+        for (Placed each : placed) {
+            WholeRun alone = wholeOf(DeclaredBounds.wholeRunAt(record, each.key(),
+                    read.ruleReading()));
+            out.put(each.place(), alone == null ? WholeRun.OPEN : alone);
+        }
         ties.add(new Tie(domains, List.copyOf(placed)));
         return below.size();
     }

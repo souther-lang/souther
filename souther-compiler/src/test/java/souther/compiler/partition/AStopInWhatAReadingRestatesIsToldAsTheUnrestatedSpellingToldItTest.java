@@ -16,6 +16,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -115,8 +116,8 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
     /** The arms of a choice that is an argument are worked out before the operation picks one. */
     @Test
     void anOperationInAnArmThatIsAnArgumentIsToldWhateverTheOperationPicks() {
-        assertEquals(1, stopsToldOf("maxOfAnArm"), TOLD.toString());
-        assertEquals(1, stopsToldOf("absOfAnArm"), TOLD.toString());
+        assertToldOnceAndLeftOnly("maxOfAnArm", NO_OPERATION_TOLD);
+        assertToldOnceAndLeftOnly("absOfAnArm", NO_OPERATION_TOLD);
     }
 
     /** A closure is applied to each element, and what a run works out on an arm it takes there
@@ -131,7 +132,7 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
     @Test
     void anArmIsToldThroughTheChoicesAndTheRulesReadInsideIt() {
         assertEquals(1, TOLD.get("nestedArm").size(), TOLD.toString());
-        assertEquals(1, stopsToldOf("armOfARule"), TOLD.toString());
+        assertToldOnceAndLeftOnly("armOfARule");
     }
 
     /** An arm of a match is told as an arm of an if is. */
@@ -205,10 +206,28 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
         assertEquals(List.of(), TOLD.get("matchArmNoStop"));
     }
 
-    /** How many stops the report says a run may come to in the behavior {@code name}, not
-     *  counting the places it says are not resolved beside them. */
-    private static long stopsToldOf(String name) {
-        return TOLD.get(name).stream().filter(line -> line.contains("may stop a run")).count();
+    /** Why a run is not said to stop at an operation that is none this compiler tells apart. */
+    private static final String NO_OPERATION_TOLD =
+            "it is none of the operations this compiler tells apart";
+
+    /**
+     * That the behavior {@code name} is told of one stop a run may come to, and of one place not
+     * resolved beside it for {@code why}, or of none where there is no {@code why}. The stop at
+     * {@code q + 1} is shown, so the input being not built is not among the reasons, and the
+     * same stop left unresolved at another place is not said again.
+     */
+    private static void assertToldOnceAndLeftOnly(String name, String... why) {
+        List<String> stops = TOLD.get(name).stream()
+                .filter(line -> line.contains("may stop a run")).toList();
+        List<String> left = TOLD.get(name).stream()
+                .filter(line -> line.contains("stop not resolved")).toList();
+        assertEquals(1, stops.size(), TOLD.toString());
+        assertEquals(why.length, left.size(), TOLD.toString());
+        for (int at = 0; at < why.length; at++) {
+            assertTrue(left.get(at).contains(why[at]), TOLD.toString());
+            assertFalse(left.get(at).contains("no input meeting them is built"),
+                    TOLD.toString());
+        }
     }
 
     /** The notes of a stop of each behavior, shown or not resolved, each of the conditions read

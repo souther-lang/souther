@@ -22,6 +22,7 @@ import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -413,6 +414,64 @@ class ATiedWayIsReadAsTheProgramRunSaysTest {
         assertTrue(ranTo(loader, behavior, 2, 1) > 0);
         String said = reportOf(model);
         assertTrue(said.contains("· may stop a run: comparison"), said);
+    }
+
+    /**
+     * The same where the run stops at a construction on the way to a rule and not at a division:
+     * {@code Count} wants a value above nought, and the way to it holds {@code e} to three or
+     * below: the clause leaves {@code p} nought only beside an {@code e} of one. Two places of the
+     * record are asked, so a run of each says nothing of them together. The program stops there,
+     * and the report says so.
+     */
+    @Test
+    void aStopAtAConstructionIsShownWhereAClauseTyingTwoFieldsLeavesTheNumberTooLow()
+            throws Exception {
+        String model = """
+                module demo
+
+                data Count = Int
+                    invariant value >= 1
+                data In = { e: Int, p: Int }
+                    invariant eInRange = e >= 1 && e <= 12
+                    invariant tied = p == e - 1
+                data OneC = { a: Count, w: Bool }
+
+                behavior b : (i: In) -> OneC constructs OneC, Count
+                let b (i) = if i.e <= 3 then OneC { a = Count(i.p), w = i.e <= 2 }
+                    else OneC { a = Count(1), w = false }
+                """;
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(model),
+                ATiedWayIsReadAsTheProgramRunSaysTest.class.getClassLoader());
+        Object behavior = Emitted.behavior(loader, "demo", "b").getConstructor().newInstance();
+        Object stops = Codecs.decoded(loader, "demo.In", Map.of("e", 1L, "p", 0L));
+        assertThrows(ConstraintViolation.class, () -> Codecs.apply(behavior, stops));
+        Object runs = Codecs.decoded(loader, "demo.In", Map.of("e", 2L, "p", 1L));
+        Codecs.apply(behavior, runs);
+        String said = reportOf(model);
+        assertTrue(said.contains("may stop a run"), said);
+    }
+
+    /** A clause on the type of the other field is one the value written down meets as well: the
+     *  number the outer clause would leave nought is refused by the newtype it is a number of. */
+    @Test
+    void noStopIsShownWhereTheTypeOfTheDivisorRefusesWhatTheClauseTyingItLeaves()
+            throws Exception {
+        String model = """
+                module demo
+
+                data PackSize = Int
+                    invariant value >= 1
+                data In = { e: Int, p: PackSize }
+                    invariant eInRange = e >= 1 && e <= 12
+                    invariant tied = p.value == e - 1
+                data Out = Int
+
+                behavior b : (i: In) -> Out
+                let b (i) = Out { value =
+                    if Rational.toInt(UP, i.e / i.p.value) >= 2 then 1 else 2 }
+                """;
+        String said = reportOf(model);
+        assertFalse(said.contains("may stop a run"), said);
     }
 
     /** Where the clause leaves the divisor the other number, which is never nought, the program
