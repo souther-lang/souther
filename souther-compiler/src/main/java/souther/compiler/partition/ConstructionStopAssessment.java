@@ -224,7 +224,7 @@ final class ConstructionStopAssessment {
                                       AConstructionOnTheWay.Reach reach, ConstructionAsk ask,
                                       List<ConstructionAsk> asks, Map<Core, List<OnTheWay>> waysTo,
                                       Predicate<Proposition> toTheComparison, InputReading read) {
-        Optional<WhatARunWorksOutBeforeACount.BeforeAConstruction> before = reach.before();
+        Optional<WhatARunWorksOutBeforeACount.BeforeAConstruction> before = reach.before().get();
         if (before.isEmpty()) {
             return unresolved(one, ask, ask.toldOf(is -> toTheComparison.test(is.read())),
                     WhyAConstructionStopIsNotShown.REACH_NOT_SHOWN);

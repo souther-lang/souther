@@ -857,6 +857,10 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 }
             }
         }
+        List<Set<Core>> metBy = new ArrayList<>();
+        for (WayInto way : into.each()) {
+            metBy.add(identitySetOf(way.mayMeet()));
+        }
         List<AConstructionOnTheWay> out = new ArrayList<>();
         for (Core.Construct each : made) {
             Optional<WhereConstructionsAreMet.Met> met = in.constructions().at(each);
@@ -867,7 +871,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             boolean everyWay = into.every();
             for (int entry = 0; entry < into.each().size(); entry++) {
                 WayInto way = into.each().get(entry);
-                if (way.mayMeet().stream().noneMatch(one -> one == each)) {
+                if (!metBy.get(entry).contains(each)) {
                     continue;
                 }
                 Optional<AConstructionOnTheWay.Reach> reach = met.isEmpty() ? Optional.empty()
@@ -951,9 +955,9 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                         .choosesInsideAFunctionValue(in.root(), comparison, false));
                 return mayMeet.map(meets -> new WaysInto(List.of(new WayInto(meets,
                         (entry, made, met) -> Optional.of(new AConstructionOnTheWay.Reach(entry,
-                                assumed, met.way(),
-                                WhatARunWorksOutBeforeACount.workedOutBeforeAConstruction(
-                                        in.root(), comparison, made),
+                                assumed, met.way(), new Pullback.Once<>(() ->
+                                        WhatARunWorksOutBeforeACount.workedOutBeforeAConstruction(
+                                                in.root(), comparison, made)),
                                 wayRead)))), true))
                         .orElse(WaysInto.NOT_READ);
             }
@@ -1038,13 +1042,13 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 call.at(), false)
                 && !(saidOfEach && WhatARunWorksOutBeforeACount.choosesInsideAFunctionValue(inner,
                         comparison, true));
-        List<Core.Construct> before = first.get();
+        Set<Core> before = identitySetOf(first.get());
         return Optional.of(new WayInto(mayMeet, (entry, made, met) ->
-                before.stream().noneMatch(one -> one == made) ? Optional.empty()
+                !before.contains(made) ? Optional.empty()
                         : Optional.of(new AConstructionOnTheWay.Reach(entry, toTheComparison,
-                                met.way(),
-                                WhatARunWorksOutBeforeACount.workedOutBeforeAConstruction(body,
-                                        call.at(), made),
+                                met.way(), new Pullback.Once<>(() ->
+                                        WhatARunWorksOutBeforeACount.workedOutBeforeAConstruction(
+                                                body, call.at(), made)),
                                 wayRead))));
     }
 
@@ -1074,18 +1078,26 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 build.at(), false)
                 && !(saidOfEach && WhatARunWorksOutBeforeACount.choosesInsideAFunctionValue(
                         template, comparison, false));
-        List<Core.Construct> before = first.get();
+        Set<Core> before = identitySetOf(first.get());
         return Optional.of(new WayInto(mayMeet, (entry, made, met) ->
-                Optional.of(before.stream().anyMatch(one -> one == made)
+                Optional.of(before.contains(made)
                         ? new AConstructionOnTheWay.Reach(entry, toTheComparison, met.way(),
-                                WhatARunWorksOutBeforeACount.workedOutBeforeAConstruction(body,
-                                        build.at(), made),
+                                new Pullback.Once<>(() -> WhatARunWorksOutBeforeACount
+                                        .workedOutBeforeAConstruction(body, build.at(), made)),
                                 wayRead)
                         : new AConstructionOnTheWay.Reach(entry, toTheComparison,
                                 union(build.way(), without(met.way(), joined)),
-                                WhatARunWorksOutBeforeACount.workedOutBeforeAConstructionPast(
-                                        body, build.at(), template, comparison, made),
+                                new Pullback.Once<>(() -> WhatARunWorksOutBeforeACount
+                                        .workedOutBeforeAConstructionPast(body, build.at(),
+                                                template, comparison, made)),
                                 wayRead))));
+    }
+
+    /** {@code nodes} as a set of the nodes themselves, told apart by identity. */
+    private static Set<Core> identitySetOf(List<? extends Core> nodes) {
+        Set<Core> out = Collections.newSetFromMap(new IdentityHashMap<>());
+        out.addAll(nodes);
+        return out;
     }
 
     /** {@code way} and then every entry of {@code more} it does not hold. */

@@ -5,6 +5,7 @@ import souther.compiler.core.Core;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 /**
  * A construction a run on the way to a comparison may work out before it
@@ -44,13 +45,16 @@ record AConstructionOnTheWay(Core.Construct made, Asked asked, List<Reach> reach
      *                        taking both ways works it out before the comparison unless something
      *                        before it ends the run
      *                        ({@link WhatARunWorksOutBeforeACount#workedOutBeforeAConstruction});
-     *                        empty where that is not shown
+     *                        empty where that is not shown. Worked out the first time it is
+     *                        asked: a construction the way to the comparison already holds what
+     *                        it asks of is never asked it, and the walk goes down the tree from
+     *                        its top
      * @param wayRead         whether {@code toTheComparison} holds every condition on the way to
      *                        the comparison: not where one met inside a function value is said of
      *                        each application and not on the way the walk carries
      */
     record Reach(int entry, List<OnTheWay> toTheComparison, List<OnTheWay> toIt,
-                 Optional<WhatARunWorksOutBeforeACount.BeforeAConstruction> before,
+                 Supplier<Optional<WhatARunWorksOutBeforeACount.BeforeAConstruction>> before,
                  boolean wayRead) {
 
         Reach {
