@@ -344,7 +344,9 @@ final class StopAssessment {
          * node's own step stands. False where {@code node} is not known.
          */
         private static boolean entirelyAfter(Core node, Set<Core> after) {
-            if (node == null) {
+            // A node's own step comes after what it is made of, so where that is not after the
+            // site, the whole of it is not, and what is under it is not asked.
+            if (node == null || !after.contains(Core.withoutStanding(node))) {
                 return false;
             }
             boolean[] every = {true};
