@@ -85,6 +85,23 @@ class AStopAtADivisionByNoughtIsShownByAnInputThatGetsThereTest {
                 .map(AStopShown.NumberAt::number).distinct().toList(), shown::toString);
     }
 
+    /**
+     * A quotient stops a run at its own step, past its operands: an operation of its dividend is
+     * worked out before it divides, so a run stops in {@code p + 1} at the greatest {@code p},
+     * though the divisor is nought there and a run that got past would divide by it.
+     */
+    @Test
+    void anOperationOfADividendStopsARunBeforeTheQuotientDoes() {
+        List<AStopShown> shown = shownIn("if Rational.toInt(UP, (p + 1) / (p - 9223372036854775807))"
+                + " >= 2 then 1 else 2");
+
+        assertEquals(List.of(BigInteger.valueOf(Long.MAX_VALUE)), shown.stream()
+                .filter(each -> each.operation().equals("p + 1"))
+                .flatMap(each -> each.at().stream())
+                .filter(each -> each.place().toString().equals("p"))
+                .map(AStopShown.NumberAt::number).toList(), shown::toString);
+    }
+
     /** A divisor of several numbers is one form of them, and a run stops where it is nought. */
     @Test
     void aDivisorThatIsASumShowsTheStopWhereTheSumIsNought() {
