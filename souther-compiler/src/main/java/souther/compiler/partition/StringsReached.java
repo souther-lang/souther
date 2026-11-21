@@ -7,15 +7,16 @@ import souther.compiler.inputs.PositionBounds;
 import souther.compiler.inputs.RepresentationBounds;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.values.AdmissibleSet;
 import souther.compiler.values.TextExtents;
 import souther.compiler.values.ValueSet;
 
-import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -79,46 +80,78 @@ public record StringsReached(boolean mandatoryPositionsHoldAValue,
     }
 
     /**
-     * Whether an edge at {@code term} is one a row could be written at, as far as the strings of
-     * the input say: the input has a whole value, which is every position every value has holding
-     * one, and the number is one its strings reach. Two claims, and neither stands for the other.
+     * Whether a point asking for a value of {@code term} among {@code asked} is one a row could be
+     * written at, as far as the strings of the input say: the input has a whole value, which is
+     * every position every value has holding one, and some number of {@code asked} is one its
+     * strings reach. Two claims, and neither stands for the other.
      *
-     * @param lineAt where the line the edge is of falls, or null where it is at no number
+     * <p>Of the values the point asks for and not of the line it is of. The lengths the rules leave
+     * can have a hole beside a line, so a string at the line says nothing of the point beside it,
+     * and a run is shown by any length of it a string has.
      */
-    public boolean allowsAnEdgeAt(NumericTerm term, ExactRatio lineAt) {
-        return mandatoryPositionsHoldAValue && reaches(term) && lineFitsAString(term, lineAt)
-                && !lineIsAtALengthNoStringHas(term, lineAt);
+    public boolean allowsAPointIn(NumericTerm term, LevelRegion asked) {
+        return mandatoryPositionsHoldAValue && reaches(term)
+                && asked.parts().stream().anyMatch(run -> aStringHasSomeOf(term, run));
     }
 
     /**
-     * Whether the line falls at a length the rules leave none of — one taken out from between the
-     * ends they place, or past them: the strings reach every length that is left, and a length
-     * that is not is none of theirs, so no row is written at a line there.
-     */
-    private boolean lineIsAtALengthNoStringHas(NumericTerm term, ExactRatio lineAt) {
-        OrderedRuns left = lengthsLeft.get(term);
-        return left != null && lineAt != null && lineAt.isWhole()
-                && lineAt.floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger whole)
-                && !left.admits(Count.of(new BigDecimal(whole)));
-    }
-
-    /**
-     * Whether a line drawn at {@code at} on {@code term} is below the most a {@code String} has of
-     * it, so that the value beside the line on its far side is one a string can have. Reaching
-     * every number the rules leave is not reaching a number past what a string holds: the rules
-     * leave every number from nought up, and a string holds no more than {@link
-     * TextExtents#LONGEST_STRING} code points.
+     * Whether some whole number of {@code run} is one a string has of {@code term}: from nought to
+     * the most a string has of it ({@link RepresentationBounds}), and a length the rules leave,
+     * where they were read whole. Reaching every number the rules leave is not reaching one past
+     * what a string holds: the rules leave every number from nought up, and a string holds no more
+     * than {@link TextExtents#LONGEST_STRING} code points. And a length taken out from between the
+     * ends the rules place, or past them, is the length of none of the strings.
      *
-     * <p>Asked of the line and not of the position's lines together. What a row at a line needs is
-     * the values beside that line, and a run between it and another line stops at the most a string
-     * has ({@link RepresentationBounds}), so a line past that takes nothing from the ones before
-     * it.
-     *
-     * @param at where the line falls, or null where it is at no number
+     * <p>Of a number that is no number of a string, every run is: what such a term holds is
+     * nothing the strings say.
      */
-    private static boolean lineFitsAString(NumericTerm term, ExactRatio at) {
+    private boolean aStringHasSomeOf(NumericTerm term, LevelInterval run) {
         ExactRatio most = mostAStringHas(term);
-        return most == null || at == null || at.compareTo(most) < 0;
+        if (most == null) {
+            return true;
+        }
+        LevelInterval.WholeNumbers whole = run.wholeNumbers();
+        if (whole == null || !(most.floor() instanceof ExactAnswer.Held<BigInteger>(
+                BigInteger greatest))) {
+            return false;
+        }
+        BigInteger from = whole.least() == null ? BigInteger.ZERO
+                : whole.least().max(BigInteger.ZERO);
+        BigInteger to = whole.most() == null ? greatest : whole.most().min(greatest);
+        OrderedRuns left = lengthsLeft.get(term);
+        if (left == null) {
+            return from.compareTo(to) <= 0;
+        }
+        for (OrderedInterval each : left.runs()) {
+            BigInteger low = wholeEnd(each.low(), true);
+            BigInteger high = wholeEnd(each.high(), false);
+            // A run whose end names no number shows no length: widened to no end, it would.
+            if ((each.low() != null && low == null) || (each.high() != null && high == null)) {
+                continue;
+            }
+            BigInteger start = low == null ? from : from.max(low);
+            BigInteger stop = high == null ? to : to.min(high);
+            if (start.compareTo(stop) <= 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** The nearest whole number {@code end} admits on the run's side of it, or null where the
+     *  run has no end that way or the end names no number: its least where {@code lower}, and its
+     *  greatest otherwise. */
+    private static BigInteger wholeEnd(Endpoint end, boolean lower) {
+        if (end == null || !(end.at() instanceof Count count)) {
+            return null;
+        }
+        ExactRatio at = count.exactly();
+        if (lower) {
+            return end.inclusive() ? at.ceiling().orNull()
+                    : at.floor().map(each -> each.add(BigInteger.ONE)).orNull();
+        }
+        return end.inclusive() ? at.floor().orNull()
+                : at.ceiling().map(each -> each.subtract(BigInteger.ONE)).orNull();
     }
 
     /** The most of {@code term} a string has, or null where it is no number of a string. */

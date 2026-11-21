@@ -11,6 +11,7 @@ import souther.compiler.check.Emptiness;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.PartId;
 import souther.compiler.check.RuleKey;
+import souther.compiler.check.DateRules;
 import souther.compiler.collect.RecentAnswers;
 import souther.compiler.check.RuleRef;
 import souther.compiler.meaning.PositionsAStatementReads;
@@ -3666,6 +3667,32 @@ final class ReadQuantities implements Quantities {
                 && asking(Set.of(here)) instanceof StructuralContext.Merge.Together(
                         StructuralContext under)
                 && under.holds(opened.opening()) ? declared : HeldClass.NONE;
+    }
+
+    /**
+     * What the declarations hold the date at {@code place} to ({@link FieldDomains#rulesOfTheDateAt}),
+     * under the context the date is asked in. Refused where no value this reading holds is around
+     * the place: an answer would be said of a place this reading has never been.
+     *
+     * <p>Whole only where the context the date is asked in is the one its declarations were opened
+     * under. Not where the date stands under two cases no row is in at once, which is no value at
+     * all ({@link #asking}), and not where the declarations were opened under another: whether
+     * their rules are then no rules of the date or the date is no value here is not told apart,
+     * and of a proof that a date exists the wide answer is the one never given for want of one.
+     */
+    @Override
+    public DateRules rulesOfTheDateAt(TermPath place) {
+        UnderARoot at = rootOf(place);
+        if (at == null) {
+            throw new IllegalArgumentException("`" + place + "` is under nothing this input takes,"
+                    + " so there is nothing here to say what its rules hold its date to");
+        }
+        OpenedRules opened = byRoot.get(at.root());
+        return (opened != null
+                && asking(Set.of(new NumericTerm.ValueOf(place)))
+                        instanceof StructuralContext.Merge.Together(StructuralContext under)
+                && under.holds(opened.opening()))
+                ? opened.rules().bounds().rulesOfTheDateAt(at.named()) : DateRules.NOT_WHOLE;
     }
 
     /** The magnitude of the divisor {@code taken} is a remainder by, or null where it is no

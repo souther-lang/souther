@@ -234,6 +234,27 @@ public final class NumericDomain<A> {
     }
 
     /**
+     * Every rule weighing one of {@code atoms}, each once, in the order the rules are read.
+     *
+     * <p>For a caller asking what the rules hold some positions to together, which no box says: a
+     * rule over two of them holds the pair to less than each one's range does.
+     */
+    public List<AffineConstraint<A>> rulesWeighingAny(Set<A> atoms) {
+        List<AffineConstraint<A>> out = new ArrayList<>();
+        for (AffineConstraint<A> each : rules()) {
+            if (weighsAny(each, atoms)) {
+                out.add(each);
+            }
+        }
+        return out;
+    }
+
+    private static <A> boolean weighsAny(AffineConstraint<A> rule, Set<A> atoms) {
+        Map<A, ExactRatio> weights = rule.form().coefs();
+        return atoms.stream().anyMatch(weights::containsKey);
+    }
+
+    /**
      * The rules as every reader here reads them, for a test holding what is read onto an earlier
      * reading to what reading every rule said from the start comes to.
      */

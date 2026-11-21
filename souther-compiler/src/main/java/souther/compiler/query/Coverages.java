@@ -1210,7 +1210,7 @@ final class Coverages {
             List<Border> lines, List<Border> everyLine,
             souther.compiler.partition.MeasuredInput subject,
             souther.compiler.query.Adequacy.RowReading observed,
-            Function<Border, ItemAssessment.WritabilityProjection> projection,
+            Function<Criterion, ItemAssessment.WritabilityProjection> projection,
             RowsPutToTheLines put, ReachingCuts reaching) {
         // One entry per reading and not per line. A guard inside a non-recursive helper is read once
         // per call of that helper, and the rows do not owe the same border twice for having been
@@ -1221,7 +1221,7 @@ final class Coverages {
         List<ReadingOfALine> out = new ArrayList<>();
         MeasuredInput.Lines read = subject.lines();
         for (Border each : lines) {
-            out.add(assessed(each, reading(read.at(each), projection.apply(each),
+            out.add(assessed(each, reading(read.at(each), projection,
                             elsewhere(lines, each),
                             otherReadingsOfTheComparison(everyLine, each, read),
                             wayTo(each, reaching), subject.quantities().region()),
@@ -1683,9 +1683,11 @@ final class Coverages {
         StandingAtAPoint.RowsRead valuesAt(Criterion criterion, List<ObservedInputs> rows);
 
         /** What reading the rules this reading took in established about a row being writable at
-         *  this border. Three answers rather than two: a shape whose rules were never put the
-         *  question is not one whose rules failed to answer it. */
-        ItemAssessment.WritabilityProjection projection();
+         *  {@code criterion}'s point of this border. Three answers rather than two: a shape whose
+         *  rules were never put the question is not one whose rules failed to answer it. Asked of
+         *  the point and not of the line: a value at the line says nothing of the value beside it
+         *  where the values the rules leave have a hole there. */
+        ItemAssessment.WritabilityProjection projection(Criterion criterion);
     }
 
     /** What building a row at one point of a border comes to. Its own interface beside the reading
@@ -1812,7 +1814,7 @@ final class Coverages {
                     // composed is a fact about who asked for one, and a measurement that carried it
                     // was answering a question it had not been put.
                     yield new ItemAssessment.Owed(owed.criterion(), coverage,
-                            shape.projection(), SearchOutcomes.none(), false);
+                            shape.projection(owed.criterion()), SearchOutcomes.none(), false);
                 }
             });
         }
@@ -2172,7 +2174,7 @@ final class Coverages {
      */
     private static OneShapeOfBorder reading(
             souther.compiler.partition.MeasuredInput.BorderReading line,
-            ItemAssessment.WritabilityProjection projection,
+            Function<Criterion, ItemAssessment.WritabilityProjection> projection,
             List<souther.compiler.partition.OrderedAffineBoundary> elsewhere,
             StandingAtAPoint.OtherReadings otherReadings,
             souther.compiler.partition.WayToTheBorder way, SearchRegion declarations) {
@@ -2222,8 +2224,8 @@ final class Coverages {
             // then `n == 11` admits a ten at the position and none at the inner line. So the
             // question is left unput, and what settles the point is what a search over the way finds.
             @Override
-            public ItemAssessment.WritabilityProjection projection() {
-                return way.asksNothingOfARow() ? projection
+            public ItemAssessment.WritabilityProjection projection(Criterion criterion) {
+                return way.asksNothingOfARow() ? projection.apply(criterion)
                         : ItemAssessment.WritabilityProjection.NOT_COMPUTED;
             }
         };
@@ -3464,7 +3466,7 @@ final class Coverages {
         MeasuredInput.Lines read = subject.lines();
         for (Border each : partitioning.between()) {
             out.add(assessed(each, reading(read.at(each),
-                            ItemAssessment.WritabilityProjection.NOT_COMPUTED,
+                            _ -> ItemAssessment.WritabilityProjection.NOT_COMPUTED,
                             elsewhere(partitioning.between(), each),
                             otherReadingsOfTheComparison(everyLine, each, read),
                             wayTo(each, reaching), subject.quantities().region()),

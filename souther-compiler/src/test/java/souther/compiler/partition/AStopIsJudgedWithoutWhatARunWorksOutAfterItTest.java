@@ -19,32 +19,58 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * and asks nothing of what it works out after it. The way to the comparison puts {@code q} at the
  * greatest {@code Int}, so {@code q + 1} stops every run that gets to it, and a stop at the
  * division by {@code p} is shown only if a run does not get that far.
+ *
+ * <p>Each case is a behavior of the one module, which is compiled once for all of them.
  */
 class AStopIsJudgedWithoutWhatARunWorksOutAfterItTest {
 
     private static final String GREATEST = "9223372036854775807";
 
-    private static String model(String way, String comparison) {
-        return """
-                module demo
+    /** A comparison, and the way the program takes to it. */
+    private record Case(String way, String comparison) {
 
-                data Out = Int
-
-                behavior b : (e: Int, p: Int, q: Int) -> Out
-                let b (e, p, q) = Out { value =
-                    if %s then (if %s then 1 else 2) else 3 }
-                """.formatted(way, comparison);
+        /** On the way where {@code q} is the greatest {@code Int}. */
+        Case(String comparison) {
+            this("q >= " + GREATEST, comparison);
+        }
     }
 
-    /** Judged on the way where {@code q} is the greatest {@code Int}. */
-    private static List<StopAssessment.Judgement> judged(String comparison) {
-        return judgedOn("q >= " + GREATEST, comparison);
+    private static final Case DIVISION_AFTER = new Case(
+            "Rational.toInt(DOWN, (e / p) / (q + 1)) >= 2");
+    private static final Case DIVISION_OF_DIVISION = new Case("e >= 0",
+            "Rational.toInt(DOWN, (e / p) / q) >= 2");
+    private static final Case DIVISION_BY_SUM = new Case("Rational.toInt(DOWN, e / (q + 1)) >= 2");
+    private static final Case LET_BODY_AFTER = new Case("(q + 1) + { let t = e\n q + 2 } >= 2");
+    private static final Case LET_BODY_BEFORE = new Case("{ let t = e\n q + 2 } + (q + 1) >= 2");
+    private static final Case FUNCTION_BODY = new Case(
+            "q >= " + GREATEST + " && p >= " + GREATEST,
+            "List.fold((w, l) -> q + 1, p + 1, [1]) >= 2");
+
+    private static final List<Case> CASES = List.of(DIVISION_AFTER, DIVISION_OF_DIVISION,
+            DIVISION_BY_SUM, LET_BODY_AFTER, LET_BODY_BEFORE, FUNCTION_BODY);
+
+    /** The module of every case, compiled when the first is judged. */
+    private static final class Module {
+
+        static final Compilation COMPILED = compile();
+
+        private static Compilation compile() {
+            StringBuilder model = new StringBuilder("module demo\n\ndata Out = Int\n");
+            for (int each = 0; each < CASES.size(); each++) {
+                model.append("""
+
+                        behavior b%1$d : (e: Int, p: Int, q: Int) -> Out
+                        let b%1$d (e, p, q) = Out { value =
+                            if %2$s then (if %3$s then 1 else 2) else 3 }
+                        """.formatted(each, CASES.get(each).way(), CASES.get(each).comparison()));
+            }
+            return ACompiledModel.measured(model.toString(),
+                    new Adequacy.Asked(Adequacy.Level.OFF, false));
+        }
     }
 
-    private static List<StopAssessment.Judgement> judgedOn(String way, String comparison) {
-        Compilation compilation = ACompiledModel.measured(model(way, comparison),
-                new Adequacy.Asked(Adequacy.Level.OFF, false));
-        return SitesJudged.of(compilation, "b");
+    private static List<StopAssessment.Judgement> judged(Case each) {
+        return SitesJudged.of(Module.COMPILED, "b" + CASES.indexOf(each));
     }
 
     private static List<StopAssessment.Judgement.Stops> stopsAtADivision(
@@ -53,6 +79,16 @@ class AStopIsJudgedWithoutWhatARunWorksOutAfterItTest {
                 .filter(StopAssessment.Judgement.Stops.class::isInstance)
                 .map(StopAssessment.Judgement.Stops.class::cast)
                 .filter(each -> each.shown().site() instanceof StopAssessment.Site.ByNought)
+                .toList();
+    }
+
+    /** The stops shown at the operation written {@code written}. */
+    private static List<StopAssessment.Judgement.Stops> stopsAt(
+            List<StopAssessment.Judgement> judged, String written) {
+        return judged.stream()
+                .filter(StopAssessment.Judgement.Stops.class::isInstance)
+                .map(StopAssessment.Judgement.Stops.class::cast)
+                .filter(each -> each.shown().site().written().equals(written))
                 .toList();
     }
 
@@ -73,8 +109,7 @@ class AStopIsJudgedWithoutWhatARunWorksOutAfterItTest {
      */
     @Test
     void aStopAtADivisionIsShownWhereAnOperationAfterItWouldStopEveryRun() {
-        List<StopAssessment.Judgement> judged =
-                judged("Rational.toInt(DOWN, (e / p) / (q + 1)) >= 2");
+        List<StopAssessment.Judgement> judged = judged(DIVISION_AFTER);
         List<StopAssessment.Judgement.Stops> stops = stopsAtADivision(judged);
         assertEquals(1, stops.size(), judged::toString);
         assertEquals(BigInteger.ZERO, heldAt(stops.getFirst().shown(), "p"));
@@ -88,8 +123,7 @@ class AStopIsJudgedWithoutWhatARunWorksOutAfterItTest {
      */
     @Test
     void aQuotientOfAQuotientIsToldWholeAndBothDivisionsAreJudged() {
-        List<StopAssessment.Judgement> judged =
-                judgedOn("e >= 0", "Rational.toInt(DOWN, (e / p) / q) >= 2");
+        List<StopAssessment.Judgement> judged = judged(DIVISION_OF_DIVISION);
         List<StopAssessment.Judgement.Stops> stops = stopsAtADivision(judged);
         assertEquals(2, stops.size(), judged::toString);
         assertEquals(BigInteger.ZERO, heldAt(stops.get(0).shown(), "p"));
@@ -105,7 +139,42 @@ class AStopIsJudgedWithoutWhatARunWorksOutAfterItTest {
      */
     @Test
     void aStopAtADivisionIsNotShownWhereAnOperationBeforeItStopsEveryRun() {
-        List<StopAssessment.Judgement> judged = judged("Rational.toInt(DOWN, e / (q + 1)) >= 2");
+        List<StopAssessment.Judgement> judged = judged(DIVISION_BY_SUM);
         assertEquals(List.of(), stopsAtADivision(judged), judged::toString);
+    }
+
+    /**
+     * The body of a {@code let} is worked out whenever the {@code let} is, but it is no step of it
+     * ({@code Evaluated.inOrder} lists the value), so {@code q + 2} has no place: it is worked out
+     * after {@code q + 1} all the same, and a run that stops at {@code q + 1} has not got to it.
+     */
+    @Test
+    void aStopIsShownWhereAnOperationInALetBodyAfterItWouldStopEveryRun() {
+        List<StopAssessment.Judgement> judged = judged(LET_BODY_AFTER);
+        List<StopAssessment.Judgement.Stops> stops = stopsAt(judged, "q + 1");
+        assertEquals(1, stops.size(), judged::toString);
+        assertEquals(new BigInteger(GREATEST), heldAt(stops.getFirst().shown(), "q"));
+    }
+
+    /**
+     * The control: the body of the {@code let} is worked out before {@code q + 1}, so a run that
+     * gets to {@code q + 1} has got past {@code q + 2}, which the way keeps it from: no value of
+     * the input is shown to stop at {@code q + 1}.
+     */
+    @Test
+    void aStopIsNotShownWhereAnOperationInALetBodyBeforeItWouldStopEveryRun() {
+        List<StopAssessment.Judgement> judged = judged(LET_BODY_BEFORE);
+        assertEquals(List.of(), stopsAt(judged, "q + 1"), judged::toString);
+    }
+
+    /**
+     * The body of a function value runs when it is applied, and {@code List.fold} applies it after
+     * its arguments are worked out, so a run that stops at {@code q + 1} in the body has got past
+     * {@code p + 1}, which the way keeps it from: no value is shown to stop at {@code q + 1}.
+     */
+    @Test
+    void aStopInAFunctionValueIsNotShownWhereAnArgumentOfTheCallStopsEveryRun() {
+        List<StopAssessment.Judgement> judged = judged(FUNCTION_BODY);
+        assertEquals(List.of(), stopsAt(judged, "q + 1"), judged::toString);
     }
 }

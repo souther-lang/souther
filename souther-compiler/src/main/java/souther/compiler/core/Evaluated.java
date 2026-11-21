@@ -5,6 +5,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Predicate;
 
@@ -194,15 +195,78 @@ public final class Evaluated {
      * every place a run may work it out at is after it. {@code site} is one node found in one
      * place; where it is not, or is in two, nothing is known to be after it.
      *
+     * <p>Nothing is known to be after a site in the body of a function value either. The body
+     * runs when the function is applied, which is after the arguments of the call that applies it
+     * whatever its place in what is written, and each time it is applied, so what is written
+     * after the site in it has been worked out in the run before. A site outside a body has a
+     * body after it where the function is made after the site, since it is applied only once it is
+     * made.
+     *
      * @param roots the expressions, in the order a run works them out
      */
-    public static Set<Core> workedOutAfter(List<Core> roots, Core site) {
+    public static WorkedOutAfter workedOutAfter(List<Core> roots, Core site) {
         if (site == null) {
-            return Set.of();
+            return WorkedOutAfter.NONE;
         }
         After walk = new After(Core.withoutStanding(site));
         roots.forEach(walk::visit);
         return walk.after();
+    }
+
+    /**
+     * What a run has not got to where it stops at a site ({@link #workedOutAfter}), asked of a
+     * node as its own step and as the whole of what it works out.
+     *
+     * <p>It says what is shown to be after the site, so a node it does not name is one it does not
+     * show to be after, which is not that it is before. An answer for a site holds what
+     * {@link #entirely} has worked out for that site, for one reader at a time and as long as the
+     * reader holds it. {@link #NONE} is shared by every site and holds nothing.
+     */
+    public static final class WorkedOutAfter {
+
+        /** Nothing is shown to be after the site. */
+        public static final WorkedOutAfter NONE = new WorkedOutAfter(Set.of(), Map.of());
+
+        private final Set<Core> steps;
+        private final Map<Core, Boolean> whole;
+
+        private WorkedOutAfter(Set<Core> steps, Map<Core, Boolean> whole) {
+            this.steps = steps;
+            this.whole = whole;
+        }
+
+        /**
+         * Whether the step of {@code node} itself is taken after the site, which says nothing of
+         * what it is made of: those come before it, and may come before the site.
+         */
+        public boolean contains(Core node) {
+            return node != null && steps.contains(Core.withoutStanding(node));
+        }
+
+        /**
+         * Whether everything {@code node} works out is worked out after the site: its own step
+         * and the step of each node under it. What stops anywhere in a node, as a product does in
+         * the middle of its own, stops after any stop at the site only where this is so. Each node
+         * is asked once for the site.
+         */
+        public boolean entirely(Core node) {
+            // The own step of a node is among what it works out, so with no step after the site
+            // none is entirely after it, and nothing is held for the answer.
+            if (node == null || steps.isEmpty()) {
+                return false;
+            }
+            Core bare = Core.withoutStanding(node);
+            Boolean known = whole.get(bare);
+            if (known != null) {
+                return known;
+            }
+            boolean[] every = {steps.contains(bare)};
+            if (every[0]) {
+                Core.forEachChild(bare, child -> every[0] = every[0] && entirely(child));
+            }
+            whole.put(bare, every[0]);
+            return every[0];
+        }
     }
 
     /** One walk in the order a run works the nodes out, with whether {@code site} has been taken. */
@@ -211,6 +275,8 @@ public final class Evaluated {
         private final Core site;
         private boolean taken;
         private int times;
+        private int insideBodies;
+        private boolean siteInABody;
         private final Set<Core> metBefore = Collections.newSetFromMap(new IdentityHashMap<>());
         private final Set<Core> metAfter = Collections.newSetFromMap(new IdentityHashMap<>());
         private final Set<Core> after = Collections.newSetFromMap(new IdentityHashMap<>());
@@ -227,6 +293,10 @@ public final class Evaluated {
             if (!(taken ? metAfter : metBefore).add(node)) {
                 return;
             }
+            boolean body = node instanceof Core.Block;
+            if (body) {
+                insideBodies++;
+            }
             List<Core> steps = new ArrayList<>();
             for (Step each : inOrder(node)) {
                 steps.add(Core.withoutStanding(each.expression()));
@@ -237,21 +307,26 @@ public final class Evaluated {
                     visit(child);
                 }
             });
+            if (body) {
+                insideBodies--;
+            }
             if (node == site) {
                 times++;
                 taken = true;
+                siteInABody |= insideBodies > 0;
             } else {
                 (taken ? after : notAfter).add(node);
             }
         }
 
-        Set<Core> after() {
-            if (times != 1) {
-                return Set.of();
+        WorkedOutAfter after() {
+            if (times != 1 || siteInABody) {
+                return WorkedOutAfter.NONE;
             }
             Set<Core> out = Collections.newSetFromMap(new IdentityHashMap<>());
             after.stream().filter(node -> !notAfter.contains(node)).forEach(out::add);
-            return out;
+            return out.isEmpty() ? WorkedOutAfter.NONE
+                    : new WorkedOutAfter(out, new IdentityHashMap<>());
         }
     }
 

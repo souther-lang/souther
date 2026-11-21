@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.DatePartsLeft;
 import souther.compiler.numeric.DateTranslation;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Rel;
@@ -72,16 +73,29 @@ final class DatesThatHoldEveryStatement {
     }
 
     /**
-     * Dates, one for each of {@code days}, at which every statement holds and every part of them
-     * is taken of a day its move is defined at; or that no dates do; or neither shown.
+     * Dates, one for each of {@code days}, at which every statement holds, every part of them is
+     * taken of a day its move is defined at, and each is of its class; or that no dates do; or
+     * neither shown.
      *
-     * @param days the dates each date may be, as the days a move by nothing is defined at
+     * <p>The class is asked of each day as it is made, and not of the dates found: the first date
+     * the statements leave need not be of the class where another of them is. What the class
+     * leaves each part is also a statement of that part, so a choice of what the parts come to
+     * that no day of the class gives is turned away before any day is made of it.
+     *
+     * @param days    the dates each date may be, as the days a move by nothing is defined at
+     * @param classes the class each date is of ({@link DatePartsLeft#EVERY_DATE} where it is of
+     *                none), in the order of {@code days}
      */
-    static Answer some(List<Statement> statements, List<DateTranslation> days) {
+    static Answer some(List<Statement> given, List<DateTranslation> days,
+                       List<DatePartsLeft> classes) {
         int dates = days.size();
         // The years are chosen together by YearsAWayAllows, which chooses them for so many dates.
-        if (dates == 0 || dates > YearsAWayAllows.MOST_DATES) {
+        if (dates == 0 || dates > YearsAWayAllows.MOST_DATES || classes.size() != dates) {
             return Otherwise.NOT_SHOWN;
+        }
+        List<Statement> statements = new ArrayList<>(given);
+        for (int date = 0; date < dates; date++) {
+            statements.addAll(statementsOf(classes.get(date), date));
         }
         List<List<Part>> partsOf = new ArrayList<>();
         List<DateTranslation> wherever = new ArrayList<>();
@@ -122,12 +136,39 @@ final class DatesThatHoldEveryStatement {
                 return Otherwise.NOT_SHOWN;
             }
         }
-        LocalDate[] found = choose(statements, partsOf, kinds, allowed, wherever, looked,
-                new ArrayList<>());
+        LocalDate[] found = choose(statements, partsOf, kinds, allowed, wherever, classes,
+                looked, new ArrayList<>());
         if (found != null) {
             return new Found(List.of(found));
         }
         return looked.everything() ? Otherwise.NONE_HOLD : Otherwise.NOT_SHOWN;
+    }
+
+    /**
+     * What {@code left} leaves each part of the date numbered {@code date}, as statements of the
+     * part: at or above its least whole number and at or below its greatest. An end that names no
+     * whole number a statement holds is left to the class, which every day made is asked of.
+     */
+    private static List<Statement> statementsOf(DatePartsLeft left, int date) {
+        List<Statement> out = new ArrayList<>();
+        left.byPart().forEach((part, bounds) -> {
+            Map<Part, Long> weighed = Map.of(new Part(date, part, DateTranslation.none()), 1L);
+            if (bounds.min() != null && wholeOrNull(bounds.min().wholeAdmitted(true))
+                    instanceof Long least) {
+                out.add(new Statement(weighed, -least, Rel.GE));
+            }
+            if (bounds.max() != null && wholeOrNull(bounds.max().wholeAdmitted(false))
+                    instanceof Long most) {
+                out.add(new Statement(weighed, -most, Rel.LE));
+            }
+        });
+        return out;
+    }
+
+    /** {@code whole} as a whole number whose negation a statement's constant holds, or null. */
+    private static Long wholeOrNull(BigInteger whole) {
+        return (whole == null || whole.bitLength() >= Long.SIZE - 1) ? null
+                : whole.longValueExact();
     }
 
     /**
@@ -194,13 +235,14 @@ final class DatesThatHoldEveryStatement {
     private static LocalDate[] choose(List<Statement> statements, List<List<Part>> partsOf,
                                       List<Map<List<Long>, Kind>> kinds, List<int[]> allowed,
                                       List<DateTranslation> wherever,
+                                      List<DatePartsLeft> classes,
                                       YearsAWayAllows.Looked looked,
                                       List<Map.Entry<List<Long>, Kind>> chosen) {
         if (chosen.size() < kinds.size()) {
             for (Map.Entry<List<Long>, Kind> kind : kinds.get(chosen.size()).entrySet()) {
                 chosen.add(kind);
-                LocalDate[] found = choose(statements, partsOf, kinds, allowed, wherever, looked,
-                        chosen);
+                LocalDate[] found = choose(statements, partsOf, kinds, allowed, wherever, classes,
+                        looked, chosen);
                 chosen.removeLast();
                 if (found != null) {
                     return found;
@@ -245,7 +287,8 @@ final class DatesThatHoldEveryStatement {
         // are taken only where the dates are made in them and hold every statement as written.
         // A year with no day of the kind holds no date of it. Dates made that the statements as
         // written do not hold are of the kind, whose sums hold them, so another day of it may:
-        // that day is passed by.
+        // that day is passed by. A year with no day of the kind in the date's class holds no
+        // date of it either, which is every day of the year asked.
         List<Map<Long, Optional<LocalDate>>> dayIn = new ArrayList<>();
         chosen.forEach(_ -> dayIn.add(new HashMap<>()));
         return YearsAWayAllows.holding(ofTheYears, ofTheCycle, allowed, years -> {
@@ -254,7 +297,7 @@ final class DatesThatHoldEveryStatement {
                 int of = date;
                 dates[date] = dayIn.get(date).computeIfAbsent(years[date], year ->
                         Optional.ofNullable(aDayOf(partsOf.get(of), chosen.get(of).getValue(),
-                                year, wherever.get(of)))).orElse(null);
+                                year, wherever.get(of), classes.get(of)))).orElse(null);
                 if (dates[date] == null) {
                     return null;
                 }
@@ -267,14 +310,17 @@ final class DatesThatHoldEveryStatement {
         }, looked);
     }
 
-    /** A day of {@code year} every move is defined at whose parts come to one of {@code kind}'s
-     *  beside the year, or null where there is none. */
+    /** A day of {@code year} of {@code left} every move is defined at whose parts come to one of
+     *  {@code kind}'s beside the year, or null where there is none. */
     private static LocalDate aDayOf(List<Part> parts, Kind kind, long year,
-                                   DateTranslation wherever) {
+                                   DateTranslation wherever, DatePartsLeft left) {
+        if (!left.leaves(TakenAs.DatePart.YEAR, (int) year)) {
+            return null;
+        }
         LocalDate first = LocalDate.of((int) year, 1, 1);
         for (int at = 0; at < first.lengthOfYear(); at++) {
             long day = first.toEpochDay() + at;
-            if (!wherever.definedAt(day)) {
+            if (!wherever.definedAt(day) || !left.holds(day)) {
                 continue;
             }
             List<Integer> beside = new ArrayList<>(parts.size());

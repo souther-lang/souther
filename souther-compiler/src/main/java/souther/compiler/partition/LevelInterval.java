@@ -2,11 +2,13 @@ package souther.compiler.partition;
 
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Towards;
 import souther.compiler.numeric.UnheldNumber;
 
+import java.math.BigInteger;
 import java.util.List;
 import java.util.Optional;
 
@@ -46,6 +48,43 @@ public record LevelInterval(Bound low, Bound high) {
     public static LevelInterval point(Level at) {
         return new LevelInterval(Bound.at(at, true), Bound.at(at, true));
     }
+
+    /**
+     * The whole numbers of this run, as the least and the greatest of them — each null where the
+     * run has no end that way — or null where an end names no number.
+     *
+     * <p>For a reader asking whether some value of a number that counts is in the run, which a
+     * level at an end does not answer: {@code 2 < n} holds three and not two.
+     */
+    public WholeNumbers wholeNumbers() {
+        BigInteger least = null;
+        BigInteger most = null;
+        if (low != null) {
+            ExactRatio at = low.at().exactly();
+            least = at == null ? null : low.inclusive() ? at.ceiling().orNull()
+                    : at.floor().map(whole -> whole.add(BigInteger.ONE)).orNull();
+            if (least == null) {
+                return null;
+            }
+        }
+        if (high != null) {
+            ExactRatio at = high.at().exactly();
+            most = at == null ? null : high.inclusive() ? at.floor().orNull()
+                    : at.ceiling().map(whole -> whole.subtract(BigInteger.ONE)).orNull();
+            if (most == null) {
+                return null;
+            }
+        }
+        return new WholeNumbers(least, most);
+    }
+
+    /**
+     * The whole numbers from {@code least} to {@code most}, both counted.
+     *
+     * @param least the least, or null where they run down without end
+     * @param most  the greatest, or null where they run up without end
+     */
+    public record WholeNumbers(BigInteger least, BigInteger most) {}
 
     /** Whether a value of the quantity lies in this run. */
     public boolean contains(Level value) {

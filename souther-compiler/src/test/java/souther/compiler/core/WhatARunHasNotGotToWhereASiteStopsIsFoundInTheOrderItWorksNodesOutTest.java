@@ -7,6 +7,8 @@ import souther.compiler.types.BinOp;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.Type;
 
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Set;
 
@@ -34,8 +36,24 @@ class WhatARunHasNotGotToWhereASiteStopsIsFoundInTheOrderItWorksNodesOutTest {
                 ConstructOccurrence.unwritten(), Type.INT, POS);
     }
 
+    /** The nodes of {@code root} whose own step is after {@code site}. */
     private static Set<Core> after(Core root, Core site) {
-        return Evaluated.workedOutAfter(List.of(root), site);
+        Evaluated.WorkedOutAfter after = Evaluated.workedOutAfter(List.of(root), site);
+        Set<Core> out = Collections.newSetFromMap(new IdentityHashMap<>());
+        Core.forEachDistinctNode(root, node -> {
+            if (after.contains(node)) {
+                out.add(node);
+            }
+        });
+        return out;
+    }
+
+    private static Core.Block aFunctionOf(Core body) {
+        return new Core.Block(List.of(), List.of(), body, POS);
+    }
+
+    private static Core.ListLit inOrder(Core... elements) {
+        return new Core.ListLit(List.of(elements), Type.INT, POS);
     }
 
     @Test
@@ -82,6 +100,52 @@ class WhatARunHasNotGotToWhereASiteStopsIsFoundInTheOrderItWorksNodesOutTest {
                 "where it is held twice, which of them a run stops at is not known");
         assertEquals(Set.of(), after(binary(BinOp.ADD, past, past), site));
         assertEquals(Set.of(), after(binary(BinOp.ADD, site, past), null));
+    }
+
+    /** The answer where nothing is after the site is shared by every site, and holds nothing. */
+    @Test
+    void nothingIsEntirelyAfterASiteThatIsNotFoundAndTheAnswerHoldsNothing() {
+        Core.Binary site = binary(BinOp.ADD, one(), one());
+        Core.Binary past = binary(BinOp.ADD, one(), one());
+        assertFalse(Evaluated.workedOutAfter(List.of(past), site).entirely(past));
+        assertFalse(Evaluated.workedOutAfter(List.of(past), null).entirely(past));
+    }
+
+    /**
+     * The body of a function value runs when it is applied, after the arguments of the call that
+     * applies it and each time it is, so nothing is after a site in it, though {@code past} is
+     * written after the function.
+     */
+    @Test
+    void nothingIsAfterASiteInTheBodyOfAFunctionValue() {
+        Core.Binary site = binary(BinOp.ADD, one(), one());
+        Core.Binary past = binary(BinOp.ADD, one(), one());
+        Core.Binary after = binary(BinOp.ADD, site, one());
+        assertEquals(Set.of(), after(inOrder(aFunctionOf(after), past), site));
+    }
+
+    /** A function value made after a site is applied after it. */
+    @Test
+    void theBodyOfAFunctionValueMadeAfterTheSiteIsAfterIt() {
+        Core.Binary site = binary(BinOp.ADD, one(), one());
+        Core.Binary inBody = binary(BinOp.ADD, one(), one());
+        Core.Block function = aFunctionOf(inBody);
+        Set<Core> after = after(inOrder(site, function), site);
+        assertTrue(after.contains(function) && after.contains(inBody));
+    }
+
+    /** A node is entirely after the site where its own step and everything under it is. */
+    @Test
+    void aNodeIsEntirelyAfterTheSiteOnlyWhereEverythingItWorksOutIs() {
+        Core.Binary site = binary(BinOp.ADD, one(), one());
+        Core.Binary past = binary(BinOp.ADD, one(), one());
+        Core.Binary around = binary(BinOp.MUL, site, past);
+        Core.Binary root = binary(BinOp.ADD, around, past);
+        Evaluated.WorkedOutAfter after = Evaluated.workedOutAfter(List.of(root), site);
+        assertTrue(after.entirely(past));
+        assertTrue(after.contains(around) && !after.entirely(around),
+                "its own step is after the site, and the site is in what it works out");
+        assertFalse(after.entirely(site) || after.entirely(null));
     }
 
     /** A node held at many places is not walked once for each: a tree of depth 40 whose every
