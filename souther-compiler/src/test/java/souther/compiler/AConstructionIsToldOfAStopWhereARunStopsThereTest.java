@@ -122,12 +122,24 @@ class AConstructionIsToldOfAStopWhereARunStopsThereTest {
         FORMS.put("beforeTwoCallsOfANamedFunction", new Form("OneC", "Count",
                 "{ let m = Count(q) \n let f = x -> x <= 3 \n "
                         + "OneC { a = m, w = List.all(f, [q]) && List.any(f, [q]) } }"));
+        // which elements the applications of a function two calls hand values to are made on is
+        // not said, so that a run makes one whatever the row is is not shown
+        NOT_SHOWN.put("beforeTwoCallsOfANamedFunction",
+                WhyAConstructionStopIsNotShown.A_CONDITION_NOT_READ);
         FORMS.put("betweenTwoCallsOfANamedFunction", new Form("CountFlag", "Count",
                 "{ let f = x -> x <= 3 \n let ok = List.all(f, [q]) \n let m = Count(q) \n "
                         + "CountFlag { a = m, ok = ok, w = List.any(f, [q]) } }"));
         // the first call, worked out before it by a run on the way by the second, applies a body
         // the call does not hold, which may end the run for all that is read of it
         NOT_SHOWN.put("betweenTwoCallsOfANamedFunction",
+                WhyAConstructionStopIsNotShown.SOMETHING_BEFORE_IT_MAY_STOP);
+        // the same with the second call made only where the first came out false: a run on the
+        // way by it stops at the construction for no value that comes out so, and one that stops
+        // there got to the rule by the first call already
+        FORMS.put("betweenTwoCallsTheSecondOnSomeRuns", new Form("CountFlag", "Count",
+                "{ let f = x -> x <= 3 \n let ok = List.all(f, [q]) \n let m = Count(q) \n "
+                        + "CountFlag { a = m, ok = ok, w = ok || List.any(f, [q]) } }"));
+        NOT_SHOWN.put("betweenTwoCallsTheSecondOnSomeRuns",
                 WhyAConstructionStopIsNotShown.SOMETHING_BEFORE_IT_MAY_STOP);
         // a construction over a place no rule on the way reads
         FORMS.put("overAPlaceNoRuleReads", new Form("OneC", "Count",

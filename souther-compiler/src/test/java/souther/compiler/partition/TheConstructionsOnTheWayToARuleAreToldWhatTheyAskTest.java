@@ -849,11 +849,12 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
     }
 
     /**
-     * A function value no call applies runs no run into its body: a construction before it is on
-     * the way to none of the rules it holds.
+     * A function value no call applies runs no run into its body: a rule it holds is read
+     * nowhere, so nothing is said of a construction on the way to it, and a construction before it
+     * is judged on the way to the rules a run does get to.
      */
     @Test
-    void aFunctionValueNothingAppliesHasNothingOnTheWayToItsRules() {
+    void aRuleInAFunctionValueNothingAppliesIsReadNowhere() {
         String unapplied = "    let g = x -> x <= 3";
         Compilation compilation = compiled("""
                 module demo
@@ -871,10 +872,9 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
                 }
                 """.replace("UNAPPLIED", unapplied));
         Map<String, Map<Integer, Set<String>>> judged = ConstructionsJudged.byRule(compilation, "f");
-        assertEquals(Map.of(), judged.getOrDefault("11:" + (unapplied.indexOf(" <= ") + 2),
-                Map.of()), judged::toString);
-        assertEquals(Map.of(10, Set.of("Stops")), judged.get("12:" + (
-                "    Plan { a = m, within = q <= 3 }".indexOf(" <= ") + 2)), judged::toString);
+        String body = "12:" + ("    Plan { a = m, within = q <= 3 }".indexOf(" <= ") + 2);
+        assertEquals(Set.of(body), judged.keySet(), judged::toString);
+        assertEquals(Map.of(10, Set.of("Stops")), judged.get(body), judged::toString);
     }
 
     /**

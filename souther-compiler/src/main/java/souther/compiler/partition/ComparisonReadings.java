@@ -945,14 +945,15 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * @param carried what the walk carried into it ({@link Stretch})
      * @param once    whether a run by this way runs the tree once before it gets to the
      *                comparison: the behavior's body, a value's template, a function value one
-     *                call applies once and nothing else does. Otherwise an application or a step
-     *                before this one ran the tree whole, after the comparison as well
+     *                call alone applies where its applications are one made whatever the row is
+     *                ({@link ClosureApplications#oneMadeWhateverTheRow}). Otherwise an application
+     *                or a step before this one ran the tree whole, after the comparison as well
      * @param inside  whether the tree is the body of a function value or a helper, every place
      *                in which is met on each application ({@link ClosureApplications})
      * @param reached whether a run that takes the way the walk carried to a place met on each
      *                application gets there whatever the row is, by this way
      */
-    private record Inner(Core root, List<OnTheWay> into, List<OnTheWay> carried, boolean once,
+    private record Inner(Core root, List<OnTheWay> into, List<OnTheWay> carried, RunsOnce once,
                          boolean inside, ReachedBy reached) {
 
         Inner {
@@ -972,13 +973,18 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
     private static final ReachedBy BY_ANY_APPLICATION =
             applying -> applying.reachedWheneverTheWayIs(_ -> true);
 
-    /**
-     * By none: a helper's body read at a call is read from the arm that takes an element and goes
-     * on ({@link #recursionAt}), and what entering that arm asks of a run — that the list holds an
-     * element there — is on neither the way the walk carried nor what the step's application is
-     * said to be made under.
-     */
-    private static final ReachedBy BY_NO_APPLICATION = _ -> false;
+    /** Whether a run by one way in runs the tree a comparison stands in once before it gets to
+     *  the comparison, which stands inside the applications {@code applying} ({@link Inner}). */
+    @FunctionalInterface
+    private interface RunsOnce {
+        boolean once(ClosureApplications applying);
+    }
+
+    /** Run once whatever the applications: the behavior's body, or a value's template. */
+    private static final RunsOnce ONCE = _ -> true;
+
+    /** Run on each application or step, and so before this one as well, as far as is said. */
+    private static final RunsOnce ON_EACH = _ -> false;
 
     /** How a run by one way in gets to a construction it meets, where the walk met it on
      *  {@code met}: the {@code entry}-th way in. */
@@ -1040,7 +1046,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     WhatARunWorksOutBeforeACount.notHandedOnTheWay(in.root(), comparison);
             return notHanded == null
                     ? new WaysIn(List.of(new AWayIn(List.of(), new Inner(in.root(), List.of(),
-                            List.of(), true, false, BY_ANY_APPLICATION), assumed)), true)
+                            List.of(), ONCE, false, BY_ANY_APPLICATION), assumed)), true)
                     : byTheCallsApplying(notHanded, assumed, in);
         }
         if (in.context().equals(CallContext.OF_THE_BODY) && in.within() != body) {
@@ -1054,7 +1060,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             List<AWayIn> each = new ArrayList<>();
             for (Chain chain : chains.each()) {
                 each.add(new AWayIn(chain.through(), new Inner(in.within(), chain.way(),
-                        joined.assumed(), true, false, BY_ANY_APPLICATION),
+                        joined.assumed(), ONCE, false, BY_ANY_APPLICATION),
                         union(chain.way(), inside)));
             }
             return new WaysIn(each, chains.every());
@@ -1063,7 +1069,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             WayIn call = in.calledAt().get();
             return new WaysIn(List.of(new AWayIn(
                     List.of(new Stretch(body, call.at(), List.of(), List.of())),
-                    new Inner(in.root(), call.way(), call.way(), false, true, BY_NO_APPLICATION),
+                    new Inner(in.root(), call.way(), call.way(), ON_EACH, true,
+                            BY_ANY_APPLICATION),
                     union(call.way(), without(assumed, call.way())))), true);
         }
         return WaysIn.NOT_READ;
@@ -1107,7 +1114,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                             && applying.everyOneReachedWheneverTheWayIs();
             each.add(new AWayIn(List.of(new Stretch(in.whole(), call, List.of(), List.of())),
                     new Inner(closure.body(), way.get(), made.get(),
-                            alone && elementsWrittenOut(applied) == 1, true, reached),
+                            alone ? ClosureApplications::oneMadeWhateverTheRow : ON_EACH, true,
+                            reached),
                     union(way.get(), inside)));
         }
         return new WaysIn(each, every);
@@ -1244,7 +1252,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     stretch.at());
             past = past.then(going.get());
         }
-        if (!inner.once()) {
+        if (!inner.once().once(applying)) {
             for (Core.Construct made : WhatARunWorksOutBeforeACount.everyConstructionIn(
                     List.of(inner.root()), comparison)) {
                 out.meet(made, null);

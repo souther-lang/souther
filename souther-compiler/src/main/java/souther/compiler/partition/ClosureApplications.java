@@ -589,10 +589,10 @@ sealed interface ClosureApplications {
     /**
      * Whether a run that takes the way the walk carried to a place inside a function value gets
      * there whatever the row is, by an application {@code by} picks: one of those is made on every
-     * such run, and nothing met inside the closures on the way to the place asks more of it
-     * ({@link Application#reached}). Never where the applications are not said one by one, or
-     * none is made: whether a run makes one is then nothing these say, and {@link Outside} says
-     * nothing of an application inside a closure handed values nobody wrote out.
+     * such run ({@link #madeWhateverTheRow}). Never where the applications are not said one by
+     * one, or none is made: whether a run makes one is then nothing these say, and
+     * {@link Outside} says nothing of an application inside a closure handed values nobody wrote
+     * out.
      */
     default boolean reachedWheneverTheWayIs(Predicate<Application> by) {
         return this instanceof Each(var each) && each.stream().filter(by)
@@ -606,8 +606,28 @@ sealed interface ClosureApplications {
                 && each.stream().allMatch(ClosureApplications::madeWhateverTheRow);
     }
 
+    /**
+     * Whether these are one application, made whatever the row is ({@link #madeWhateverTheRow}):
+     * a body they stand in runs once on a run that gets to the place, nested ones taken together
+     * with the ones around them.
+     */
+    default boolean oneMadeWhateverTheRow() {
+        return this instanceof Each(var each) && each.size() == 1
+                && madeWhateverTheRow(each.getFirst());
+    }
+
+    /**
+     * Whether {@code one} is made on every run that takes the way the walk carried: nothing met
+     * inside the closures on the way asks more of it ({@link Application#reached}), it stands for
+     * no element of a container of the input, which a row may hold none of, and nothing beside
+     * the way is asked of a row for it to be made through it ({@link ElementsMetOn#made}) — what
+     * the step of a helper read at a call is made under, the arm taking an element being on
+     * neither.
+     */
     private static boolean madeWhateverTheRow(Application one) {
-        return one.reached() instanceof Proposition.Always(boolean holds) && holds;
+        return one.reached() instanceof Proposition.Always(boolean holds) && holds
+                && one.metOn().levels().isEmpty()
+                && one.metOn().made() instanceof Proposition.Always(boolean made) && made;
     }
 
     /**
