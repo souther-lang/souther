@@ -810,6 +810,50 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
     }
 
     /**
+     * A template a run builds once runs once before the rule it holds, so what it works out
+     * after the rule is on the way to it on no run. A body builds a value once however often it
+     * names it; built in two trees — the body and another value's template — a run may build it at
+     * both, the first ran it whole, and what it works out after the rule may come before the rule
+     * on the second.
+     */
+    @Test
+    void aTemplateBuiltTwiceHasOnTheWayWhatTheFirstBuildWorkedOutAfterTheRule() {
+        String model = """
+                module demo
+
+                data Count = Int
+                    invariant value >= 0
+                data Span = { lo: Decimal, hi: Decimal }
+                    invariant lo <= hi
+                data Plan = { a: Count, within: Bool }
+                let small: Bool = {
+                    let ok = Decimal.compare(1.0m, 2.0m) <= 0
+                    let s = Span { lo = 1.0m, hi = 2.0m }
+                    ok && Decimal.compare(s.lo, 3.0m) <= 0
+                }
+                let smallToo: Bool = {
+                    let t = small
+                    t
+                }
+
+                behavior f : (q: Int) -> Plan
+                    constructs Plan, Count
+                let f (q) = {
+                    let t = small
+                    BUILDS
+                }
+                """;
+        String rule = "9:" + ("    let ok = Decimal.compare(1.0m, 2.0m) <= 0".indexOf(" <= ") + 2);
+        Map<String, Map<Integer, Set<String>>> once = ConstructionsJudged.byRule(compiled(model
+                .replace("BUILDS", "Plan { a = Count(0), within = t }")), "f");
+        Map<String, Map<Integer, Set<String>>> twice = ConstructionsJudged.byRule(compiled(model
+                .replace("BUILDS", "let u = smallToo\n    Plan { a = Count(0), within = t && u }")),
+                "f");
+        assertEquals(Map.of(), once.get(rule), once::toString);
+        assertEquals(Set.of(10), twice.get(rule).keySet(), twice::toString);
+    }
+
+    /**
      * A value built in the template of another is gone into by way of the other's builds: a
      * construction in it before a rule it holds is on the way to the rule by those, as one in a
      * template the body builds is.

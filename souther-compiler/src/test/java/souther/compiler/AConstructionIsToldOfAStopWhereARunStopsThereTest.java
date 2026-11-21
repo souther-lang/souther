@@ -108,6 +108,14 @@ class AConstructionIsToldOfAStopWhereARunStopsThereTest {
                         + "OneC { a = Count(0), w = List.all(f, [q, q]) } }"));
         NOT_SHOWN.put("inANamedFunctionAppliedTwice",
                 WhyAConstructionStopIsNotShown.REACH_NOT_SHOWN);
+        // the same written at one call, which a closure around it makes on each of two elements:
+        // one call written is not one application made, and the first ran the body whole
+        FORMS.put("inANamedFunctionAtOneCallMadeTwice", new Form("OneC", "Count",
+                "{ let p: (Int) -> Bool = x -> { let ok = x <= 3 \n let later = Count(x) \n "
+                        + "ok && later.value >= 0 } \n "
+                        + "OneC { a = Count(0), w = List.all(y -> List.all(p, [y]), [q, q]) } }"));
+        NOT_SHOWN.put("inANamedFunctionAtOneCallMadeTwice",
+                WhyAConstructionStopIsNotShown.REACH_NOT_SHOWN);
         // one before a function bound by a name, on the way to the rule the function holds where
         // the call applying it is
         FORMS.put("beforeANamedFunction", new Form("OneC", "Count",
@@ -141,6 +149,9 @@ class AConstructionIsToldOfAStopWhereARunStopsThereTest {
                         + "CountFlag { a = m, ok = ok, w = ok || List.any(f, [q]) } }"));
         NOT_SHOWN.put("betweenTwoCallsTheSecondOnSomeRuns",
                 WhyAConstructionStopIsNotShown.SOMETHING_BEFORE_IT_MAY_STOP);
+        // one after a value is built whose template ends every run, before the rule
+        FORMS.put("afterAValueThatStops", new Form("OneC", "Count",
+                "{ let t = past \n let m = Count(q) \n OneC { a = m, w = q <= t } }"));
         // a construction over a place no rule on the way reads
         FORMS.put("overAPlaceNoRuleReads", new Form("OneC", "Count",
                 "OneC { a = Count(q), w = Decimal.compare(d, e) <= 0 }"));
@@ -222,6 +233,8 @@ class AConstructionIsToldOfAStopWhereARunStopsThereTest {
                 data OneS = { s: Small, w: Bool }
                 data OneH = { h: Held, w: Bool }
                 data TwoH = { a: Held, b: Held, w: Bool }
+
+                let past: Int = Int.abs(9223372036854775807) + 1
                 """);
         for (int at = 0; at < names.size(); at++) {
             Form form = FORMS.get(names.get(at));

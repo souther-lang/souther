@@ -347,6 +347,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * @param quotients  the quotients evaluating the comparison always works out, in the order
      *                   it works them out ({@link QuotientsEveryRunWorksOut}): none for an
      *                   application, which states no comparison to evaluate
+     * @param templateOf the template of each value the body builds, which is what working a build
+     *                   out works out, and is in no tree a build stands in
      */
     record Reading(ConstructOccurrence occurrence, Stated statement, Citation at,
                    InputReads reads,
@@ -360,7 +362,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                    ElementsNamed readsTheElements, LinesReadOn readOn,
                    Supplier<Boolean> beforeIt,
                    Supplier<List<AConstructionOnTheWay>> constructionsOnTheWay,
-                   List<Core.Binary> quotients) {
+                   List<Core.Binary> quotients,
+                   Function<Core.MaterialisedValue, Core> templateOf) {
 
         Reading {
             if (occurrence == null || statement == null || at == null
@@ -369,7 +372,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     || context == null
                     || saidOnTheWay == null || witnesses == null || getsPast == null
                     || asks == null || readsTheElements == null || readOn == null
-                    || beforeIt == null || constructionsOnTheWay == null) {
+                    || beforeIt == null || constructionsOnTheWay == null || templateOf == null) {
                 throw new IllegalArgumentException(
                         "a reading is of some comparison of the model, placed somewhere");
             }
@@ -728,7 +731,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      *  the way to it, and whether what it computes is read on the way to what the behavior
      *  answers with. The build and its tree are null in what every build stood under
      *  ({@link Templates#joined}). */
-    private record Entry(Core build, Core tree, List<OnTheWay> assumed, boolean live) { }
+    private record Entry(Core build, Core standsIn, List<OnTheWay> assumed, boolean live) { }
 
     /** Where a run goes from the behavior's body into another body a comparison stands in: a
      *  node of the behavior's body, and what stood on the way to it. */
@@ -759,9 +762,10 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             return held.bodyOf(build);
         }
 
-        void entered(Core template, Core build, Core tree, List<OnTheWay> assumed, boolean live) {
+        void entered(Core template, Core build, Core standsIn, List<OnTheWay> assumed,
+                     boolean live) {
             entered.computeIfAbsent(template, _ -> new ArrayList<>())
-                    .add(new Entry(build, tree, assumed, live));
+                    .add(new Entry(build, standsIn, assumed, live));
         }
 
         /** Every build of {@code template} the walk met, each where it is, in which tree, and on
@@ -822,7 +826,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * what it asks and each way a run on the way gets to it on.
      *
      * <p>A run gets to the comparison by one or more ways into the tree it stands in
-     * ({@link #waysInto}), and on each of those, the constructions it may meet first are read
+     * ({@link #waysIn}), and on each of those, the constructions it may meet first are read
      * ({@link WhatARunWorksOutBeforeACount#constructionsARunMayMeetBefore}). Where some way in is
      * not read, every construction written in the behavior's body and in the tree the comparison
      * stands in but under it is among them as well, with no way to it shown by that one: any of
@@ -944,8 +948,9 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * @param into    what stood on the way to it by this way
      * @param carried what the walk carried into it ({@link Stretch})
      * @param once    whether a run by this way runs the tree once before it gets to the
-     *                comparison: the behavior's body, a value's template, a function value one
-     *                call alone applies where its applications are one made whatever the row is
+     *                comparison: the behavior's body, a value's template a run builds once at most
+     *                ({@link #chainsInto}), a function value one call alone applies where its
+     *                applications are one made whatever the row is
      *                ({@link ClosureApplications#oneMadeWhateverTheRow}). Otherwise an application
      *                or a step before this one ran the tree whole, after the comparison as well
      * @param inside  whether the tree is the body of a function value or a helper, every place
@@ -980,7 +985,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         boolean once(ClosureApplications applying);
     }
 
-    /** Run once whatever the applications: the behavior's body, or a value's template. */
+    /** Run once whatever the applications: the behavior's body, or a value's template a run
+     *  builds once at most. */
     private static final RunsOnce ONCE = _ -> true;
 
     /** Run on each application or step, and so before this one as well, as far as is said. */
@@ -1060,7 +1066,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             List<AWayIn> each = new ArrayList<>();
             for (Chain chain : chains.each()) {
                 each.add(new AWayIn(chain.through(), new Inner(in.within(), chain.way(),
-                        joined.assumed(), ONCE, false, BY_ANY_APPLICATION),
+                        joined.assumed(), chains.once() ? ONCE : ON_EACH, false,
+                        BY_ANY_APPLICATION),
                         union(chain.way(), inside)));
             }
             return new WaysIn(each, chains.every());
@@ -1143,43 +1150,48 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * holds the templates the ways are being read through, so a template built inside itself is a
      * way not read.
      *
-     * @return the ways, and whether they are every way: not where a build stands in a template no
-     *         way to which is read
+     * @return the ways, whether they are every way — not where a build stands in a template no
+     *         way to which is read — and whether a run builds the template once at most: where it
+     *         is built in one place, which is the behavior's body or a template built once. Built in
+     *         two, a run may build it at both, and the first build ran it whole before the second
      */
     private static Chains chainsInto(Core template, Body in, Set<Core> on) {
         List<Entry> builds = in.templates().builds(template);
         if (builds.isEmpty() || !on.add(template)) {
-            return new Chains(List.of(), false);
+            return new Chains(List.of(), false, false);
         }
         boolean every = true;
+        boolean once = builds.size() == 1;
         List<Chain> out = new ArrayList<>();
         for (Entry build : builds) {
-            if (build.tree() == in.whole()) {
-                out.add(new Chain(List.of(new Stretch(build.tree(), build.build(), List.of(),
+            if (build.standsIn() == in.whole()) {
+                out.add(new Chain(List.of(new Stretch(build.standsIn(), build.build(), List.of(),
                         List.of())), build.assumed()));
                 continue;
             }
-            Entry outer = in.templates().joined(build.tree());
+            Entry outer = in.templates().joined(build.standsIn());
             if (outer == null) {
                 every = false;
                 continue;
             }
-            Chains around = chainsInto(build.tree(), in, on);
+            Chains around = chainsInto(build.standsIn(), in, on);
             every &= around.every();
+            once &= around.once();
             for (Chain way : around.each()) {
                 List<Stretch> through = new ArrayList<>(way.through());
-                through.add(new Stretch(build.tree(), build.build(), way.way(),
+                through.add(new Stretch(build.standsIn(), build.build(), way.way(),
                         outer.assumed()));
                 out.add(new Chain(through, union(way.way(),
                         without(build.assumed(), outer.assumed()))));
             }
         }
         on.remove(template);
-        return new Chains(out, every);
+        return new Chains(out, every, once);
     }
 
-    /** The ways to a template ({@link #chainsInto}), and whether they are every one. */
-    private record Chains(List<Chain> each, boolean every) {}
+    /** The ways to a template ({@link #chainsInto}), whether they are every one, and whether a
+     *  run builds it once at most. */
+    private record Chains(List<Chain> each, boolean every, boolean once) {}
 
     /** One way to a template: the trees a run goes through to its build, and what stood on the
      *  way to the build. */
@@ -1893,7 +1905,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     new Pullback.Once<>(() -> constructionsOnTheWay(e, past.asks(),
                             besideIt.way(), applying, in)),
                     stated.statement() instanceof Stated.AComparison
-                            ? QuotientsEveryRunWorksOut.in(e) : List.of()));
+                            ? QuotientsEveryRunWorksOut.in(e) : List.of(),
+                    in.templates()::bodyOf));
         }
         // A fork the reading of the runs takes a way out of, under the closures the walk is in. A
         // value standing as a wider type is no fork, and a fork under it is met one step down.
