@@ -297,12 +297,16 @@ public final class ElementsWrittenOut {
      * The most elements {@code container} holds on any run where that is written down, or empty
      * where it is not: the elements the walk writes out, less those that are there on no run.
      * Where every one is there on every run it is the count {@link #sizeOf} answers.
+     *
+     * <p>The container is walked once: an occurrence there on every run or turning on the run is
+     * counted and one there on no run is not, which, where none turns on the run, is the count of
+     * those there on every run.
      */
     public static <E> OptionalLong mostOf(Stood<E> asked, Reading<E> reading) {
         Stood<E> container = standing(asked, reading);
-        OptionalLong exact = sizeOf(container, reading);
-        if (exact.isPresent()) {
-            return exact;
+        Core value = Core.withoutStanding(container.value());
+        if (value instanceof Core.Str || value instanceof Core.ListLit) {
+            return sizeOf(container, reading);
         }
         if (!(of(container, reading) instanceof Walked.Each<E>(List<Occurrence<E>> each))) {
             return OptionalLong.empty();

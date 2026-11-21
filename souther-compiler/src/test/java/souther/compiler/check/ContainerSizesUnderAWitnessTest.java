@@ -41,21 +41,69 @@ class ContainerSizesUnderAWitnessTest {
         return compilation.db().ask(new Bodies.CheckedBehavior("demo", "run")).value().body();
     }
 
+    /** The body the analysis reads of {@code run}, answering {@code body}, a {@code type}: the
+     *  tree a stop is owed on, where the language's operations stand as themselves. */
+    private static Core bodyOf(String type, String body) {
+        Compilation compilation = ACompiledModel.answered("""
+                module demo
+                behavior run : (n: Int) -> %s
+                let run (n) = %s
+                """.formatted(type, body));
+        return compilation.db().ask(new Bodies.Checked("demo")).value().analysisBodies()
+                .get("run").core();
+    }
+
+    /** The one {@code List.sum} under {@code body}. */
+    private static Core theSum(Core body) {
+        List<Core> out = new ArrayList<>();
+        collect(body, ValueName.Stdlib.operation("List", "sum"), out);
+        assertEquals(1, out.size(), "one sum");
+        return out.getFirst();
+    }
+
+    /** Whether the one sum in {@code body} answers, read with nothing of the input. */
+    private static boolean theSumAnswers(String body) {
+        Core run = bodyOf("Int", body);
+        Core sum = theSum(run);
+        return ContainerSizesUnderAWitness.answersOn(run, sum,
+                WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(sum),
+                node -> Optional.empty(), node -> Optional.empty());
+    }
+
+    /** A total of whole numbers written out is the one it comes to, however the list reaches the
+     *  sum: past the greatest {@code Int} it does not answer. */
+    @Test
+    void aTotalOfNumbersWrittenOutIsReadThroughTheNameItIsGiven() {
+        assertTrue(theSumAnswers("List.sum([1, 2, 3])"));
+        assertTrue(theSumAnswers("{ let ns = [1, 2, 3] \n List.sum(ns) }"));
+        assertFalse(theSumAnswers("{ let ns = [9223372036854775807, 1] \n List.sum(ns) }"),
+                "control");
+    }
+
+    /** A list of lists written out under a name holds, flattened, no more than as many as it
+     *  holds times the most any of them holds. */
+    @Test
+    void theListsAListWrittenOutUnderANameHoldsAreReadThroughTheName() {
+        assertEquals(Optional.of(BigInteger.valueOf(4)), ContainerSizesUnderAWitness.mostHeld(
+                bodyOf("List<Int>", "{ let xss = [[1], [2, 3]] \n List.concat(xss) }"),
+                node -> Optional.empty()));
+    }
+
     /** Every union under {@code body}, outermost first. */
     private static List<Core> unions(Core body) {
         List<Core> out = new ArrayList<>();
-        collect(body, out);
+        collect(body, ValueName.Stdlib.operation("Set", "union"), out);
         return out;
     }
 
-    private static void collect(Core e, List<Core> out) {
+    /** Every application of {@code operation} under {@code e}, outermost first. */
+    private static void collect(Core e, ValueName operation, List<Core> out) {
         Core node = Core.withoutStanding(e);
         AnOperationApplied applied = AnOperationApplied.of(node);
-        if (applied != null && applied.operation().equals(
-                ValueName.Stdlib.operation("Set", "union"))) {
+        if (applied != null && applied.operation().equals(operation)) {
             out.add(node);
         }
-        Core.forEachChild(node, child -> collect(child, out));
+        Core.forEachChild(node, child -> collect(child, operation, out));
     }
 
     /** The list holds {@code list} sets, and each set an element hands the step holds

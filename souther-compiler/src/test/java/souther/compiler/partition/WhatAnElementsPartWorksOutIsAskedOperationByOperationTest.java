@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -120,6 +121,46 @@ class WhatAnElementsPartWorksOutIsAskedOperationByOperationTest {
         assertEquals(AddedOfEachElement.Through.NOT_SHOWN, unread.overWholeNumbers(
                 BigInteger.ZERO, path -> rangeOf(path, noughtOrMore, noughtOrMore), LEAST,
                 GREATEST));
+    }
+
+    /**
+     * A field read off a value built on the way comes to what the build was given, and nothing
+     * past a build is shown to end no run, whatever its numbers come to: a build may refuse what
+     * it is given. The same parts with the path read as it is are shown to end none.
+     */
+    @Test
+    void aFieldOfAValueBuiltComesToWhatItWasGivenAndNoRunIsShownToGetPastIt() {
+        long[] noughtOrMore = {0, 3};
+        Function<Core, FormRange> ranges = path -> rangeOf(path, noughtOrMore, noughtOrMore);
+        AddedOfEachElement.Part built = new AddedOfEachElement.Built(PATH_P);
+
+        AddedOfEachElement answer = new AddedOfEachElement(built);
+        assertEquals(rangeOf(P, noughtOrMore, noughtOrMore),
+                answer.answerHeldWithin(ranges, LEAST, GREATEST));
+        assertFalse(answer.holdsEveryOperation(ranges, LEAST, GREATEST));
+        assertTrue(new AddedOfEachElement(PATH_P).holdsEveryOperation(ranges, LEAST, GREATEST));
+
+        // Built for a name nothing reads, and built all the same.
+        AddedOfEachElement unread = new AddedOfEachElement(
+                List.of(new AddedOfEachElement.Bound(D, built)), Map.of(), PATH_Q);
+        assertFalse(unread.holdsEveryOperation(ranges, LEAST, GREATEST));
+
+        // A step over a nought or a one, which over two steps keeps within the ends.
+        long[] noughtOrOne = {0, 1};
+        Function<Core, FormRange> small = path -> rangeOf(path, noughtOrOne, noughtOrOne);
+        AddedOfEachElement step = new AddedOfEachElement(
+                List.of(new AddedOfEachElement.Bound(D, built)), Map.of(),
+                worked(BinOp.ADD, SO_FAR, NAMED_D));
+        assertFalse(step.heldOverEveryStep(BigInteger.ZERO, small, 2, LEAST, GREATEST));
+        assertEquals(AddedOfEachElement.Through.NOT_SHOWN,
+                step.overWholeNumbers(BigInteger.ZERO, small, LEAST, GREATEST));
+
+        AddedOfEachElement asItIs = new AddedOfEachElement(
+                List.of(new AddedOfEachElement.Bound(D, PATH_P)), Map.of(),
+                worked(BinOp.ADD, SO_FAR, NAMED_D));
+        assertTrue(asItIs.heldOverEveryStep(BigInteger.ZERO, small, 2, LEAST, GREATEST));
+        assertNotEquals(AddedOfEachElement.Through.NOT_SHOWN,
+                asItIs.overWholeNumbers(BigInteger.ZERO, small, LEAST, GREATEST));
     }
 
     /** The answer so far is read once, along sums from the top, taken from nothing, and given to
@@ -301,7 +342,8 @@ class WhatAnElementsPartWorksOutIsAskedOperationByOperationTest {
             case AddedOfEachElement.Written(BigDecimal value) -> value.longValueExact();
             case AddedOfEachElement.Named(BindingId name) -> named.get(name);
             case AddedOfEachElement.SoFar _ -> seed;
-            case AddedOfEachElement.ReadWithTheTotal _, AddedOfEachElement.Chosen _ ->
+            case AddedOfEachElement.ReadWithTheTotal _, AddedOfEachElement.Chosen _,
+                 AddedOfEachElement.Built _ ->
                     throw new IllegalStateException("not among the trees asked");
             case AddedOfEachElement.Worked(BinOp op, var left, var right) -> {
                 long value = apply(op, workedOut(left, seed, values, named, stops),

@@ -272,10 +272,18 @@ final class StopAssessment {
         for (Core.Binary quotient : each.quotients()) {
             LinearForm<NumericTerm> form = AffineReading.formOf(quotient.right(), each.reads(),
                     read, new ElementsMet(), AffineReading.Unkept.EVERY_NAME_AFRESH);
-            out.add(form != null && form.coefs().keySet().stream()
-                    .allMatch(NumericTerm.ValueOf.class::isInstance) ? form : null);
+            out.add((form != null && ofThePlaces(form)) ? form : null);
         }
         return out;
+    }
+
+    /** Whether every number {@code form} is over is the value at a place of the input, or the
+     *  product of two forms of such values. */
+    private static boolean ofThePlaces(LinearForm<NumericTerm> form) {
+        return form.coefs().keySet().stream().allMatch(term ->
+                term instanceof NumericTerm.ValueOf
+                        || (term instanceof NumericTerm.ProductOf product
+                                && ofThePlaces(product.one()) && ofThePlaces(product.other())));
     }
 
     /**

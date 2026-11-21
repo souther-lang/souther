@@ -200,8 +200,10 @@ public final class InputNumber {
 
     /**
      * What a run works out of each element to make {@code walk}, a call of an operation applying
-     * a closure to the elements of a container that stands at a place: each whole-number
-     * operation the closure writes, in the order it works them out
+     * a closure to the elements of a container that stands at a place, or a walk from a seed
+     * carrying no whole number ({@link #theStepOfAWalkCarryingNoWholeNumber}): each whole-number
+     * operation the closure or the step writes, the values it gives a name among them, in the
+     * order it works them out
      * ({@link ElementValue#operationsOf}). None where {@code walk} is no such call. Null where
      * they are not every one: one is not read as a form of the places of the element, or the
      * elements stand at no place, as the elements a filter keeps stand at none, and a run is then
@@ -219,6 +221,9 @@ public final class InputNumber {
         BindingId element = WalkElements.elementBindingOf(met.value(), where, source.symbols(),
                 source.newtypes());
         ElementAnswer closure = element == null ? null : where.answerAt(element);
+        if (closure == null && element != null) {
+            closure = theStepOfAWalkCarryingNoWholeNumber(met.value(), element);
+        }
         if (closure == null) {
             return List.of();
         }
@@ -246,6 +251,26 @@ public final class InputNumber {
         // the element: a comparison it makes is read as a comparison, on each element.
         return (closure.body().type() == Type.BOOL
                 || WhatARunMayEndFor.endsNoneBeneath(closure.body())) ? List.of() : null;
+    }
+
+    /**
+     * The step of {@code walk}, read as what it works out of the element it is handed on
+     * {@code element}, where it is a walk from a seed carrying a decimal or a rational: what it
+     * carries is no number a whole-number operation of the step is worked out of, and every one
+     * the step works out is of the element, at every element, as a closure's is. Null where it is
+     * no such walk. A walk carrying a whole number is read where its running totals are
+     * ({@link #stepsAnsweringNoElement}), and one carrying a record, a tuple or a container where
+     * each part's own walk is.
+     */
+    private static ElementAnswer theStepOfAWalkCarryingNoWholeNumber(Core walk,
+                                                                    BindingId element) {
+        SeededWalk seeded = SeededWalk.of(walk, closure ->
+                Core.withoutStanding(closure) instanceof Core.Block block ? block : null);
+        Type carried = seeded == null ? null : seeded.step().body().type();
+        return (seeded == null || seeded.element() == null
+                || !element.equals(seeded.element().binding())
+                || (carried != Type.DECIMAL && carried != Type.RATIONAL)) ? null
+                : new ElementAnswer(element, seeded.step().body(), null);
     }
 
     /**
