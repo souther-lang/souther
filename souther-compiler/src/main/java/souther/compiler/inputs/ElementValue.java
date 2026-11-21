@@ -975,7 +975,7 @@ public sealed interface ElementValue {
      * <p>The number a closure makes of an element by multiplying its fields, or by rounding what
      * it made of them. A product is no form of the fields, but it is linear in each field taken
      * alone: with every other field fixed it is a form of the one left
-     * ({@link ElementValue#withOnly}), so a total of it is reached by fixing all of an element's
+     * ({@link ElementValue#solvedThrough}), so a total of it is reached by fixing all of an element's
      * fields but one and solving for that one, as a total of a form is.
      *
      * <p>One value however it was written. The terms are a mapping to their weights, so
@@ -1045,25 +1045,11 @@ public sealed interface ElementValue {
     }
 
     /**
-     * What the sum of products {@code form} comes to with every field but {@code free} at the
-     * number {@code fixed} holds of it, as a form of {@code free}; or null where {@code fixed}
-     * holds no number at a field the sum reads, or the exact arithmetic cannot hold one.
-     *
-     * <p>A form of the fields is a sum of products of one field each, and fixing all of its
-     * fields but one leaves it a form of that one as well.
-     */
-    static LinearForm<ElementProjection> withOnly(LinearForm<Monomial> form,
-                                                  ElementProjection free,
-                                                  Map<ElementProjection, ExactRatio> fixed) {
-        return heldStill(form, free, fixed, false);
-    }
-
-    /**
      * What a total of {@code form} is solved for {@code free} through, with every other field at
-     * the number {@code fixed} holds of it: {@link #withOnly}, with a rounding of a number that
-     * reads {@code free} taken as the number it rounds — or null where {@code fixed} holds no
-     * number at a field the sum reads, a rounding rounds what is no form or sum of products, or the
-     * exact arithmetic cannot hold one.
+     * the number {@code fixed} holds of it: the sum of products as a form of {@code free}, with a
+     * rounding of a number that reads {@code free} taken as the number it rounds — or null where
+     * {@code fixed} holds no number at a field the sum reads, a rounding rounds what is no form or
+     * sum of products, or the exact arithmetic cannot hold one.
      *
      * <p>A rounding answers what it rounds wherever that lies on the steps it rounds to, so an
      * element whose number does is written by solving through it, and the row is read back for
@@ -1077,7 +1063,9 @@ public sealed interface ElementValue {
     }
 
     /**
-     * {@link #withOnly}, or {@link #solvedThrough} where {@code throughRoundings}.
+     * The form of {@code free} that {@code form} comes to with every other field at the number
+     * {@code fixed} holds of it; a rounding is taken as the number it rounds where
+     * {@code throughRoundings}.
      */
     private static LinearForm<ElementProjection> heldStill(LinearForm<Monomial> form,
                                                            ElementProjection free,

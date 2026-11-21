@@ -697,13 +697,6 @@ final class AStatementAtARow {
         return NumericTerms.inOrder(out);
     }
 
-    /** The positions the statement asks of their own value: whether one is true, holds a value,
-     *  is in some cases, is the same as another or is a string of a language — and the strings
-     *  a piece's membership is read at. */
-    Set<TermPath> positionsAsked() {
-        return positions;
-    }
-
     /**
      * What one element's answer to a statement turns on, among the elements of a container held
      * as groups under one value at a place inside each — or each on its own where there is no such

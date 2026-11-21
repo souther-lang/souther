@@ -248,42 +248,6 @@ public final class RepositoryLayout {
     }
 
     /**
-     * The text of every element the root pom's profile {@code id} holds at {@code path}, a step a
-     * child element's name, in document order.
-     *
-     * <p>For a check holding what a profile says to what the repository is. Refused where the root
-     * pom has no such profile, so a profile renamed out from under a check stops the check. Nothing
-     * at {@code path} is an answer, the empty one, and a check expecting something there fails on
-     * it as on any other wrong answer.
-     */
-    public List<String> rootProfileTexts(String id, String... path) {
-        Element project = parse(root.resolve("pom.xml")).getDocumentElement();
-        List<Element> at = new ArrayList<>();
-        for (Element profiles : childElements(project, "profiles")) {
-            for (Element profile : childElements(profiles, "profile")) {
-                if (childText(profile, "id").equals(id)) {
-                    at.add(profile);
-                }
-            }
-        }
-        if (at.size() != 1) {
-            throw new IllegalArgumentException("the root pom has " + at.size() + " profiles called " + id);
-        }
-        for (String step : path) {
-            List<Element> next = new ArrayList<>();
-            for (Element each : at) {
-                next.addAll(childElements(each, step));
-            }
-            at = next;
-        }
-        List<String> out = new ArrayList<>();
-        for (Element each : at) {
-            out.add(each.getTextContent().trim());
-        }
-        return List.copyOf(out);
-    }
-
-    /**
      * The directory of the module called {@code named}.
      *
      * <p>What a check reaching another module's files wants, and the whole of what it should have

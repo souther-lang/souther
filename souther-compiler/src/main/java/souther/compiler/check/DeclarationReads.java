@@ -101,17 +101,4 @@ public interface DeclarationReads {
             return kind;
         };
     }
-
-    /**
-     * {@code inners}, telling this of every declaration it is asked about.
-     *
-     * <p>Whatever the answer. That a declaration wraps nothing is as much a fact about it as what
-     * one wraps, and a reader told nothing is a reader that went on as if it were a product.
-     */
-    default NewtypeInners readingInners(NewtypeInners inners) {
-        return declaration -> {
-            read(declaration);
-            return inners.of(declaration);
-        };
-    }
 }
