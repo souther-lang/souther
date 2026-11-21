@@ -116,7 +116,9 @@ record StopEvidence(UndividedByARelation.Working operations, boolean everyStopSa
      * also work out {@code alsoWorkedOut} first ({@link UndividedByARelation#everyRunStopsIn}).
      */
     List<EveryRunStops> everyRunStopsIn(InputReading read, List<SearchRegion> regions,
-                                        List<UndividedByARelation.IntOperation> alsoWorkedOut) {
-        return UndividedByARelation.everyRunStopsIn(operations, read, regions, alsoWorkedOut);
+                                        List<UndividedByARelation.IntOperation> alsoWorkedOut,
+                                        EvaluationPlaces places) {
+        return UndividedByARelation.everyRunStopsIn(operations, read, regions, alsoWorkedOut,
+                places);
     }
 }

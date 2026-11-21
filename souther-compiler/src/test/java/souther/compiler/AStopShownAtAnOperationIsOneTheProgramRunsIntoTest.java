@@ -82,6 +82,10 @@ class AStopShownAtAnOperationIsOneTheProgramRunsIntoTest {
         // nought: the way holds the divisor there
         FORMS.put("aQuotientAfterTheSum", new Form("q >= " + GREATEST + " && p == 0",
                 "Rational.toInt(DOWN, (q + 1) / p) >= 2", true));
+        // a quotient beside the sum and worked out after it is not asked either: the run ends in
+        // the sum, not at the divisor it holds at nought
+        FORMS.put("aQuotientBesideAndAfterTheSum", new Form("q >= " + GREATEST + " && p == 0",
+                "(q + 1) + Rational.toInt(DOWN, e / p) >= 2", true));
         // nor is a branch that stands after it, whose call ends a run for what nothing says
         FORMS.put("aBranchAfterTheSum", new Form("q >= " + GREATEST,
                 "Rational.toInt(DOWN, (q + 1) / p) + (if e > 0 then h(e) else 0) >= 2", true));

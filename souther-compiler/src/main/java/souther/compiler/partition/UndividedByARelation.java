@@ -272,6 +272,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
          * are equal where they are the same node, as two stops of a run are the same only where
          * they are worked out at the same place. What an operation is as a number, wherever it is
          * worked out, is {@link IntOperation#sameOperationAs}.
+         *
+         * <p>The node is where the operation is told, and the operation may stop anywhere in what
+         * that node works out: a product, or a total over a list, stops in the middle of its
+         * node, not at its own step. So an operation is after another place only where the whole
+         * of its node is ({@link EvaluationPlaces#comesAfter}), and never by
+         * {@link EvaluationPlaces#isWorkedOutAfter}, which says where a node's own step stands
+         * and is for a quotient's divisor.
          */
         static final class Origin {
 
@@ -737,6 +744,21 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         /** The same operations, for a relation not every run that gets to the comparison reaches. */
         Working notOnEveryRun() {
             return new Working(operations, told, false, partials, aStopUntold, leftUntold);
+        }
+
+        /**
+         * Whether the operation at {@code index} may be worked out before what stands at
+         * {@code node}: it is not the one at {@code at}, is not worked out of it
+         * ({@link IntOperation#after}), and the whole of its node does not come after
+         * {@code node} ({@link EvaluationPlaces#comesAfter}). The one place the order of the
+         * operations against a stop is asked; a node with no place is taken to come before.
+         *
+         * @param at the index of the operation the stop is at, or -1 where it is at no operation
+         */
+        boolean mayComeBefore(int index, int at, Core node, EvaluationPlaces places) {
+            IntOperation it = operations.get(index);
+            return index != at && !it.after().contains(at)
+                    && !places.comesAfter(it.origin().node(), node);
         }
 
         /** Whether every operation that can stop a run is told. */
@@ -2881,8 +2903,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *                its operations are narrowed to: a region a row got past them in holds none
      *                of the rows a run stops at
      */
-    List<EveryRunStops> everyRunStopsIn(InputReading read, List<SearchRegion> regions) {
-        return everyRunStopsIn(working, read, regions, List.of());
+    List<EveryRunStops> everyRunStopsIn(InputReading read, List<SearchRegion> regions,
+                                        EvaluationPlaces places) {
+        return everyRunStopsIn(working, read, regions, List.of(), places);
     }
 
     /**
@@ -2890,10 +2913,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * {@code alsoWorkedOut} before it, in any order: each of those within its type at every row
      * said, so that no row is said to stop in one operation where it stops in another first.
      * Nothing where one of those has an end that is no form of the input's numbers.
+     *
+     * <p>An operation is not asked to be within its type where it is worked out of the value of
+     * the one asked ({@code after}), or where its whole node comes after that one's in the order
+     * a run works the comparison out ({@code places}): a run that stops in the one never gets to
+     * it. Where either has no place, it is asked.
      */
     static List<EveryRunStops> everyRunStopsIn(Working working, InputReading read,
                                                List<SearchRegion> regions,
-                                               List<IntOperation> alsoWorkedOut) {
+                                               List<IntOperation> alsoWorkedOut,
+                                               EvaluationPlaces places) {
         if (!working.exact() || !working.onEveryRun()) {
             return List.of();
         }
@@ -2912,7 +2941,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 IntOperation one = operations.get(other);
                 // An operation told twice is one a run works out, and is not another that has to
                 // be within the type before this one is asked.
-                if (other != at && !one.sameOperationAs(it) && !one.after().contains(at)
+                if (!one.sameOperationAs(it)
+                        && working.mayComeBefore(other, at, it.origin().node(), places)
                         && !withinItsEnds(one, before)) {
                     before = null;
                     break;
