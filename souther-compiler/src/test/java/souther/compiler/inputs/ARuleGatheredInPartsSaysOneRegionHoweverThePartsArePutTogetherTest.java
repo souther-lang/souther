@@ -12,7 +12,9 @@ import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.WrittenOwner;
 
 import java.math.BigInteger;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -36,16 +38,20 @@ class ARuleGatheredInPartsSaysOneRegionHoweverThePartsArePutTogetherTest {
     private static ABoundThatKeepsEveryRunGoing on(String parameter) {
         return new ABoundThatKeepsEveryRunGoing(
                 new ABoundThatKeepsEveryRunGoing.Holder.AParameter(parameter, "Int"), true,
-                BigInteger.TEN, new ObservedValue.Integer(10),
-                new ABoundThatKeepsEveryRunGoing.Held(null, null));
+                BigInteger.TEN, new ObservedValue.Integer(10));
     }
 
     /** A part holding one finding of the rule, which keeps the region {@code bounds} declare. */
     private static RulesWithNoLine part(ABoundThatKeepsEveryRunGoing... bounds) {
+        Map<ABoundThatKeepsEveryRunGoing.Holder, ABoundThatKeepsEveryRunGoing.Held> held =
+                new LinkedHashMap<>();
+        for (ABoundThatKeepsEveryRunGoing each : bounds) {
+            held.put(each.holder(), new ABoundThatKeepsEveryRunGoing.Held(null, null));
+        }
         RulesWithNoLine.Gathered gathered = new RulesWithNoLine.Gathered();
         gathered.mayStopARun(RULE, ModelOccurrences.NONE,
                 List.of(new AStopShown("x + 1", List.of())), List.of(), List.of(),
-                WhatKeepsEveryRunGoing.of(List.of(bounds)));
+                WhatKeepsEveryRunGoing.of(List.of(bounds), held));
         return gathered.found();
     }
 

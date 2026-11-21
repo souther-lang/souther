@@ -28,24 +28,36 @@ import java.math.BigInteger;
  * @param at     the whole number the value holds at the bound: the number, or the count of the
  *               days of a date
  * @param bound  the value at the bound, as a row would hold it
- * @param held   the whole numbers the rules already written leave what is declared on, every one
- *               of which is a value: what the bound is declared beside
  */
 public record ABoundThatKeepsEveryRunGoing(Holder holder, boolean atMost, BigInteger at,
-                                           ObservedValue bound, Held held) {
+                                           ObservedValue bound) {
 
     public ABoundThatKeepsEveryRunGoing {
-        if (holder == null || at == null || bound == null || held == null) {
+        if (holder == null || at == null || bound == null) {
             throw new IllegalArgumentException("a bound is on what something holds, at a value");
         }
     }
 
     /**
      * The least and greatest whole number the rules already written and the value's own type leave
-     * it, every one between them a value: each null where neither has an end there. A bound past
-     * one of them leaves no value, and a bound outside both asks nothing.
+     * what a bound is declared on, every one between them a value: each null where neither has an
+     * end there. A bound past one of them leaves no value, and a bound outside both asks nothing.
+     *
+     * <p>An account of the holder, which a reading gives as it reads the input, and no part of a
+     * bound: two readings may give two accounts of one holder, and a bound is declared beside
+     * every one of them ({@link WhatKeepsEveryRunGoing}).
      */
     public record Held(BigInteger least, BigInteger greatest) {
+
+        /** Whether this leaves no whole number. */
+        boolean none() {
+            return least != null && greatest != null && least.compareTo(greatest) > 0;
+        }
+
+        /** This, with the bound {@code at} on it, from above where {@code atMost}. */
+        Held bounded(BigInteger at, boolean atMost) {
+            return meet(atMost ? new Held(null, at) : new Held(at, null));
+        }
 
         /** What this and {@code other}, two accounts of what one holder holds, leave it both. */
         Held meet(Held other) {

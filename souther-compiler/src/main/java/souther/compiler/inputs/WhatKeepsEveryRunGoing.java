@@ -1,6 +1,5 @@
 package souther.compiler.inputs;
 
-import java.math.BigInteger;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -20,11 +19,15 @@ import java.util.stream.Collectors;
  * <p>Said of what the invariants are declared on, and not of the places of the input: a data's
  * invariant holds every value of it, so two places one data holds are bounded by one declaration,
  * the tighter of what each asks, and the region is the declarations whatever order they were met
- * in. Made only where each data keeps a value under them: what its rules already leave it, met
- * with both sides declared, holds a whole number. What its rules leave is what a value of the
- * input holds at every place the declarations hold, one number at each, all together
- * ({@code AValueOfTheInput}), so a bound met with it at each place leaves a value of the input
- * holding every one at once.
+ * in.
+ *
+ * <p>Made only where each data keeps a value under them: what every reading says its rules and its
+ * type already leave it ({@code held}), met with both sides declared, holds a whole number. What
+ * one reading says is what a value of the input holds at every place the declarations hold, one
+ * number at each, all together ({@code AValueOfTheInput}); readings put together keep what each
+ * says, so the region is beside all of them. Bounds only tighten and accounts only narrow as
+ * readings are put together, so a region that leaves some data no value stays one however many
+ * more are put in, and none is the answer whatever order they are put in.
  *
  * <p>How far out the region goes is a second fact, said of each bound apart: a bound is as far out
  * as one can be where a run with it declared one step further out, every other declaration
@@ -38,24 +41,29 @@ import java.util.stream.Collectors;
  * of the rule is put together, whatever order they came in.
  *
  * @param bounds          the declarations, each data and side once
+ * @param held            what every reading put together says each data a bound is declared on is
+ *                        already left, every one of which is a value
  * @param asFarOutAsCanBe the bounds of {@code bounds} as far out as one can be
  * @param shownTogether   each set of what is declared on that a value of the input was shown to
  *                        hold at once, every combination of what its rules leave the places of
  *                        each being held
  */
 public record WhatKeepsEveryRunGoing(Set<ABoundThatKeepsEveryRunGoing> bounds,
+                                     Map<ABoundThatKeepsEveryRunGoing.Holder,
+                                             ABoundThatKeepsEveryRunGoing.Held> held,
                                      Set<ABoundThatKeepsEveryRunGoing> asFarOutAsCanBe,
                                      Set<Set<ABoundThatKeepsEveryRunGoing.Holder>> shownTogether) {
 
     public WhatKeepsEveryRunGoing {
         bounds = Collections.unmodifiableSequencedSet(new LinkedHashSet<>(bounds));
+        held = Map.copyOf(held);
         asFarOutAsCanBe = Set.copyOf(asFarOutAsCanBe);
         shownTogether = shownTogether.stream().map(Set::copyOf)
                 .collect(Collectors.toUnmodifiableSet());
         if (bounds.stream().map(ABoundThatKeepsEveryRunGoing::side).distinct().count()
-                != bounds.size() || !keepsEveryDataAValue(bounds)) {
+                != bounds.size() || !keepsEveryDataAValue(bounds, held)) {
             throw new IllegalArgumentException("a region declares each data and side once, and"
-                    + " leaves each a value: " + bounds);
+                    + " leaves each a value beside what it is held to: " + bounds + " " + held);
         }
         if (!bounds.containsAll(asFarOutAsCanBe)) {
             throw new IllegalArgumentException("as far out as can be is said of a bound of the"
@@ -64,45 +72,53 @@ public record WhatKeepsEveryRunGoing(Set<ABoundThatKeepsEveryRunGoing> bounds,
     }
 
     /**
-     * The region one reading's {@code asked} declare, each data and side bounded by the tightest of
-     * them, a value of the input shown to hold all they declare on at once, with nothing yet said
-     * of how far out — or none where that leaves some data no value.
+     * The region one reading's {@code asked} declare beside {@code held}, what that reading says
+     * each data they are declared on is already left, each data and side bounded by the tightest
+     * of them, a value of the input shown to hold all they declare on at once, with nothing yet
+     * said of how far out — or none where that leaves some data no value.
      */
     public static Optional<WhatKeepsEveryRunGoing> of(
-            Collection<ABoundThatKeepsEveryRunGoing> asked) {
+            Collection<ABoundThatKeepsEveryRunGoing> asked,
+            Map<ABoundThatKeepsEveryRunGoing.Holder, ABoundThatKeepsEveryRunGoing.Held> held) {
         Set<ABoundThatKeepsEveryRunGoing.Holder> declaredOn = new LinkedHashSet<>();
         asked.forEach(each -> declaredOn.add(each.holder()));
-        return tightest(asked, Set.of(declaredOn));
+        if (!held.keySet().containsAll(declaredOn)) {
+            throw new IllegalArgumentException("what each bound is declared on is held to"
+                    + " something: " + declaredOn + " " + held.keySet());
+        }
+        return tightest(asked, held, Set.of(declaredOn));
     }
 
-    /** The region {@code asked} declare, each data and side bounded by the tightest of them, with
-     *  {@code shown} — or none where that leaves some data no value. */
+    /** The region {@code asked} declare beside {@code held}, each data and side bounded by the
+     *  tightest of them, with {@code shown} — or none where that leaves some data no value. */
     private static Optional<WhatKeepsEveryRunGoing> tightest(
             Collection<ABoundThatKeepsEveryRunGoing> asked,
+            Map<ABoundThatKeepsEveryRunGoing.Holder, ABoundThatKeepsEveryRunGoing.Held> held,
             Set<Set<ABoundThatKeepsEveryRunGoing.Holder>> shown) {
         Map<ABoundThatKeepsEveryRunGoing.Side, ABoundThatKeepsEveryRunGoing> tightest =
                 new LinkedHashMap<>();
         for (ABoundThatKeepsEveryRunGoing each : asked) {
-            tightest.merge(each.side(), each, WhatKeepsEveryRunGoing::tighter);
+            tightest.merge(each.side(), each, (one, other) -> one.within(other) ? one : other);
         }
-        return keepsEveryDataAValue(tightest.values())
+        return keepsEveryDataAValue(tightest.values(), held)
                 ? Optional.of(new WhatKeepsEveryRunGoing(new LinkedHashSet<>(tightest.values()),
-                        Set.of(), shown))
+                        held, Set.of(), shown))
                 : Optional.empty();
     }
 
     /** The same region, with {@code farOut}, bounds of it, said as far out as each can be. */
     public WhatKeepsEveryRunGoing asFarOutAsCanBe(Set<ABoundThatKeepsEveryRunGoing> farOut) {
-        return new WhatKeepsEveryRunGoing(bounds, farOut, shownTogether);
+        return new WhatKeepsEveryRunGoing(bounds, held, farOut, shownTogether);
     }
 
     /**
      * What two readings of one rule say of the region, as one: the declarations of both, each data
-     * and side bounded by the tighter, so that a run within it is within each, and every set of
-     * what is declared on either was shown to hold at once — and none where either says none, a
-     * run of that reading being one no declaration said keeps going, or where the two together
-     * leave some data no value. How far out a bound goes is shown of one region, and stands only
-     * where the two together are that region, whatever order either met its declarations in.
+     * and side bounded by the tighter, so that a run within it is within each, beside what both
+     * say each data is left, and every set of what is declared on either was shown to hold at once
+     * — and none where either says none, a run of that reading being one no declaration said keeps
+     * going, or where the two together leave some data no value. How far out a bound goes is shown
+     * of one region, and stands only where the two together are that region, whatever order either
+     * met its declarations in.
      *
      * <p>Nothing here asks whether a value holds them all at once ({@link #heldTogether}): that is
      * of every reading of the rule, and a reading put in later may be the one that shows it. So
@@ -115,10 +131,14 @@ public record WhatKeepsEveryRunGoing(Set<ABoundThatKeepsEveryRunGoing> bounds,
         }
         Set<ABoundThatKeepsEveryRunGoing> both = new LinkedHashSet<>(one.get().bounds);
         both.addAll(other.get().bounds);
+        Map<ABoundThatKeepsEveryRunGoing.Holder, ABoundThatKeepsEveryRunGoing.Held> held =
+                new LinkedHashMap<>(one.get().held);
+        other.get().held.forEach((holder, each) -> held.merge(holder, each,
+                ABoundThatKeepsEveryRunGoing.Held::meet));
         Set<Set<ABoundThatKeepsEveryRunGoing.Holder>> shown =
                 new LinkedHashSet<>(one.get().shownTogether);
         shown.addAll(other.get().shownTogether);
-        return tightest(both, shown).map(region -> {
+        return tightest(both, held, shown).map(region -> {
             Set<ABoundThatKeepsEveryRunGoing> standing = new LinkedHashSet<>();
             for (WhatKeepsEveryRunGoing each : List.of(one.get(), other.get())) {
                 if (each.bounds.equals(region.bounds)) {
@@ -156,42 +176,18 @@ public record WhatKeepsEveryRunGoing(Set<ABoundThatKeepsEveryRunGoing> bounds,
     }
 
     /** Whether every data {@code bounds} declare on keeps a whole number under them, within what
-     *  its rules already leave it, every one of which is a value. */
+     *  {@code held} says it is already left, every one of which is a value. */
     private static boolean keepsEveryDataAValue(
-            Collection<ABoundThatKeepsEveryRunGoing> bounds) {
-        Map<ABoundThatKeepsEveryRunGoing.Holder, BigInteger[]> left = new LinkedHashMap<>();
+            Collection<ABoundThatKeepsEveryRunGoing> bounds,
+            Map<ABoundThatKeepsEveryRunGoing.Holder, ABoundThatKeepsEveryRunGoing.Held> held) {
+        Map<ABoundThatKeepsEveryRunGoing.Holder, ABoundThatKeepsEveryRunGoing.Held> left =
+                new LinkedHashMap<>(held);
         for (ABoundThatKeepsEveryRunGoing each : bounds) {
-            BigInteger[] ends = left.computeIfAbsent(each.holder(),
-                    _ -> new BigInteger[] {each.held().least(), each.held().greatest()});
-            ends[0] = tighter(ends[0], each.held().least(), true);
-            ends[1] = tighter(ends[1], each.held().greatest(), false);
-            ends[each.atMost() ? 1 : 0] = tighter(ends[each.atMost() ? 1 : 0], each.at(),
-                    !each.atMost());
+            if (!left.containsKey(each.holder())) {
+                return false;
+            }
+            left.computeIfPresent(each.holder(), (_, was) -> was.bounded(each.at(), each.atMost()));
         }
-        return left.values().stream().allMatch(ends -> ends[0] == null || ends[1] == null
-                || ends[0].compareTo(ends[1]) <= 0);
-    }
-
-    /**
-     * The tighter of two bounds of one side, whichever was met first: at one number, the two are
-     * one bound, beside what both accounts of the holder leave it, so that which reading said it
-     * first decides nothing of what is kept.
-     */
-    private static ABoundThatKeepsEveryRunGoing tighter(ABoundThatKeepsEveryRunGoing one,
-                                                        ABoundThatKeepsEveryRunGoing other) {
-        if (one.at().equals(other.at())) {
-            return new ABoundThatKeepsEveryRunGoing(one.holder(), one.atMost(), one.at(),
-                    one.bound(), one.held().meet(other.held()));
-        }
-        return one.within(other) ? one : other;
-    }
-
-    /** The tighter of two ends of one side, a least where {@code least}: either where the other
-     *  is none. */
-    private static BigInteger tighter(BigInteger one, BigInteger other, boolean least) {
-        if (one == null || other == null) {
-            return one == null ? other : one;
-        }
-        return least ? one.max(other) : one.min(other);
+        return left.values().stream().noneMatch(ABoundThatKeepsEveryRunGoing.Held::none);
     }
 }

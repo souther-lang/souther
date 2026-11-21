@@ -2903,12 +2903,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (runs.isEmpty()) {
             return Optional.empty();
         }
+        Map<ABoundThatKeepsEveryRunGoing.Holder, ABoundThatKeepsEveryRunGoing.Held> left =
+                new LinkedHashMap<>();
         for (Map.Entry<TermPath, BigInteger[]> each : kept.entrySet()) {
             ABoundThatKeepsEveryRunGoing.Holder holder = holders.get(each.getKey());
             ABoundThatKeepsEveryRunGoing.Held range = heldBy(holder, runs.get(), read);
             if (range == null) {
                 return Optional.empty();
             }
+            left.put(holder, range);
             for (boolean atMost : new boolean[] {false, true}) {
                 BigInteger bound = each.getValue()[atMost ? 1 : 0];
                 // Within what the rules and the order already leave every value: none is asked.
@@ -2921,15 +2924,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     return Optional.empty();
                 }
                 ABoundThatKeepsEveryRunGoing one = aBoundOn(
-                        new NumericTerm.ValueOf(each.getKey()), bound, atMost, holder, range,
-                        read);
+                        new NumericTerm.ValueOf(each.getKey()), bound, atMost, holder, read);
                 if (one == null) {
                     return Optional.empty();
                 }
                 out.add(one);
             }
         }
-        return WhatKeepsEveryRunGoing.of(out);
+        // What each holder is left is said of the holders a bound is declared on alone.
+        left.keySet().retainAll(out.stream().map(ABoundThatKeepsEveryRunGoing::holder).toList());
+        return WhatKeepsEveryRunGoing.of(out, left);
     }
 
     /**
@@ -3049,21 +3053,20 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
     /**
      * {@code bound} on the values of {@code value}'s place, from above where {@code atMost}, as
-     * the invariant an author declares it on {@code holder}, beside {@code held}, what a value of
-     * the input holds at every place the holder holds — or null where the place's values are no
-     * whole numbers or dates. The bound lies within {@code held}, which is within what the
-     * place's order holds, so it is a value of the place.
+     * the invariant an author declares it on {@code holder} — or null where the place's values are
+     * no whole numbers or dates. The caller has met the bound with what the holder is left
+     * ({@link #heldBy}), which is within what the place's order holds, so it is a value of the
+     * place.
      */
     private static ABoundThatKeepsEveryRunGoing aBoundOn(
             NumericTerm.ValueOf value, BigInteger bound, boolean atMost,
-            ABoundThatKeepsEveryRunGoing.Holder holder, ABoundThatKeepsEveryRunGoing.Held held,
-            InputReading read) {
+            ABoundThatKeepsEveryRunGoing.Holder holder, InputReading read) {
         TermOrders orders = read.quantities().ordersOf(value);
         Carrier carrier = orders == null ? null : orders.answered();
         ObservedValue at = carrier == null ? null
                 : carrier.valueOf(Count.of(new BigDecimal(bound)));
         return at instanceof ObservedValue.Integer || at instanceof ObservedValue.Temporal
-                ? new ABoundThatKeepsEveryRunGoing(holder, atMost, bound, at, held) : null;
+                ? new ABoundThatKeepsEveryRunGoing(holder, atMost, bound, at) : null;
     }
 
     /**
