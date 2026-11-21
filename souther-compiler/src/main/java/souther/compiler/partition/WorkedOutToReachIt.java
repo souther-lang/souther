@@ -1351,6 +1351,9 @@ final class WorkedOutToReachIt {
             return value.at().pathOf(written, newtypes) instanceof ValuesAt.At(var at)
                     ? attainmentsAtAPlace(at, arms) : List.of();
         }
+        if (written instanceof Core.PreservedCall) {
+            return attainmentsOfAWalkOverNone(value, arms);
+        }
         if (!(written instanceof Core.Read name)) {
             return List.of();
         }
@@ -1361,6 +1364,36 @@ final class WorkedOutToReachIt {
                     : attainmentsOfAnOpenedElement(name, value.at(), arms);
         }
         return given.size() == 1 ? attainmentsOf(given.getFirst(), arms) : List.of();
+    }
+
+    /**
+     * How a row makes a walk from a seed come to a number, where it walks a container of the
+     * input that holds none: the seed, whatever the step is. A walk over elements comes to what
+     * the step makes of them, which is not said here.
+     */
+    private List<Attainment> attainmentsOfAWalkOverNone(Denotation value, ArmsTaken arms) {
+        Denotation met = value.at().denotes(Core.withoutStanding(value.value()),
+                read.rules().symbols(), read.rules().newtypes());
+        SeededWalk walk = met == null ? null : SeededWalk.of(met.value(), closure ->
+                Core.withoutStanding(closure) instanceof Core.Block block ? block : null);
+        if (walk == null || !(met.at().everyElementOf(walk.container(), read.rules().newtypes())
+                instanceof ValuesHeld.At(TermPath element))
+                || !AValueOfTheInput.ofTheOnlyElement(element)) {
+            return List.of();
+        }
+        NumericTerm count = AValueOfTheInput.howMany(
+                element.prefix(element.steps().size() - 1), read);
+        if (count == null) {
+            return List.of();
+        }
+        TakenConstraint.Affine none = new TakenConstraint.Affine(LinearForm.atom(count), Rel.EQ);
+        List<Attainment> out = new ArrayList<>();
+        for (Attainment seed : attainmentsOf(new Denotation(walk.seed(), met.at()), arms)) {
+            List<TakenConstraint.Affine> holding = new ArrayList<>(seed.holding());
+            holding.add(none);
+            out.add(new Attainment(seed.form(), holding));
+        }
+        return List.copyOf(out);
     }
 
     /** What {@code place} holds, where that is known ({@link #atAPlace}). */

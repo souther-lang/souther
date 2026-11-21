@@ -61,6 +61,13 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
             List.of(MAX - 1), List.of(MIN), List.of(MAX, 1L), List.of(3_037_000_500L),
             List.of(4_611_686_018_427_387_904L, 4_611_686_018_427_387_904L));
 
+    /** Why a stop over what a walk comes to is shown only where the walk is over no element: the
+     *  walk over some comes to what its step makes of them, which no way a row makes it a number
+     *  says (WorkedOutToReachIt#attainmentsOfAWalkOverNone). */
+    private static final String WALK_OVER_ELEMENTS =
+            "what a walk over elements comes to, its seed or an element, may take the operation "
+                    + "past its type, which shows no run that does";
+
     /** Each condition on {@code ds} and {@code q}, by the name it is told under. */
     private static final Map<String, String> FORMS = new LinkedHashMap<>();
 
@@ -232,14 +239,12 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
         // an operation over what a walk comes to: what that may be shows where no run stops, and
         // never that one does
         String walk = "List.fold((w, l) -> if l > w then l else w, 0, ds)";
-        NOT_TOLD.put("walkPlusOne", "what the walk comes to, its seed or an element, may take the "
-                + "operation past its type, which shows no run that does: said as not read");
+        NOT_TOLD.put("walkPlusOne", WALK_OVER_ELEMENTS + ": said as not read");
         FORMS.put("walkPlusOne", walk + " + 1 <= 10");
-        // the same walk from a seed past where the operation keeps within the type, one that
-        // keeps only what is below nought, which no run takes past it, one a test of every element
-        // keeps within it, and one over a list written out whose every element and seed keep it
-        // within
-        NOT_TOLD.put("walkFromTheGreatestSeedPlusOne", "the same, from the seed");
+        // the same walk from a seed past where the operation keeps within the type, which a walk
+        // over none comes to; one that keeps only what is below nought, which no run takes past
+        // it, one a test of every element keeps within it, and one over a list written out whose
+        // every element and seed keep it within
         FORMS.put("walkFromTheGreatestSeedPlusOne",
                 "List.fold((w, l) -> if l > w then l else w, 9223372036854775807, ds) + 1 >= 3");
         UNTOLD_THOUGH_NONE_STOPS.put("walkKeepingWhatIsBelowNoughtPlusOne", "what the walk "
@@ -255,28 +260,24 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
                         + " <= 10");
         // a test some element meets, which leaves the others anything, and one over a number the
         // walk does not read
-        NOT_TOLD.put("walkPlusOneSomeElementGuarded", "the same as walkPlusOne: what some element "
-                + "meets narrows none of the others");
+        NOT_TOLD.put("walkPlusOneSomeElementGuarded", WALK_OVER_ELEMENTS);
         FORMS.put("walkPlusOneSomeElementGuarded",
                 "List.any(x -> x < 9223372036854775807, ds) && " + walk + " + 1 <= 10");
-        NOT_TOLD.put("walkPlusOneGuardedByQ", "the same as walkPlusOne: what the way states of q "
-                + "says nothing of the elements");
+        NOT_TOLD.put("walkPlusOneGuardedByQ", WALK_OVER_ELEMENTS);
         FORMS.put("walkPlusOneGuardedByQ", "q > 0 && " + walk + " + 1 <= 10");
         FORMS.put("walkOverAWrittenListPlusOneWithinTheType",
                 "List.fold((w, l) -> if l > w then l else w, 0, [1, 2]) + 1 >= 3");
-        NOT_TOLD.put("walkAgainstAnOption", "the operation over what the option holds, against "
-                + "a walk, is told on no arm or application the report asks of: said as not "
-                + "read");
+        NOT_TOLD.put("walkAgainstAnOption", WALK_OVER_ELEMENTS + ", on the walk the option is "
+                + "compared with");
         FORMS.put("walkAgainstAnOption", walk + " <= Option.withDefault(0, List.max(ds)) + 1");
-        NOT_TOLD.put("armOfAWalkPlusOne", "the same, the operation over the walk in an arm");
+        NOT_TOLD.put("armOfAWalkPlusOne", WALK_OVER_ELEMENTS + ", in an arm");
         FORMS.put("armOfAWalkPlusOne", "(if q > 3 then " + walk + " + 1 else 0) >= 2");
-        NOT_TOLD.put("remainderOfAWalkPlusOne", "what the remainder divides is a part of an "
-                + "expression held aside, told beside it only where it is read as a number of the "
-                + "input (tellWhatIsWorkedOutIn); an operation over a walk is no such number and "
-                + "is passed over, though what the walk comes to is known");
+        NOT_TOLD.put("remainderOfAWalkPlusOne", WALK_OVER_ELEMENTS + ", and the operation over "
+                + "it is a part of an expression held aside, which is read as a number only "
+                + "where it holds no choice (worksOutAsANumber), so that it is passed over");
         FORMS.put("remainderOfAWalkPlusOne", "Int.floorMod(" + walk + " + 1, 7) >= 3");
-        NOT_TOLD.put("armOfAWalkPlusOneInAClosure", "the same, in an arm of what a closure "
-                + "works out on each element");
+        NOT_TOLD.put("armOfAWalkPlusOneInAClosure", WALK_OVER_ELEMENTS + ", in an arm of what a "
+                + "closure works out on each element");
         FORMS.put("armOfAWalkPlusOneInAClosure",
                 "List.all(x -> (if x > 3 then " + walk + " + 1 else 0) >= 2, ds)");
         FORMS.put("remainderOfAWalk", "Int.floorMod(" + walk + ", 7) + 1 >= 3");

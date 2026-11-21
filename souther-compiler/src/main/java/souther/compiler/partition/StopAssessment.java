@@ -486,6 +486,7 @@ final class StopAssessment {
                                 place.prefix(place.steps().size() - 1), 0, held.floor().orNull()));
                     }
                 });
+                structure.sort(InputFact.IN_A_STEADY_ORDER);
                 out.add(new AStopShown(shown.site().written(), at, structure));
             }
         }
