@@ -38,9 +38,16 @@ final class NotAccountedFor {
     private final Kind kind;
     private final List<Core.Binary> quotients;
 
+    /** The quotients are a set of nodes: each once, by the node it is. */
     private NotAccountedFor(Kind kind, List<Core.Binary> quotients) {
         this.kind = kind;
-        this.quotients = quotients;
+        List<Core.Binary> distinct = new ArrayList<>();
+        for (Core.Binary each : quotients) {
+            if (distinct.stream().noneMatch(one -> one == each)) {
+                distinct.add(each);
+            }
+        }
+        this.quotients = List.copyOf(distinct);
     }
 
     /** The stops of {@code nodes}, quotients by a value, and nothing else; something else where
@@ -66,11 +73,7 @@ final class NotAccountedFor {
             return SOMETHING_ELSE;
         }
         List<Core.Binary> both = new ArrayList<>(quotients);
-        for (Core.Binary each : other.quotients) {
-            if (!names(each)) {
-                both.add(each);
-            }
-        }
+        both.addAll(other.quotients);
         return new NotAccountedFor(Kind.QUOTIENTS, both);
     }
 

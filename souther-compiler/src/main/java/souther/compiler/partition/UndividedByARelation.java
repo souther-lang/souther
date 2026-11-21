@@ -268,9 +268,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
         /**
          * The node of the expression a run works an operation out at, which says where it stands
-         * among everything else the expression works out ({@link EvaluationPlaces}). It is no part
-         * of what the operation is: any two origins are equal, so that two readings of the same
-         * operation are one whichever node each was read at.
+         * among everything else the expression works out ({@link EvaluationPlaces}). Two origins
+         * are equal where they are the same node, as two stops of a run are the same only where
+         * they are worked out at the same place. What an operation is as a number, wherever it is
+         * worked out, is {@link IntOperation#sameOperationAs}.
          */
         static final class Origin {
 
@@ -290,12 +291,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
             @Override
             public boolean equals(Object other) {
-                return other instanceof Origin;
+                return other instanceof Origin that && node == that.node;
             }
 
             @Override
             public int hashCode() {
-                return 0;
+                return System.identityHashCode(node);
             }
         }
 

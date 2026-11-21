@@ -2910,18 +2910,19 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             lastToldAt.put(bare, at.size());
             at.add(bare);
             operations.add(operation.workedOutAt(bare));
-            toldOnce.add(operation);
+            toldOnce.add(operation.workedOutAt(null));
         }
 
-        /** Whether {@code operation} is among the operations told. */
+        /** Whether {@code operation} is among the operations told, wherever it was worked out:
+         *  what is asked is whether the number was told, and the sets hold each at no node. */
         boolean told(UndividedByARelation.IntOperation operation) {
-            return toldOnce.contains(operation);
+            return toldOnce.contains(operation.workedOutAt(null));
         }
 
         /** Whether {@code operation} is among those kept for where a run stops
-         *  ({@link #leftToTheWitness}, {@link #besideTheRows}). */
+         *  ({@link #leftToTheWitness}, {@link #besideTheRows}), wherever it was worked out. */
         boolean keptForWhereARunStops(UndividedByARelation.IntOperation operation) {
-            return keptOnce.contains(operation);
+            return keptOnce.contains(operation.workedOutAt(null));
         }
 
         /**

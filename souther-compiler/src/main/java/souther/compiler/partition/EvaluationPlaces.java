@@ -3,8 +3,10 @@ package souther.compiler.partition;
 import souther.compiler.core.Core;
 import souther.compiler.core.Evaluated;
 
+import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Where each node of an expression stands in the order a run works the expression out: the nodes a
@@ -30,7 +32,6 @@ final class EvaluationPlaces {
     private EvaluationPlaces(Map<Core, Stretch> stretches) {
         this.stretches = stretches;
     }
-
     /** No node has a place. */
     static EvaluationPlaces none() {
         return NONE;
@@ -39,19 +40,32 @@ final class EvaluationPlaces {
     /** The places of the nodes evaluating {@code expression} always works out. */
     static EvaluationPlaces of(Core expression) {
         Map<Core, Stretch> out = new IdentityHashMap<>();
-        place(expression, out, new int[1]);
+        place(expression, out, Collections.newSetFromMap(new IdentityHashMap<>()), new int[1]);
         return new EvaluationPlaces(out);
     }
 
-    private static void place(Core expression, Map<Core, Stretch> out, int[] next) {
+    /**
+     * Puts {@code expression} and what it works out in the order. A node the expression holds in
+     * more than one place is worked out once for each, at a place of the order each time, so it
+     * has no one place: it is left out, with everything under it, and what is asked of it says
+     * it is not known.
+     */
+    private static void place(Core expression, Map<Core, Stretch> out, Set<Core> shared,
+                              int[] next) {
         Core node = Core.withoutStanding(expression);
         int first = next[0];
         for (Evaluated.Step step : Evaluated.inOrder(node)) {
             if (step instanceof Evaluated.Step.Always(Core part)) {
-                place(part, out, next);
+                place(part, out, shared, next);
             }
         }
-        out.put(node, new Stretch(first, next[0]++));
+        if (out.containsKey(node) || shared.contains(node)) {
+            shared.add(node);
+            out.remove(node);
+            next[0]++;
+        } else {
+            out.put(node, new Stretch(first, next[0]++));
+        }
     }
 
     /**
