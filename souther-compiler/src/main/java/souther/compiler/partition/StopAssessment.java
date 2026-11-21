@@ -515,12 +515,10 @@ final class StopAssessment {
         Optional<List<TakenConstraint.Affine>> declared =
                 AValueOfTheInput.whatAValueAtThemMeets(read, places);
         // Where they do not, because the declarations tie the places, each value found is asked
-        // whether a value of the input holds it, and only the places being a number of a record is
-        // asked before the search.
+        // whether a value of the input holds it, and nothing is looked for where no value of the
+        // input is shown to exist beside the places.
         if (declared.isEmpty()) {
-            Map<TermPath, ExactRatio> anyNumber = new LinkedHashMap<>();
-            places.forEach(asked -> anyNumber.put(asked, null));
-            if (!AValueOfTheInput.holding(read, anyNumber)) {
+            if (!AValueOfTheInput.canShowHolding(read, places)) {
                 return new Judgement.Unresolved(site, WhyAStopIsNotShown.NO_VALUE_SHOWN);
             }
         } else {

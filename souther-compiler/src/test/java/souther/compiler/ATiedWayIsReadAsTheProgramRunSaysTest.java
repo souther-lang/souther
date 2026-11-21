@@ -428,6 +428,17 @@ class ATiedWayIsReadAsTheProgramRunSaysTest {
         assertFalse(said.contains("may stop a run"), said);
     }
 
+    /** Where no value of the record is shown to exist, no input is, and the report says that and
+     *  not that none was found among those tried: nothing is looked for. A product of two numbers
+     *  below nought is one no value of is written. */
+    @Test
+    void noInputIsBuiltWhereTheClausesOfTheRecordLeaveNoValueWrittenDown() {
+        String said = reportOf(aDivisionBehindAClauseTyingTwoFields("e * e < 0 && p == e - 1"));
+        assertFalse(said.contains("may stop a run"), said);
+        assertTrue(said.contains("no input meeting them is built"), said);
+        assertFalse(said.contains("no input that was tried"), said);
+    }
+
     private static String reportOf(String model) {
         Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation)
