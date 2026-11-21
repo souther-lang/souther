@@ -215,7 +215,7 @@ final class ConstructionStopAssessment {
         }, one.everyWay());
         return switch (shown) {
             case Together.ByOne(int at) -> judged.get(at);
-            case Together.Safe _ -> new Judgement.Safe(one.made());
+            case Together.NoneStops _ -> new Judgement.Safe(one.made());
             case Together.ByAWayNotRead _ ->
                     unresolved(one, ask, unheld, WhyAConstructionStopIsNotShown.REACH_NOT_SHOWN);
         };
@@ -232,7 +232,7 @@ final class ConstructionStopAssessment {
         record ByOne(int at) implements Together {}
 
         /** That no run on the way stops there: every way is read, and each shows it. */
-        record Safe() implements Together {}
+        record NoneStops() implements Together {}
 
         /** Not resolved, since each way read shows no run stops there and some way is not
          *  read. */
@@ -265,7 +265,7 @@ final class ConstructionStopAssessment {
         if (unresolved >= 0) {
             return new Together.ByOne(unresolved);
         }
-        return everyWay ? new Together.Safe() : new Together.ByAWayNotRead();
+        return everyWay ? new Together.NoneStops() : new Together.ByAWayNotRead();
     }
 
     /** What is shown of {@code one} by {@code reach}, one way a run on the way gets to it on

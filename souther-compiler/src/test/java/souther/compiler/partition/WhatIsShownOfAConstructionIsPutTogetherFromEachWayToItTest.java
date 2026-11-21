@@ -22,9 +22,9 @@ class WhatIsShownOfAConstructionIsPutTogetherFromEachWayToItTest {
 
     @Test
     void safeOnlyWhereEveryWayIsReadAndShowsIt() {
-        assertEquals(new Together.Safe(), together(true, ByAWay.SAFE, ByAWay.SAFE));
+        assertEquals(new Together.NoneStops(), together(true, ByAWay.SAFE, ByAWay.SAFE));
         assertEquals(new Together.ByAWayNotRead(), together(false, ByAWay.SAFE, ByAWay.SAFE));
-        assertEquals(new Together.Safe(), together(true));
+        assertEquals(new Together.NoneStops(), together(true));
         assertEquals(new Together.ByAWayNotRead(), together(false));
     }
 
