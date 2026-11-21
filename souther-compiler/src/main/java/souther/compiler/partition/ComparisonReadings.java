@@ -350,6 +350,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * @param quotients  the quotients evaluating the comparison always works out, in the order
      *                   it works them out ({@link QuotientsEveryRunWorksOut}): none for an
      *                   application, which states no comparison to evaluate
+     * @param places     where each node the comparison always works out stands in the order it
+     *                   works them out, the quotients among them ({@link EvaluationPlaces})
      * @param definitions the template of each value the body builds, which is what working a build
      *                   out works out, and is in no tree a build stands in
      */
@@ -365,10 +367,11 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                    ElementsNamed readsTheElements, LinesReadOn readOn,
                    Supplier<WorkedOutFirst> first,
                    Supplier<List<AConstructionOnTheWay>> constructionsOnTheWay,
-                   List<Core.Binary> quotients,
+                   List<Core.Binary> quotients, EvaluationPlaces places,
                    ValueTemplates definitions) {
 
         Reading {
+            Objects.requireNonNull(places, "where the comparison's parts stand in its order");
             if (occurrence == null || statement == null || at == null
                     || statedAsACondition == null || stopsWhere == null || worksOutOnEach == null
                     || stopsIn == null || onTheArms == null || applying == null || runsAs == null
@@ -2082,6 +2085,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                             besideIt.way(), applying, in)),
                     stated.statement() instanceof Stated.AComparison
                             ? QuotientsEveryRunWorksOut.in(e) : List.of(),
+                    stated.statement() instanceof Stated.AComparison
+                            ? EvaluationPlaces.of(e) : EvaluationPlaces.none(),
                     in.templates().definitions()));
         }
         // A fork the reading of the runs takes a way out of, under the closures the walk is in. A

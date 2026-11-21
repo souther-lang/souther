@@ -242,12 +242,21 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * @param ofTheRepresentation whether {@code least} and {@code greatest} are where the type
      *              the number is worked out in stops — an {@code Int}, the calendar — and not where
      *              the clauses of a type a construction makes leave it, which the model states
+     * @param origin where the expression the comparison is read from works it out, which says
+     *              what else is worked out before and after it wherever that is known
      */
     record IntOperation(LinearForm<IntOperand> form, BigInteger least, BigInteger greatest,
-                        List<Integer> after, boolean ofTheRepresentation) {
+                        List<Integer> after, boolean ofTheRepresentation, Origin origin) {
 
         IntOperation {
             after = isAscending(after) ? List.copyOf(after) : List.copyOf(new TreeSet<>(after));
+            Objects.requireNonNull(origin, "where it is worked out, or that that is not known");
+        }
+
+        /** An operation told with no node it is worked out at. */
+        IntOperation(LinearForm<IntOperand> form, BigInteger least, BigInteger greatest,
+                     List<Integer> after, boolean ofTheRepresentation) {
+            this(form, least, greatest, after, ofTheRepresentation, Origin.NOT_KNOWN);
         }
 
         /** An operation whose ends are where the type it is worked out in stops, which is every
@@ -255,6 +264,46 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         IntOperation(LinearForm<IntOperand> form, BigInteger least, BigInteger greatest,
                      List<Integer> after) {
             this(form, least, greatest, after, true);
+        }
+
+        /**
+         * The node of the expression a run works an operation out at, which says where it stands
+         * among everything else the expression works out ({@link EvaluationPlaces}). Two origins
+         * are equal where they are the same node, as two stops of a run are the same only where
+         * they are worked out at the same place. What an operation is as a number, wherever it is
+         * worked out, is {@link IntOperation#sameOperationAs}.
+         */
+        static final class Origin {
+
+            /** The operation is worked out at no node that is known. */
+            static final Origin NOT_KNOWN = new Origin(null);
+
+            private final Core node;
+
+            Origin(Core node) {
+                this.node = node;
+            }
+
+            /** The node, or null where it is not known. */
+            Core node() {
+                return node;
+            }
+
+            @Override
+            public boolean equals(Object other) {
+                return other instanceof Origin that && node == that.node;
+            }
+
+            @Override
+            public int hashCode() {
+                return System.identityHashCode(node);
+            }
+        }
+
+        /** The same operation, worked out at {@code node}. */
+        IntOperation workedOutAt(Core node) {
+            return new IntOperation(form, least, greatest, after, ofTheRepresentation,
+                    new Origin(node));
         }
 
         /** Whether every index comes after the one before it, which is what the set of them
@@ -328,7 +377,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         /** The same operation, worked out after the operations moved {@code by} on. */
         IntOperation shifted(int by) {
             return new IntOperation(form, least, greatest,
-                    after.stream().map(at -> at + by).toList(), ofTheRepresentation);
+                    after.stream().map(at -> at + by).toList(), ofTheRepresentation, origin);
         }
     }
 
@@ -493,9 +542,29 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *                    place, which no row of a line is at. Told only of what a run works out
      *                    ({@link StopEvidence}), and carried wherever the working is, so that a
      *                    reading that stands in for another does not leave it behind
+     * @param leftUntold what the operations told and {@code aStopUntold} leave out, as one value:
+     *                    nothing exactly where {@code told} says every operation is told and no
+     *                    stop is left untold, and otherwise the stops of some quotients by a
+     *                    value, whose operands are told, or something else. A reader that asks
+     *                    those quotients takes the first as accounted for ({@link
+     *                    #leavesUntoldBeyond})
      */
     record Working(List<IntOperation> operations, WhatARelationLeavesUndivided.Told told,
-                   boolean onEveryRun, List<NumericTerm> partials, boolean aStopUntold) {
+                   boolean onEveryRun, List<NumericTerm> partials, boolean aStopUntold,
+                   NotAccountedFor leftUntold) {
+
+        /** A working whose left-untold part is said by the other components: nothing where they
+         *  say there is none, and something else where they do not. */
+        Working(List<IntOperation> operations, WhatARelationLeavesUndivided.Told told,
+                boolean onEveryRun, List<NumericTerm> partials, boolean aStopUntold) {
+            this(operations, told, onEveryRun, partials, aStopUntold, null);
+        }
+
+        /** Whether what the operations told and {@code aStopUntold} leave out is not accounted
+         *  for by the stops of {@code asked}. */
+        boolean leavesUntoldBeyond(List<Core.Binary> asked) {
+            return !leftUntold.isAccountedForBy(asked);
+        }
 
         Working(List<IntOperation> operations, WhatARelationLeavesUndivided.Told told) {
             this(operations, told, true);
@@ -549,15 +618,40 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 return UNREAD.leavingAStopUntold(untold);
             }
             // Whether every run reaches the relation is no part of what is told of it: readings
-            // that tell alike tell that, and the relation is on every run only if each is.
-            return (readings.stream().allMatch(Working::onEveryRun) ? first
-                    : first.notOnEveryRun()).leavingAStopUntold(untold);
+            // that tell alike tell that, and the relation is on every run only if each is. What
+            // any of them leaves out is left out of the readings together.
+            NotAccountedFor left = NotAccountedFor.NOTHING;
+            for (Working each : readings) {
+                left = left.join(each.leftUntold);
+            }
+            return new Working(first.operationsAtThePlacesAllAgreeOn(readings), first.told,
+                    readings.stream().allMatch(Working::onEveryRun), first.partials, untold,
+                    left);
         }
 
-        /** The same, with {@code untold} as whether a stop is left that no reading tells. */
+        /**
+         * The operations, each at the node every one of {@code readings} tells it at, and at no
+         * node where they tell it at different ones. Two operations are the same operation
+         * wherever they are worked out, and where one is worked out is no more than that said of
+         * the reading it was told in.
+         */
+        private List<IntOperation> operationsAtThePlacesAllAgreeOn(List<Working> readings) {
+            List<IntOperation> out = new ArrayList<>();
+            for (IntOperation each : operations) {
+                boolean agreed = readings.stream().allMatch(other -> other.operations.stream()
+                        .anyMatch(one -> one.sameOperationAs(each)
+                                && one.origin().node() == each.origin().node()));
+                out.add(agreed ? each : each.workedOutAt(null));
+            }
+            return out;
+        }
+
+        /** The same, with {@code untold} as whether a stop is left that no reading tells, which
+         *  is not told to be a quotient's own where it is newly left. */
         private Working leavingAStopUntold(boolean untold) {
             return untold == aStopUntold ? this
-                    : new Working(operations, told, onEveryRun, partials, untold);
+                    : new Working(operations, told, onEveryRun, partials, untold,
+                            untold ? NotAccountedFor.SOMETHING_ELSE : leftUntold);
         }
 
         /** Whether this tells the operations {@code other} does, each once or more, and as much
@@ -585,6 +679,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 throw new IllegalArgumentException(
                         "a total left to its running totals leaves some untold: " + partials);
             }
+            // Nothing is left out exactly where every operation is told and no stop is left
+            // untold, and where one of them says otherwise something is.
+            leftUntold = told == WhatARelationLeavesUndivided.Told.EVERY && !aStopUntold
+                    ? NotAccountedFor.NOTHING
+                    : leftUntold == null || leftUntold.kind() == NotAccountedFor.Kind.NOTHING
+                            ? NotAccountedFor.SOMETHING_ELSE : leftUntold;
         }
 
         /** Whether what is untold is at most the running totals of the walks in {@link #partials}. */
@@ -623,16 +723,18 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 partials.stream().filter(each -> !bothPartials.contains(each))
                         .forEach(bothPartials::add);
             }
-            return new Working(both, earlier.exact() && exact()
+            boolean everyOne = earlier.exact() && exact();
+            return new Working(both, everyOne
                     ? WhatARelationLeavesUndivided.Told.EVERY
                     : WhatARelationLeavesUndivided.Told.SOME,
                     earlier.onEveryRun && onEveryRun, bothPartials,
-                    earlier.aStopUntold || aStopUntold);
+                    earlier.aStopUntold || aStopUntold,
+                    earlier.leftUntold.join(leftUntold));
         }
 
         /** The same operations, for a relation not every run that gets to the comparison reaches. */
         Working notOnEveryRun() {
-            return new Working(operations, told, false, partials, aStopUntold);
+            return new Working(operations, told, false, partials, aStopUntold, leftUntold);
         }
 
         /** Whether every operation that can stop a run is told. */
