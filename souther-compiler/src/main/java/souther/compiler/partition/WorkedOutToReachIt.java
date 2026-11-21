@@ -61,6 +61,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
@@ -802,16 +803,25 @@ final class WorkedOutToReachIt {
         if (added == null) {
             return null;
         }
-        Long most = mostElementsOf(container);
+        Long most = mostElementsOf(container, where);
         return new Worth(added, rangesOfTheElements(where, element, answer.position(), container,
                 added.aliases(), most), answer.body(), most);
     }
 
-    /** How many elements {@code container} holds at most: those of a list written out there, or
-     *  the most a list holds; null where neither is known. */
-    private static Long mostElementsOf(Core container) {
-        return Core.withoutStanding(container) instanceof Core.ListLit list
-                ? Long.valueOf(list.elements().size()) : RepresentationBounds.mostElements();
+    /**
+     * How many elements {@code container}, read in {@code where}, holds at most: as many as the
+     * walk of it writes out less those there on no run ({@link WrittenOutElements#mostOf}),
+     * through the names, {@code let}s and helpers it stands at and the operations that keep a piece
+     * of each element of another — or, where it is not written out, the most a list holds.
+     *
+     * <p>A bound on how many elements a total or a walk is handed and nothing more: what a run
+     * works out to reach the container is asked of the parts and names it is written with.
+     */
+    private Long mostElementsOf(Core container, InputReads where) {
+        OptionalLong written = WrittenOutElements.mostOf(new Denotation(container, where),
+                read.rules().symbols(), read.rules().newtypes());
+        return written.isPresent() ? Long.valueOf(written.getAsLong())
+                : RepresentationBounds.mostElements();
     }
 
     /**
@@ -827,7 +837,8 @@ final class WorkedOutToReachIt {
         NumericTerm aCodePoint = InputNumber.aCodePointListedBy(container, read.domain(), where,
                 read.rules());
         ValuesHeld held = where.everyElementAt(element, newtypes);
-        Function<ElementProjection, FormRange> kept = keptByATest(where, element, container);
+        Function<ElementProjection, FormRange> kept = held instanceof ValuesHeld.NotAPosition
+                ? whereSomeOfThePlacesAreKept(where, element, container) : null;
         return path -> {
             if (position != null && Core.withoutStanding(path) instanceof Core.Read at
                     && position.equals(at.binding())) {
@@ -840,17 +851,7 @@ final class WorkedOutToReachIt {
             }
             return switch (held) {
                 case ValuesHeld.At(TermPath at) -> rangeOfAPlace(place.from(at), ArmsTaken.NONE);
-                case ValuesHeld.MayStandAt(List<TermPath> among) -> {
-                    FormRange hull = null;
-                    for (TermPath each : among) {
-                        FormRange one = rangeOfAPlace(place.from(each), ArmsTaken.NONE);
-                        if (one == null) {
-                            yield null;
-                        }
-                        hull = hull == null ? one : hull.hull(one);
-                    }
-                    yield hull;
-                }
+                case ValuesHeld.MayStandAt(List<TermPath> among) -> rangeAtEachOf(place, among);
                 case ValuesHeld.NotAPosition _ -> place.steps().isEmpty() && aCodePoint != null
                         ? FormRange.endsOf(aCodePoint, read)
                         : kept == null ? null : kept.apply(place);
@@ -858,20 +859,61 @@ final class WorkedOutToReachIt {
         };
     }
 
+    /** What {@code place} comes to at whichever of {@code among} the element stands at: the hull
+     *  of what it comes to at each, or null where one of them comes to nothing known. */
+    private FormRange rangeAtEachOf(ElementProjection place, List<TermPath> among) {
+        FormRange hull = null;
+        for (TermPath each : among) {
+            FormRange one = rangeOfAPlace(place.from(each), ArmsTaken.NONE);
+            if (one == null) {
+                return null;
+            }
+            hull = hull == null ? one : hull.hull(one);
+        }
+        return hull;
+    }
+
     /**
-     * What a path of the element handed on {@code element} comes to where {@code container} keeps
-     * elements of another container a test holds of ({@link BoundOperationFacts#keepsWhereItHolds}),
-     * as the library says it does: an element kept is one of that container's, standing where its
-     * elements stand ({@link InputReads#elementAt}), and one of which what every test that kept it
-     * states holds ({@link #whatEachTestThatKeptItStates}, {@link #heldByWhatItStates}). Null where
-     * no container on the way keeps by a test, or its elements stand at no place.
+     * What a path of the element handed on {@code element} comes to where the element is some of
+     * the values {@code container} was made of and not every occurrence of a place, as an element
+     * a filter keeps is.
+     *
+     * <p>Where the element stands at one place ({@link InputReads#elementAt}) it is what the path
+     * comes to there, held to what every test that kept it states ({@link #keptByATest}). Where
+     * {@code container} is written out ({@link WrittenOutElements#of}) the element is one of the
+     * occurrences, each where it stands, and the path comes to what it comes to at whichever of
+     * them it is ({@link #rangeAtEachOf}): every occurrence, the ones a test may drop as well,
+     * since one dropped on some run is one another run keeps. Null where neither is so.
      */
-    private Function<ElementProjection, FormRange> keptByATest(InputReads where, BindingId element,
-                                                               Core container) {
-        if (!(where.elementAt(element, read.rules().newtypes())
-                instanceof ValuesAt.At(TermPath at))) {
+    private Function<ElementProjection, FormRange> whereSomeOfThePlacesAreKept(
+            InputReads where, BindingId element, Core container) {
+        DeclarationNewtypes newtypes = read.rules().newtypes();
+        if (where.elementAt(element, newtypes) instanceof ValuesAt.At(TermPath at)) {
+            return keptByATest(at, where, container);
+        }
+        if (!(WrittenOutElements.of(new Denotation(container, where), read.rules().symbols(),
+                newtypes) instanceof WrittenOutElements.Walked.Each written)) {
             return null;
         }
+        List<TermPath> among = new ArrayList<>();
+        for (ReadMeaning.Occurrence each : written.asWritten()) {
+            Denotation one = each.value();
+            switch (one.at().pathOf(one.value(), newtypes)) {
+                case ValuesAt.At(TermPath at) -> among.add(at);
+                case ValuesAt.MayStandAt(List<TermPath> may) -> among.addAll(may);
+                case ValuesAt.NotAPosition _ -> {
+                    return null;
+                }
+            }
+        }
+        return among.isEmpty() ? null : place -> rangeAtEachOf(place, among);
+    }
+
+    /** What a path of an element standing at {@code at} comes to, held to what every test that
+     *  kept it on the way to {@code container} states; null where no container on the way keeps
+     *  by a test. */
+    private Function<ElementProjection, FormRange> keptByATest(TermPath at, InputReads where,
+                                                               Core container) {
         List<Proposition> stated = whatEachTestThatKeptItStates(new Denotation(container, where));
         if (stated.isEmpty()) {
             return null;
@@ -1027,7 +1069,7 @@ final class WorkedOutToReachIt {
         InputReads where = met == null ? null : met.at();
         AddedOfEachElement step = walk == null ? null : AddedOfEachElement.ofTheStep(walk,
                 decides -> endsNoRun(new Denotation(decides, where), question), newtypes);
-        Long most = step == null ? null : mostElementsOf(walk.container());
+        Long most = step == null ? null : mostElementsOf(walk.container(), where);
         if (most != null && where.folded(walk.seed(), symbols, newtypes).orElse(null)
                 instanceof Long seed
                 && step.heldOverEveryStep(BigInteger.valueOf(seed), rangesOfTheElements(where,
