@@ -439,17 +439,6 @@ final class StopAssessment {
                                      List<LinearForm<NumericTerm>> divisors,
                                      List<TakenConstraint.Affine> within, InputReading read) {
         UndividedByARelation.Working working = place.worked().stops().operations();
-        // On an arm or an application, a run gets there only where taking the arm or making the
-        // application holds, which is on the way only where the comparison is stated as a
-        // condition: then the value tried is asked to meet it with the rest of the way.
-        if (each.statedAsACondition().isEmpty()) {
-            if (place.worked().madeWhere() != null) {
-                return new Judgement.Unresolved(site, WhyAStopIsNotShown.ON_AN_APPLICATION);
-            }
-            if (place.worked().onAnArm() != null) {
-                return new Judgement.Unresolved(site, WhyAStopIsNotShown.ON_AN_ARM);
-            }
-        }
         // A working is not on every run where the expression the comparison was stopped at may
         // end a run before the operations it tells. A quotient is worked out wherever the
         // comparison is ({@link QuotientsEveryRunWorksOut}), so only an operation is asked of the
