@@ -6,6 +6,7 @@ import souther.compiler.check.AnOperationApplied;
 import souther.compiler.check.BehaviorAnswers;
 import souther.compiler.check.BoundOperationFacts;
 import souther.compiler.check.CallArguments;
+import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.CalledBody;
 import souther.compiler.check.Choice;
 import souther.compiler.check.ClausesInOrder;
@@ -825,10 +826,12 @@ final class WorkedOutToReachIt {
     }
 
     /**
-     * What a path of the element handed on {@code element} comes to, read in {@code where}: the
-     * numbers its place holds, wherever the elements of {@code container} stand; the code point
-     * of a string, from nought to the last there is; or, where it is the position handed on
-     * {@code position}, from nought to one below {@code most}. Null where it is none of these.
+     * What a path of the element handed on {@code element} comes to, read in {@code where}: what
+     * it comes to at whichever place the element is the value at ({@link #placesTheElementIsAt}),
+     * held to what every test that kept it states; the code point of a string, from nought to the
+     * last there is; what the rules of the type a field is read off leave the field
+     * ({@link #numbersTheRulesLeave}), whatever made the value; or, where it is the position handed
+     * on {@code position}, from nought to one below {@code most}. Null where it is none of these.
      */
     private Function<Core, FormRange> rangesOfTheElements(
             InputReads where, BindingId element, BindingId position, Core container,
@@ -836,9 +839,9 @@ final class WorkedOutToReachIt {
         DeclarationNewtypes newtypes = read.rules().newtypes();
         NumericTerm aCodePoint = InputNumber.aCodePointListedBy(container, read.domain(), where,
                 read.rules());
-        ValuesHeld held = where.everyElementAt(element, newtypes);
-        Function<ElementProjection, FormRange> kept = held instanceof ValuesHeld.NotAPosition
-                ? whereSomeOfThePlacesAreKept(where, element, container) : null;
+        List<TermPath> places = placesTheElementIsAt(where, element, container);
+        List<Proposition> stated = places.isEmpty() ? List.of()
+                : whatEachTestThatKeptItStates(new Denotation(container, where));
         return path -> {
             if (position != null && Core.withoutStanding(path) instanceof Core.Read at
                     && position.equals(at.binding())) {
@@ -849,22 +852,86 @@ final class WorkedOutToReachIt {
             if (place == null) {
                 return null;
             }
-            return switch (held) {
-                case ValuesHeld.At(TermPath at) -> rangeOfAPlace(place.from(at), ArmsTaken.NONE);
-                case ValuesHeld.MayStandAt(List<TermPath> among) -> rangeAtEachOf(place, among);
-                case ValuesHeld.NotAPosition _ -> place.steps().isEmpty() && aCodePoint != null
-                        ? FormRange.endsOf(aCodePoint, read)
-                        : kept == null ? null : kept.apply(place);
-            };
+            if (!places.isEmpty()) {
+                return rangeAtEachOf(place, places, stated);
+            }
+            if (place.steps().isEmpty() && aCodePoint != null) {
+                return FormRange.endsOf(aCodePoint, read);
+            }
+            return Core.withoutStanding(path) instanceof Core.FieldAccess access
+                    ? numbersTheRulesLeave(access) : null;
         };
     }
 
-    /** What {@code place} comes to at whichever of {@code among} the element stands at: the hull
-     *  of what it comes to at each, or null where one of them comes to nothing known. */
-    private FormRange rangeAtEachOf(ElementProjection place, List<TermPath> among) {
+    /**
+     * The places the element handed on {@code element} is, on every run, the value at one of:
+     * where every element of {@code container} stands ({@link InputReads#everyElementAt}); where
+     * it stands though it is some of them and not every one, as an element a filter, a
+     * {@code take} or a reordering keeps is ({@link InputReads#elementAt}); or where each element
+     * of the list written out stands ({@link #placesOfTheElementsWrittenOut}). None where it is
+     * none of these.
+     *
+     * <p>A place a value only may stand at is none of these: among several cases, one standing at
+     * no place adds none, and the value may be that one.
+     */
+    private List<TermPath> placesTheElementIsAt(InputReads where, BindingId element,
+                                                Core container) {
+        DeclarationNewtypes newtypes = read.rules().newtypes();
+        switch (where.everyElementAt(element, newtypes)) {
+            case ValuesHeld.At(TermPath at) -> {
+                return List.of(at);
+            }
+            case ValuesHeld.MayStandAt(List<TermPath> among) -> {
+                return among;
+            }
+            case ValuesHeld.NotAPosition _ -> { }
+        }
+        if (where.elementAt(element, newtypes) instanceof ValuesAt.At(TermPath at)) {
+            return List.of(at);
+        }
+        List<TermPath> written = placesOfTheElementsWrittenOut(new Denotation(container, where));
+        return written == null ? List.of() : written;
+    }
+
+    /**
+     * The place each element of {@code container} stands at, as the list is written out
+     * ({@link #elementsWrittenOut}), the ones a test may drop as well: one dropped on some run is
+     * one another run keeps. Null where it is no list written out, holds none, or one of them
+     * stands at no one place.
+     */
+    private List<TermPath> placesOfTheElementsWrittenOut(Denotation container) {
+        List<Denotation> elements = elementsWrittenOut(container);
+        if (elements == null || elements.isEmpty()) {
+            return null;
+        }
+        List<TermPath> places = new ArrayList<>();
+        for (Denotation each : elements) {
+            if (!(each.at().pathOf(Core.withoutStanding(each.value()), read.rules().newtypes())
+                    instanceof ValuesAt.At(var at))) {
+                return null;
+            }
+            places.add(at);
+        }
+        return places;
+    }
+
+    /**
+     * What {@code place} comes to at whichever of {@code among} the element stands at, each held
+     * to what every test in {@code stated} that kept the element says of it
+     * ({@link #heldByWhatItStates}): the hull of what it comes to at each, or null where one of
+     * them comes to nothing known. A test states something of the one place its parameter stands
+     * at, and of every other it says nothing.
+     */
+    private FormRange rangeAtEachOf(ElementProjection place, List<TermPath> among,
+                                    List<Proposition> stated) {
         FormRange hull = null;
         for (TermPath each : among) {
-            FormRange one = rangeOfAPlace(place.from(each), ArmsTaken.NONE);
+            TermPath at = place.from(each);
+            FormRange one = rangeOfAPlace(at, ArmsTaken.NONE);
+            NumericTerm term = new NumericTerm.ValueOf(at);
+            for (Proposition test : stated) {
+                one = heldByWhatItStates(one, term, test);
+            }
             if (one == null) {
                 return null;
             }
@@ -874,69 +941,15 @@ final class WorkedOutToReachIt {
     }
 
     /**
-     * What a path of the element handed on {@code element} comes to where the element is some of
-     * the values {@code container} was made of and not every occurrence of a place, as an element
-     * a filter keeps is.
-     *
-     * <p>Where the element stands at one place ({@link InputReads#elementAt}) it is what the path
-     * comes to there, held to what every test that kept it states ({@link #keptByATest}). Where
-     * {@code container} is written out ({@link WrittenOutElements#of}) the element is one of the
-     * occurrences, each where it stands, and the path comes to what it comes to at whichever of
-     * them it is ({@link #rangeAtEachOf}): every occurrence, the ones a test may drop as well,
-     * since one dropped on some run is one another run keeps. Null where neither is so.
-     */
-    private Function<ElementProjection, FormRange> whereSomeOfThePlacesAreKept(
-            InputReads where, BindingId element, Core container) {
-        DeclarationNewtypes newtypes = read.rules().newtypes();
-        if (where.elementAt(element, newtypes) instanceof ValuesAt.At(TermPath at)) {
-            return keptByATest(at, where, container);
-        }
-        if (!(WrittenOutElements.of(new Denotation(container, where), read.rules().symbols(),
-                newtypes) instanceof WrittenOutElements.Walked.Each written)) {
-            return null;
-        }
-        List<TermPath> among = new ArrayList<>();
-        for (ReadMeaning.Occurrence each : written.asWritten()) {
-            Denotation one = each.value();
-            switch (one.at().pathOf(one.value(), newtypes)) {
-                case ValuesAt.At(TermPath at) -> among.add(at);
-                case ValuesAt.MayStandAt(List<TermPath> may) -> among.addAll(may);
-                case ValuesAt.NotAPosition _ -> {
-                    return null;
-                }
-            }
-        }
-        return among.isEmpty() ? null : place -> rangeAtEachOf(place, among);
-    }
-
-    /** What a path of an element standing at {@code at} comes to, held to what every test that
-     *  kept it on the way to {@code container} states; null where no container on the way keeps
-     *  by a test. */
-    private Function<ElementProjection, FormRange> keptByATest(TermPath at, InputReads where,
-                                                               Core container) {
-        List<Proposition> stated = whatEachTestThatKeptItStates(new Denotation(container, where));
-        if (stated.isEmpty()) {
-            return null;
-        }
-        return place -> {
-            TermPath kept = place.from(at);
-            NumericTerm term = new NumericTerm.ValueOf(kept);
-            FormRange range = rangeOfAPlace(kept, ArmsTaken.NONE);
-            for (Proposition each : stated) {
-                range = heldByWhatItStates(range, term, each);
-            }
-            return range;
-        };
-    }
-
-    /**
      * What each test that kept an element of {@code container} states of the element it was
      * handed: the test of the operation that made the container, where it keeps the elements of
-     * another a test holds of, and so on into the container it took them from, as far as one
-     * keeps them. Every element kept on the way is one each of those tests held of, which is what
-     * the library says such an operation keeps. A test that is no closure of one value states
-     * nothing here, and the container it took its elements from is followed all the same. A name
-     * a container is given is read as the one value it was given.
+     * another a test holds of, and so on into the container it took them from, through every
+     * operation whose answer holds some of the very elements it was handed — a {@code take}, a
+     * reordering ({@link InputReads#argumentWhoseElementsItHolds}) — as far as one keeps them.
+     * Every element kept on the way is one each of those tests held of, which is what the library
+     * says such an operation keeps. A test that is no closure of one value states nothing here,
+     * and the container it took its elements from is followed all the same. A name a container is
+     * given is read as the one value it was given.
      *
      * <p>Each is of the place the elements of the container it walks stand at, which an element
      * kept on the way stands at too, where the reading takes the parameter of the test as the
@@ -951,15 +964,17 @@ final class WorkedOutToReachIt {
                 && walked.add(call)) {
             BoundOperationFacts.Kept keeps =
                     DefaultBoundOperationFacts.get().keepsWhereItHolds(call.operation());
-            if (keeps == null) {
+            DeclaredArgument source = keeps != null ? keeps.source()
+                    : InputReads.argumentWhoseElementsItHolds(call.operation());
+            if (source == null) {
                 break;
             }
-            if (Core.withoutStanding(CallArguments.of(keeps.closure(), call))
+            if (keeps != null && Core.withoutStanding(CallArguments.of(keeps.closure(), call))
                     instanceof Core.Block test && test.params().size() == 1) {
                 out.add(WhatConditionsState.of(read).truth(test.body(), at.at(), read)
                         .proposition());
             }
-            at = theOneValueOf(new Denotation(CallArguments.of(keeps.source(), call), at.at()));
+            at = theOneValueOf(new Denotation(CallArguments.of(source, call), at.at()));
         }
         return out;
     }
@@ -1910,17 +1925,13 @@ final class WorkedOutToReachIt {
             container = where.containerOfTheElementHandedTo(current.binding());
         }
         ElementProjection way = ElementProjection.read(path, current.binding(), held, newtypes);
-        List<Denotation> elements = way == null ? null
-                : elementsWrittenOut(new Denotation(container, where));
-        if (elements == null || elements.isEmpty()) {
+        List<TermPath> places = way == null ? null
+                : placesOfTheElementsWrittenOut(new Denotation(container, where));
+        if (places == null) {
             return null;
         }
         List<WhereAValueComesFrom> candidates = new ArrayList<>();
-        for (Denotation each : elements) {
-            if (!(each.at().pathOf(Core.withoutStanding(each.value()), newtypes)
-                    instanceof ValuesAt.At(var at))) {
-                return null;
-            }
+        for (TermPath at : places) {
             TermPath place = way.from(at);
             FormRange one = rangeOfAPlace(place, arms);
             if (one == null) {

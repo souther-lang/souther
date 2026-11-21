@@ -158,10 +158,11 @@ public final class ContainerSizesUnderAWitness {
                 && total.compareTo(least) >= 0 && total.compareTo(greatest) <= 0;
     }
 
-    /** The exact total of {@code list} where it is written out of whole numbers written out, or
-     *  nothing where it is not. */
-    private static Optional<BigInteger> writtenTotal(Core list) {
-        if (!(Core.withoutStanding(list) instanceof Core.ListLit written)) {
+    /** The exact total of {@code list} where it stands at a list written out of whole numbers
+     *  written out ({@link #listItStandsAt}), or nothing where it does not. */
+    private Optional<BigInteger> writtenTotal(Core list) {
+        Core.ListLit written = listItStandsAt(list);
+        if (written == null) {
             return Optional.empty();
         }
         BigInteger total = BigInteger.ZERO;
@@ -173,6 +174,18 @@ public final class ContainerSizesUnderAWitness {
             total = total.add(number.get());
         }
         return Optional.of(total);
+    }
+
+    /** The list written out {@code e} stands at, through the names given a value and the
+     *  {@code let}s around it, as {@link #most} reads them; null where it stands at none. */
+    private Core.ListLit listItStandsAt(Core e) {
+        return switch (Core.withoutStanding(e)) {
+            case Core.ListLit written -> written;
+            case Core.Read name -> boundTo.get(name.binding()) instanceof Core value
+                    ? listItStandsAt(value) : null;
+            case Core.LetIn li -> listItStandsAt(li.body());
+            default -> null;
+        };
     }
 
     /** {@code e} where it is a whole number written out, or one negated. */
@@ -390,15 +403,17 @@ public final class ContainerSizesUnderAWitness {
         return container == null ? Optional.empty() : most(container);
     }
 
-    /** The most any element of the collection {@code container} holds: of one written out, the
-     *  most of those written; of one of the input, as the caller says. */
+    /** The most any element of the collection {@code container} holds: of one written out
+     *  ({@link #listItStandsAt}), the most of those written; of one of the input, as the caller
+     *  says. */
     private Optional<BigInteger> mostOfAnElement(Core container) {
         Core node = Core.withoutStanding(container);
         Optional<BigInteger> input = ofEachElementOfTheInput.apply(node);
         if (input.isPresent()) {
             return input;
         }
-        if (!(node instanceof Core.ListLit written)) {
+        Core.ListLit written = listItStandsAt(node);
+        if (written == null) {
             return Optional.empty();
         }
         Optional<BigInteger> out = Optional.of(BigInteger.ZERO);

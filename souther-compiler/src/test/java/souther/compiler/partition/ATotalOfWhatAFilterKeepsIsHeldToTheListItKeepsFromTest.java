@@ -100,6 +100,9 @@ class ATotalOfWhatAFilterKeepsIsHeldToTheListItKeepsFromTest {
             "keptOf(a, b, c)",
             "List.map(m -> m, " + FILTERED_HERE + ")",
             "{ let all = [a, b, c]\n        List.filter(m -> m.days.value >= 17, all) }",
+            // An element built here stands at no place, and holds what the rules of its type
+            // leave it, whatever made it.
+            "List.filter(m -> m.days.value >= 17, [a, b, Month { pay = Yen(5), days = Days(20) }])",
     })
     void theFilteredListReachedAnotherWayIsRead(String kept) {
         assertEquals(List.of(), unread(report(BOUNDED, kept, TOTAL + " / List.length(ms)")));
