@@ -2881,8 +2881,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *                its operations are narrowed to: a region a row got past them in holds none
      *                of the rows a run stops at
      */
-    List<EveryRunStops> everyRunStopsIn(InputReading read, List<SearchRegion> regions) {
-        return everyRunStopsIn(working, read, regions, List.of());
+    List<EveryRunStops> everyRunStopsIn(InputReading read, List<SearchRegion> regions,
+                                        EvaluationPlaces places) {
+        return everyRunStopsIn(working, read, regions, List.of(), places);
     }
 
     /**
@@ -2890,10 +2891,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * {@code alsoWorkedOut} before it, in any order: each of those within its type at every row
      * said, so that no row is said to stop in one operation where it stops in another first.
      * Nothing where one of those has an end that is no form of the input's numbers.
+     *
+     * <p>An operation is not asked to be within its type where it is worked out of the value of
+     * the one asked ({@code after}), or where its whole node comes after that one's in the order
+     * a run works the comparison out ({@code places}): a run that stops in the one never gets to
+     * it. Where either has no place, it is asked.
      */
     static List<EveryRunStops> everyRunStopsIn(Working working, InputReading read,
                                                List<SearchRegion> regions,
-                                               List<IntOperation> alsoWorkedOut) {
+                                               List<IntOperation> alsoWorkedOut,
+                                               EvaluationPlaces places) {
         if (!working.exact() || !working.onEveryRun()) {
             return List.of();
         }
@@ -2913,6 +2920,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 // An operation told twice is one a run works out, and is not another that has to
                 // be within the type before this one is asked.
                 if (other != at && !one.sameOperationAs(it) && !one.after().contains(at)
+                        && !places.comesAfter(one.origin().node(), it.origin().node())
                         && !withinItsEnds(one, before)) {
                     before = null;
                     break;

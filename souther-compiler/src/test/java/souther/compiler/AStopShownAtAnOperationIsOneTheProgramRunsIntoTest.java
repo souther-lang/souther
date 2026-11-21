@@ -4,6 +4,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import souther.compiler.inputs.AStopShown;
+import souther.compiler.inputs.EveryRunStops;
 import souther.compiler.inputs.RuleWhereARunMayStop;
 import souther.compiler.inputs.RuleWhereAStopIsNotShown;
 import souther.compiler.inputs.TermPath;
@@ -13,10 +14,16 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.runtime.ConstraintViolation;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
@@ -94,6 +101,9 @@ class AStopShownAtAnOperationIsOneTheProgramRunsIntoTest {
                 "Rational.toInt(DOWN, (e / p) / (q + 1)) >= 2"));
         FORMS.put("aQuotientOfNoFormBeforeTheSum", new Form("q >= " + GREATEST,
                 "Rational.toInt(DOWN, (e / (p * p)) / (q + 1)) >= 2"));
+        // a sum worked out after the one stopped at is not asked to be within its type
+        FORMS.put("aSumAfterTheSum", new Form("q >= " + GREATEST,
+                "(q + 1) + (e + 1) >= 2", true));
         // a call before the sum that stops every run of the way is not got past
         FORMS.put("aCallBeforeTheSumThatStops", new Form("q >= " + GREATEST + " && p == 0",
                 "h(p) + (q + 1) >= 2"));
@@ -129,10 +139,20 @@ class AStopShownAtAnOperationIsOneTheProgramRunsIntoTest {
         boolean saidSomething = false;
         boolean aStopShown = false;
         List<String> shownAndItsRunDoesNotStop = new ArrayList<>();
+        List<String> everyRunSaidToStopAndDoesNot = new ArrayList<>();
         for (WhatIsShownOfAStop each : divided.stopsShown()) {
             if (each instanceof RuleWhereARunMayStop stops) {
                 saidSomething |= !stops.shown().isEmpty() || !stops.everyRunStops().isEmpty();
                 aStopShown |= !stops.shown().isEmpty();
+                for (EveryRunStops every : stops.everyRunStops()) {
+                    for (Map<String, Object> in : inputsWithin(every)) {
+                        String stoppedFor = stoppedFor(loader, behavior, in);
+                        if (stoppedFor == null || !stoppedFor.startsWith(INT_OVERFLOW)) {
+                            everyRunSaidToStopAndDoesNot.add(every.operation() + " at " + in
+                                    + " ends for " + stoppedFor);
+                        }
+                    }
+                }
                 for (AStopShown shown : stops.shown()) {
                     String ends = shown.operation().startsWith("division")
                             ? DIVISION_BY_ZERO : INT_OVERFLOW;
@@ -156,6 +176,9 @@ class AStopShownAtAnOperationIsOneTheProgramRunsIntoTest {
                 () -> assertEquals(List.of(), shownAndItsRunDoesNotStop,
                         "told that a run stops at an operation, and the run of the numbers the "
                                 + "stop rests on does not stop"),
+                () -> assertEquals(List.of(), everyRunSaidToStopAndDoesNot,
+                        "told that every run getting to the comparison at these rows stops in an"
+                                + " operation, and the run does not stop for that reason"),
                 () -> assertTrue(said || !someRunStops,
                         "a run of the grid stops and the findings say nothing of an operation"),
                 () -> assertTrue(!form.required() || everyRunOfTheWayStops,
@@ -189,6 +212,56 @@ class AStopShownAtAnOperationIsOneTheProgramRunsIntoTest {
             }
         }
         return out;
+    }
+
+    /**
+     * The inputs of the grid, and the ends of each row, that meet every row {@code every} says:
+     * of the forms that are one number of the input alone. Nothing where one is a form of several,
+     * which a grid of three numbers does not ask.
+     */
+    private static List<Map<String, Object>> inputsWithin(EveryRunStops every) {
+        Map<String, List<EveryRunStops.Within>> rows = new LinkedHashMap<>();
+        for (EveryRunStops.Within row : every.where()) {
+            Matcher number = Pattern.compile("(?:i\\.)?([epq])").matcher(row.form());
+            if (!number.matches()) {
+                return List.of();
+            }
+            rows.computeIfAbsent(number.group(1), name -> new ArrayList<>()).add(row);
+        }
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (long e : candidates("e", rows)) {
+            for (long p : candidates("p", rows)) {
+                for (long q : candidates("q", rows)) {
+                    Map<String, Long> at = Map.of("e", e, "p", p, "q", q);
+                    boolean within = rows.entrySet().stream().allMatch(each ->
+                            each.getValue().stream().allMatch(row ->
+                                    (row.least() == null
+                                            || row.least().compareTo(BigInteger.valueOf(
+                                                    at.get(each.getKey()))) <= 0)
+                                            && (row.greatest() == null
+                                            || row.greatest().compareTo(BigInteger.valueOf(
+                                                    at.get(each.getKey()))) >= 0)));
+                    if (within) {
+                        out.add(Map.of("e", e, "p", p, "q", q));
+                    }
+                }
+            }
+        }
+        return out;
+    }
+
+    /** The values of the grid at a place, and the ends of the rows over it. */
+    private static List<Long> candidates(String place,
+                                         Map<String, List<EveryRunStops.Within>> rows) {
+        Set<Long> out = new LinkedHashSet<>(WHOLE);
+        for (EveryRunStops.Within row : rows.getOrDefault(place, List.of())) {
+            for (BigInteger end : Arrays.asList(row.least(), row.greatest())) {
+                if (end != null && end.bitLength() < 64) {
+                    out.add(end.longValueExact());
+                }
+            }
+        }
+        return List.copyOf(out);
     }
 
     /**
