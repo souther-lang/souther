@@ -11,7 +11,7 @@ import souther.compiler.check.Emptiness;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.PartId;
 import souther.compiler.check.RuleKey;
-import souther.compiler.check.RuleOfDateParts;
+import souther.compiler.check.DateRules;
 import souther.compiler.collect.RecentAnswers;
 import souther.compiler.check.RuleRef;
 import souther.compiler.meaning.PositionsAStatementReads;
@@ -3670,14 +3670,14 @@ final class ReadQuantities implements Quantities {
     }
 
     /**
-     * The rules the declarations of the date at {@code place} hold its parts to together, read
-     * where {@link #classDeclaredAt} reads the class: under the context the date is asked in, and
-     * none where no declarations reach it or the context does not hold where they were opened.
-     * Refused where no value this reading holds is around the place: "no rules" would be said of
-     * a place this reading has never been.
+     * What the declarations hold the date at {@code place} to ({@link FieldDomains#rulesOfTheDateAt}),
+     * read where {@link #classDeclaredAt} reads the class: under the context the date is asked in,
+     * and every date where no declarations reach it or the context does not hold where they were
+     * opened. Refused where no value this reading holds is around the place: "every date" would be
+     * said of a place this reading has never been.
      */
     @Override
-    public List<RuleOfDateParts> rulesOfThePartsOfTheDate(TermPath place) {
+    public DateRules rulesOfTheDateAt(TermPath place) {
         UnderARoot at = rootOf(place);
         if (at == null) {
             throw new IllegalArgumentException("`" + place + "` is under nothing this input takes,"
@@ -3685,15 +3685,12 @@ final class ReadQuantities implements Quantities {
         }
         OpenedRules opened = byRoot.get(at.root());
         if (opened == null) {
-            return List.of();
+            return DateRules.EVERY_DATE;
         }
-        NumericTerm.ValueOf date = new NumericTerm.ValueOf(place);
-        List<RuleOfDateParts> rules = opened.rules().bounds().rulesOfThePartsAt(at.named());
-        if (rules != null && rules.isEmpty()) {
-            return rules;
-        }
-        return (asking(Set.of(date)) instanceof StructuralContext.Merge.Together(
-                StructuralContext under) && under.holds(opened.opening())) ? rules : List.of();
+        return (asking(Set.of(new NumericTerm.ValueOf(place)))
+                instanceof StructuralContext.Merge.Together(StructuralContext under)
+                && under.holds(opened.opening()))
+                ? opened.rules().bounds().rulesOfTheDateAt(at.named()) : DateRules.EVERY_DATE;
     }
 
     /** The magnitude of the divisor {@code taken} is a remainder by, or null where it is no

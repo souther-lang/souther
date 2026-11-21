@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -71,6 +72,7 @@ class AProvedEdgeOfADatePartIsAPartSomeDateHasTest {
         for (String each : proved) {
             assertTrue(someFebruaryDayIn(each), "proved at " + each + ", which no February has");
         }
+        assertTrue(proved.contains("29"), proved::toString);
     }
 
     @Test
@@ -174,6 +176,112 @@ class AProvedEdgeOfADatePartIsAPartSomeDateHasTest {
                     "proved at " + each + ", which no Day a day on has");
         }
         assertTrue(proved.contains("2"), proved::toString);
+    }
+
+    /** The values of {@code part} the dates {@code holds} leaves come to, over four years as
+     *  {@link #monthsOf} reads them. */
+    private static Set<Integer> valuesOf(Predicate<LocalDate> holds,
+                                         Function<LocalDate, Integer> part) {
+        Set<Integer> out = new TreeSet<>();
+        for (LocalDate date = LocalDate.of(2000, 1, 1); date.getYear() < 2004;
+                date = date.plusDays(1)) {
+            if (holds.test(date)) {
+                out.add(part.apply(date));
+            }
+        }
+        return out;
+    }
+
+    /** A rule of the date a day on: the dates of it are the last day of January and the days of
+     *  February but its last, and none of them is in March. */
+    @Test
+    void aMonthARuleOfAMovedPartRulesOutIsNotProved() throws Exception {
+        Set<Integer> held = valuesOf(date -> date.plusDays(1).getMonthValue() == 2,
+                LocalDate::getMonthValue);
+        List<String> proved = provedPoints("""
+                module demo
+
+                data Day = Date
+                    invariant Date.month(Date.addDays(1, value)) == 2
+
+                data Out = Int
+
+                behavior go : (d: Day) -> Out
+                let go (d) = Out { value = if Date.month(d.value) >= 3 then 1 else 2 }
+                """);
+        for (String each : proved) {
+            assertTrue(someNumberIn(each, held), "proved at " + each + ", which no Day has");
+        }
+    }
+
+    /** A part of the date moved, held to another field: the dates a day before a January are the
+     *  last of December and the days of January but its last, and none of them is in March. */
+    @Test
+    void aMonthARuleTyingAMovedPartToAnotherPlaceRulesOutIsNotProved() throws Exception {
+        Set<Integer> held = valuesOf(date -> date.plusDays(1).getMonthValue() <= 1,
+                LocalDate::getMonthValue);
+        List<String> proved = provedPoints("""
+                module demo
+
+                data Span = { start: Date, n: Int }
+                    invariant early = Date.month(Date.addDays(1, start)) <= n
+                    invariant one = n <= 1
+
+                data Out = Int
+
+                behavior go : (s: Span) -> Out
+                let go (s) = Out { value = if Date.month(s.start) >= 3 then 1 else 2 }
+                """);
+        for (String each : proved) {
+            assertTrue(someNumberIn(each, held), "proved at " + each + ", which no Span has");
+        }
+    }
+
+    /** The date held by its own ends to the last days of February 2020 and the first of March:
+     *  the fifteenth and the fourteenth are days every month has, and no date of the ends. */
+    @Test
+    void aDayTheEndsOfTheDateRuleOutIsNotProved() throws Exception {
+        Set<Integer> held = new TreeSet<>();
+        for (LocalDate date = LocalDate.of(2020, 2, 27); !date.isAfter(LocalDate.of(2020, 3, 2));
+                date = date.plusDays(1)) {
+            held.add(date.getDayOfMonth());
+        }
+        List<String> proved = provedPoints("""
+                module demo
+
+                data Day = Date
+                    invariant value >= Date("2020-02-27") && value <= Date("2020-03-02")
+
+                data Out = Int
+
+                behavior go : (d: Day) -> Out
+                let go (d) = Out { value = if Date.day(d.value) >= 15 then 1 else 2 }
+                """);
+        for (String each : proved) {
+            assertTrue(someNumberIn(each, held), "proved at " + each + ", which no Day has");
+        }
+    }
+
+    /** A choice of two days: the tenth and the ninth are days the calendar has, and no date of
+     *  the rule has either. */
+    @Test
+    void aDayAChoiceOfDaysRulesOutIsNotProved() throws Exception {
+        Set<Integer> held = valuesOf(date -> date.getDayOfMonth() == 1
+                || date.getDayOfMonth() == 15, LocalDate::getDayOfMonth);
+        List<String> proved = provedPoints("""
+                module demo
+
+                data Day = Date
+                    invariant Date.day(value) == 1 || Date.day(value) == 15
+
+                data Out = Int
+
+                behavior go : (d: Day) -> Out
+                let go (d) = Out { value = if Date.day(d.value) >= 10 then 1 else 2 }
+                """);
+        for (String each : proved) {
+            assertTrue(someNumberIn(each, held), "proved at " + each + ", which no Day has");
+        }
     }
 
     /** The report of {@code model} with no rows measured: a point is proved writable by what the

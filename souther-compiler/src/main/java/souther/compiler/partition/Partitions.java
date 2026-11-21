@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.check.DeclarationReadings;
 import souther.compiler.check.ClassMembers;
 import souther.compiler.check.DatePartsLeft;
+import souther.compiler.check.DateRules;
 import souther.compiler.check.RuleOfDateParts;
 import souther.compiler.numeric.DateTranslation;
 import souther.compiler.check.HeldClass;
@@ -488,35 +489,34 @@ public final class Partitions {
          * <p>Of a part of a date, true only where one date shows it, with the date moved as the
          * number moves it, and that date is of everything the declarations say of it together
          * ({@link DatesTheDeclarationsLeave}): its ends, the range of each part ({@code month ==
-         * 2}), and what they hold two parts to ({@code month + day <= 20}). A point in a run is
-         * asked of the whole run, whose value nearest the line may be one no date has while
-         * another is. A class of the date other than one of its parts is one nothing here reads,
-         * a rule holding a part beside another place ties the date to what this does not answer,
-         * and a search that shows no date is no proof that there is none. None is a proof, and
-         * each leaves the point not known.
+         * 2}), and what they hold two parts to ({@code month + day <= 20}) — and only where those
+         * are shown to be all the declarations say of it ({@link DateRules.Whole}). A choice, a
+         * part of the date moved, a hole in the date or a rule tying it to another place is a
+         * rule those do not hold, and a date found without it is one it may refuse. A point in a
+         * run is asked of the whole run, whose value nearest the line may be one no date has
+         * while another is. A search that shows no date is no proof that there is none. None is a
+         * proof, and each leaves the point not known.
          */
         private static boolean aDateHasThePartIn(NumericTerm.TakenOf taken, Criterion asked,
                                                  Quantities reading) {
             if (!(taken.takenAs() instanceof TakenAs.PartOfDate(TakenAs.DatePart part))) {
                 return true;
             }
-            NumericTerm.ValueOf date = new NumericTerm.ValueOf(taken.position());
-            DatePartsLeft left = switch (reading.region().classAt(date)) {
+            if (asked == null || !(reading.rulesOfTheDateAt(taken.position())
+                    instanceof DateRules.Whole(long least, long most, HeldClass held,
+                            List<RuleOfDateParts> rules))
+                    || least > most) {
+                return false;
+            }
+            DatePartsLeft left = switch (held) {
                 case HeldClass.None _ -> DatePartsLeft.EVERY_DATE;
                 case HeldClass.OfDays(DatePartsLeft parts) -> parts;
                 case HeldClass.OfResidues _, HeldClass.NoValue _ -> null;
             };
-            List<RuleOfDateParts> rules = left == null ? null
-                    : reading.rulesOfThePartsOfTheDate(taken.position());
-            return rules != null && asked != null
-                    && reading.projectionOfTheDeclarations(date)
-                            instanceof NumericDomain.FormProjection.Within(
-                                    NumericDomain.Bounds ends)
-                    && DateTranslation.none().definedOnlyWithin(ends)
-                            instanceof DateTranslation days
-                    && DatesTheDeclarationsLeave.withThePartIn(left, rules, days, part,
-                            asked.region(), taken.transformation().translation())
-                            instanceof DatesThatHoldEveryStatement.Found;
+            return left != null && DatesTheDeclarationsLeave.withThePartIn(left, rules,
+                    new DateTranslation(0, least, most), part, asked.region(),
+                    taken.transformation().translation())
+                    instanceof DatesThatHoldEveryStatement.Found;
         }
 
         /**

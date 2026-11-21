@@ -304,6 +304,10 @@ public final class FieldDomains {
      */
     private final Map<RuleKey, HeldClass> classes = new ConcurrentHashMap<>();
 
+    /** What the rules hold the date at each place to ({@link #rulesOfTheDateAt}), kept under the
+     *  place for the same reason: asked at every point of every line on a part of it. */
+    private final Map<RuleKey, DateRules> dateRules = new ConcurrentHashMap<>();
+
     /**
      * The readings of the declarations the elements of this value's containers are of, made when
      * whether one of them holds a value is first asked ({@link #elementHoldsAValue}).
@@ -2669,21 +2673,90 @@ public final class FieldDomains {
     }
 
     /**
-     * The rules the parts of the date at {@code path} are held to that {@link #classAt} does not
-     * read: each relating two numbers taken of the date, or holding one away from a number — or
-     * null where a rule weighing a part of the date weighs anything but a part of it as it stands,
-     * or weighs two numbers that are one part.
+     * What the declarations hold the date at {@code path} to, where that is shown to be the whole
+     * of what they say of it, or that it is not.
      *
-     * <p>Empty where the rules weigh no part of the date together with another, which is where what
-     * the class leaves each part is all they say of the parts. A rule weighing a part and another
-     * place, or a part of the date moved, ties the date to what this does not answer, and null says
-     * so rather than leaving the rule out.
+     * <p>For a reader proving that a date with some part exists, which a range of each part cannot
+     * answer: a date between the ends of every part is still one a rule of two parts, a choice or
+     * a hole may refuse. So the date is read whole or not at all — as the strings at a place are
+     * by {@link #setBoundsAndRunsAreTheRulesAt} — and whole is shown, never assumed of a rule
+     * nothing here took apart.
+     *
+     * <p>Whole where every rule reaching the value was read, and every part of one that is about
+     * the date is held by the algebra over the value's names and the parts taken of the date as it
+     * stands ({@link #unstatedOver}): a choice is held by no rule of the algebra, and a part of the
+     * date moved is a number of another date. And where every rule of the algebra weighing a
+     * number of the date weighs the date alone, by an end, or its parts as it stands alone: a hole
+     * in the date is no end, and a rule tying it to another place leaves it what the other leaves.
      */
-    public List<RuleOfDateParts> rulesOfThePartsAt(RuleKey path) {
+    public DateRules rulesOfTheDateAt(RuleKey path) {
+        return dateRules.computeIfAbsent(path, this::dateRulesOf);
+    }
+
+    /** {@link #rulesOfTheDateAt}, worked out. */
+    private DateRules dateRulesOf(RuleKey path) {
         FactSubject place = atomAt.get(path);
-        if (place == null) {
-            return List.of();
+        // A rule's own reason for going unread at the name is filed under the rule, and the parts
+        // of it that matter are asked below; a reason about the answer is filed under no rule, so
+        // it is asked here, as the strings at a place are.
+        if (place == null || !notGathered.isEmpty() || !unreadOfEveryValue.isEmpty()
+                || unreadByName.getOrDefault(path, List.of()).stream()
+                        .anyMatch(each -> standsBesideARulesOwnAccount(each.why()))
+                || gathered().others().stream().anyMatch(
+                        ProjectionEvidence.Cause.OperatorsNotShownToAnswer.class::isInstance)) {
+            return DateRules.NOT_WHOLE;
         }
+        Map<FactSubject, TakenAs.DatePart> parts = partsTakenOf(place, path);
+        Set<FactSubject> held = rangedOfTheValue();
+        held.addAll(parts.keySet());
+        // A part that raised no question is filed under the value it is written on, which is
+        // about every name of it.
+        if (unstatedOver(held).stream().anyMatch(each -> each.paths().contains(path)
+                || each.paths().contains(RuleKey.THE_VALUE))) {
+            return DateRules.NOT_WHOLE;
+        }
+        Set<FactSubject> ofTheDate = new HashSet<>();
+        for (FactSubject atom : constraints.numbers().atomsSpokenOf()) {
+            if (mentions(atom.identity(), place.identity())) {
+                ofTheDate.add(atom);
+            }
+        }
+        BigInteger least = BigInteger.valueOf(DatePartsLeft.FIRST_DAY);
+        BigInteger most = BigInteger.valueOf(DatePartsLeft.LAST_DAY);
+        List<RuleOfDateParts> out = new ArrayList<>();
+        for (AffineConstraint<FactSubject> rule
+                : constraints.numbers().rulesWeighingAny(ofTheDate)) {
+            if (weighsOnly(rule, Set.of(place))) {
+                DaysBetween ends = wholeDaysOf(rule, place);
+                if (ends == null) {
+                    return DateRules.NOT_WHOLE;
+                }
+                least = least.max(ends.least());
+                most = most.min(ends.most());
+                continue;
+            }
+            // A range of one part, which the class holds. A hole in it is no range.
+            if (weighsOnly(rule, parts.keySet()) && rule.form().coefs().size() == 1
+                    && !(rule instanceof AffineConstraint.Disequality)) {
+                continue;
+            }
+            RuleOfDateParts read = ruleOfTheParts(rule, parts);
+            if (read == null) {
+                return DateRules.NOT_WHOLE;
+            }
+            out.add(read);
+        }
+        // Held a day past the calendar at most, so that ends past it say no date rather than a
+        // number a day count does not hold.
+        BigInteger first = BigInteger.valueOf(DatePartsLeft.FIRST_DAY);
+        BigInteger last = BigInteger.valueOf(DatePartsLeft.LAST_DAY);
+        return new DateRules.Whole(least.min(last.add(BigInteger.ONE)).longValueExact(),
+                most.max(first.subtract(BigInteger.ONE)).longValueExact(), classAt(path), out);
+    }
+
+    /** The parts taken of the date {@code place} stands for at {@code path} as it stands, by the
+     *  atom each is held under. */
+    private Map<FactSubject, TakenAs.DatePart> partsTakenOf(FactSubject place, RuleKey path) {
         Map<FactSubject, TakenAs.DatePart> parts = new HashMap<>();
         for (FactSubject atom : takenOf(place)) {
             DerivedNumber number = DerivedNumber.readBack(atom.identity(), _ -> path);
@@ -2691,29 +2764,56 @@ public final class FieldDomains {
                 parts.put(atom, part);
             }
         }
-        if (parts.isEmpty()) {
-            return List.of();
-        }
-        List<RuleOfDateParts> out = new ArrayList<>();
-        for (AffineConstraint<FactSubject> rule
-                : constraints.numbers().rulesWeighingAny(parts.keySet())) {
-            if (aRangeOfOnePart(rule)) {
-                continue;
-            }
-            RuleOfDateParts read = ruleOfTheParts(rule, parts);
-            if (read == null) {
-                return null;
-            }
-            out.add(read);
-        }
-        return out;
+        return parts;
     }
 
-    /** Whether {@code rule} bounds one number on its own, which the class holds. A hole in it is
-     *  no range. */
-    private static boolean aRangeOfOnePart(AffineConstraint<FactSubject> rule) {
-        return rule.form().coefs().size() == 1
-                && !(rule instanceof AffineConstraint.Disequality);
+    /** Whether {@code term} is {@code place} or is made of it, at any depth: a part of a date
+     *  moved is made of the date. */
+    private static boolean mentions(Term term, Term place) {
+        return term.equals(place) || term.parts().stream().anyMatch(each -> mentions(each, place));
+    }
+
+    /** Whether every number {@code rule} weighs is one of {@code these}. */
+    private static boolean weighsOnly(AffineConstraint<FactSubject> rule, Set<FactSubject> these) {
+        return these.containsAll(rule.form().coefs().keySet());
+    }
+
+    /** The days from {@code least} to {@code most}, both counted. */
+    private record DaysBetween(BigInteger least, BigInteger most) {}
+
+    /**
+     * The first and last day a rule of the date {@code place} alone leaves it, as whole numbers of
+     * days, or null where the rule is a hole or its bound divides into no number held: a hole is
+     * no end, and leaving it out would say a day it refuses is one of the date's.
+     */
+    private static DaysBetween wholeDaysOf(AffineConstraint<FactSubject> rule,
+                                           FactSubject place) {
+        ExactRatio weight = rule.form().coefs().get(place);
+        return switch (rule) {
+            case AffineConstraint.Disequality<FactSubject> _ -> null;
+            case AffineConstraint.Equality<FactSubject> at ->
+                    (at.at().dividedBy(weight) instanceof ExactAnswer.Held<ExactRatio>(
+                            ExactRatio day) && day.isWhole()
+                            && day.floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger whole))
+                            ? new DaysBetween(whole, whole) : null;
+            case AffineConstraint.HalfSpace<FactSubject> half -> {
+                if (!(half.bound().at().dividedBy(weight)
+                        instanceof ExactAnswer.Held<ExactRatio>(ExactRatio at))) {
+                    yield null;
+                }
+                boolean below = weight.signum() > 0;
+                BigInteger end = below
+                        ? (half.bound().inclusive() ? at.floor().orNull()
+                                : at.ceiling().map(day -> day.subtract(BigInteger.ONE)).orNull())
+                        : (half.bound().inclusive() ? at.ceiling().orNull()
+                                : at.floor().map(day -> day.add(BigInteger.ONE)).orNull());
+                if (end == null) {
+                    yield null;
+                }
+                yield below ? new DaysBetween(BigInteger.valueOf(DatePartsLeft.FIRST_DAY), end)
+                        : new DaysBetween(end, BigInteger.valueOf(DatePartsLeft.LAST_DAY));
+            }
+        };
     }
 
     /**
@@ -3958,22 +4058,38 @@ public final class FieldDomains {
     /** {@link #gathered}, read off the readings. */
     private Gathered gatheredFromTheReadings() {
         List<ProjectionEvidence.Cause> causes = new ArrayList<>();
-        List<PartUnstated> unstated = new ArrayList<>();
         // A rule that never arrived first. Which rule it was is not known here and there is nothing
         // to say: what a stop leaves is a name and every name under it.
         // Spelled, since what a cause carries is read by an author rather than looked up.
         for (RuleKey stopped : unreadOfEveryValue) {
             causes.add(new ProjectionEvidence.Cause.Unavailable(stopped.toString()));
         }
-        // Every name of this value, by the atom a range of it is taken under. A rule that
-        // narrowed one of these is in the bounds; a rule that narrowed only an atom standing for an
-        // arithmetic this cannot carry narrowed nothing anybody reads off them.
+        Set<FactSubject> ranged = rangedOfTheValue();
+        return gatheredBeside(causes, ranged, unstatedOver(ranged));
+    }
+
+    /**
+     * Every name of this value, by the atom a range of it is taken under. A rule that narrowed one
+     * of these is in the bounds; a rule that narrowed only an atom standing for an arithmetic this
+     * cannot carry narrowed nothing anybody reads off them.
+     */
+    private Set<FactSubject> rangedOfTheValue() {
         Set<FactSubject> ranged = new LinkedHashSet<>(atomAt.values());
         countAt.values().forEach(counted -> ranged.add(counted.atom()));
-        // Asked of every rule the reading was handed, and not of the questions the rules raise. A
-        // pattern raises none — which values may stand somewhere and where a line falls are not what
-        // it is about — and it is still a way the value can be refused at an edge of the number
-        // beside it.
+        return ranged;
+    }
+
+    /**
+     * The parts of rules nothing {@code ranged} holds a range of was narrowed by: what a reading
+     * that holds those atoms and nothing else holds nothing of, by the names each part is about.
+     *
+     * <p>Asked of every rule the reading was handed, and not of the questions the rules raise. A
+     * pattern raises none — which values may stand somewhere and where a line falls are not what
+     * it is about — and it is still a way the value can be refused at an edge of the number beside
+     * it.
+     */
+    private List<PartUnstated> unstatedOver(Set<FactSubject> ranged) {
+        List<PartUnstated> unstated = new ArrayList<>();
         readings.forEach(reading -> {
             RuleRef.Invariant rule = reading.from();
             // What this reading left unrepresented, told to the statement each is a statement of
@@ -4065,6 +4181,16 @@ public final class FieldDomains {
                         each.runsHoldWhole()));
             }
         });
+        return unstated;
+    }
+
+    /**
+     * {@link #gathered}, with {@code causes} already found and the parts {@code unstated} the
+     * bounds over {@code ranged} hold nothing of: what the algebra was given and does not hold, and
+     * what it made of the ranges it derived.
+     */
+    private Gathered gatheredBeside(List<ProjectionEvidence.Cause> causes, Set<FactSubject> ranged,
+                                    List<PartUnstated> unstated) {
         // And what the algebra was given and what it projects does not hold.
         //
         // Asked of what was derived and of nothing else. Asking the whole state whether it holds a
