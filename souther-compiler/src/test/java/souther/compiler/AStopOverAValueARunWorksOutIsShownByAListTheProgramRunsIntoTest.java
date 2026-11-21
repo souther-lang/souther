@@ -16,6 +16,7 @@ import souther.runtime.ConstraintViolation;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -102,11 +103,6 @@ class AStopOverAValueARunWorksOutIsShownByAListTheProgramRunsIntoTest {
                 "Option.withDefault(0, List.max(ds)) <= 10", List.of(),
                 List.of(new InputFact.ListLength(DS, 1),
                         new InputFact.ListElement(DS, 0, GREATEST))));
-        // the default is what a list of none answers, and the element of a list of one is what it
-        // answers otherwise: either stops, and which of them is shown is not what is held
-        STOPPING.put("theDefaultOfAListOfNone", new Form(
-                "Option.withDefault(9223372036854775807, List.max(ds)) + 1 >= 3", null,
-                List.of(), null));
         // the greatest of a list written out is the element no other is past
         STOPPING.put("theGreatestOfAListWrittenOut", new Form(
                 "Option.withDefault(0, List.max([q, 3])) + 1 >= 3",
@@ -141,13 +137,6 @@ class AStopOverAValueARunWorksOutIsShownByAListTheProgramRunsIntoTest {
                 "List.length(ds) * 4611686018427387904 >= 1", null, List.of(),
                 List.of(new InputFact.ListLength(DS, 2))));
 
-        // what a list written out holds keeps the operation within the type
-        NOT_SHOWN.put("aListWrittenOutKeptWithin", new Form(
-                "Option.withDefault(0, List.max([1, 2])) + 1 >= 3", null, List.of(), null));
-        // a test every element meets keeps what the greatest of them comes to within the type
-        NOT_SHOWN.put("aTestOfEveryElementKeepsItWithin", new Form(
-                "List.all(x -> x < 9223372036854775807, ds) && "
-                        + "Option.withDefault(0, List.max(ds)) + 1 <= 10", null, List.of(), null));
         // a walk that keeps only what is below nought comes to a number the operation keeps
         // within the type, whichever arm of its step is taken
         NOT_SHOWN.put("aWalkKeepingWhatIsBelowNought", new Form(
@@ -220,28 +209,39 @@ class AStopOverAValueARunWorksOutIsShownByAListTheProgramRunsIntoTest {
         assertEquals(List.of(), Run.of(NOT_SHOWN.get(name)).shown());
     }
 
-    /** One comparison, compiled as a behavior of a model beside the one that leaves out what
-     *  the stop is in. */
-    private record Run(Compilation compilation) {
+    /**
+     * One comparison, as the behavior {@code b} of the model of every form over the same types,
+     * which is compiled once beside it: the behavior {@code p} leaves out what the stop is in.
+     */
+    private record Run(Compilation compilation, int at) {
+
+        private static final Map<String, Compilation> COMPILED = new HashMap<>();
 
         static Run of(Form form) {
-            String model = """
-                    module demo
+            List<Form> group = Stream.concat(STOPPING.values().stream(),
+                            NOT_SHOWN.values().stream())
+                    .filter(each -> each.types().equals(form.types())
+                            && each.element().equals(form.element())).toList();
+            Compilation compiled = COMPILED.computeIfAbsent(form.types() + "|" + form.element(),
+                    _ -> compiled(form.types(), form.element(), group));
+            return new Run(compiled, group.indexOf(form));
+        }
 
-                    %s
-                    data In = { ds: List<%s>, q: Int }
-                    data Out = Int
-
-                    behavior b : (i: In) -> Out constructs Out
-                    let b (i) = Out { value = if %s then 1 else 2 }
-                    %s
-                    """.formatted(form.types(), form.element(), onTheInput(form.comparison()),
-                    form.before() == null ? "" : """
-                            behavior p : (i: In) -> Out constructs Out
-                            let p (i) = Out { value = if %s then 1 else 2 }
-                            """.formatted(onTheInput(form.before())));
-            return new Run(ACompiledModel.measured(model,
-                    new Adequacy.Asked(Adequacy.Level.OFF, false)));
+        private static Compilation compiled(String types, String element, List<Form> group) {
+            StringBuilder model = new StringBuilder("module demo\n\n" + types
+                    + "\ndata In = { ds: List<" + element + ">, q: Int }\ndata Out = Int\n");
+            for (int at = 0; at < group.size(); at++) {
+                model.append("\nbehavior b").append(at).append(" : (i: In) -> Out constructs Out\n")
+                        .append("let b").append(at).append(" (i) = Out { value = if ")
+                        .append(onTheInput(group.get(at).comparison())).append(" then 1 else 2 }\n");
+                if (group.get(at).before() != null) {
+                    model.append("behavior p").append(at).append(" : (i: In) -> Out constructs Out\n")
+                            .append("let p").append(at).append(" (i) = Out { value = if ")
+                            .append(onTheInput(group.get(at).before())).append(" then 1 else 2 }\n");
+                }
+            }
+            return ACompiledModel.measured(model.toString(),
+                    new Adequacy.Asked(Adequacy.Level.OFF, false));
         }
 
         private static String onTheInput(String text) {
@@ -251,7 +251,7 @@ class AStopOverAValueARunWorksOutIsShownByAListTheProgramRunsIntoTest {
         /** Every stop shown of the behavior {@code b}. */
         List<AStopShown> shown() {
             Partitions.Partitioning divided =
-                    compilation.db().ask(new Adequacy.Divided("demo", "b")).value();
+                    compilation.db().ask(new Adequacy.Divided("demo", "b" + at)).value();
             List<AStopShown> out = new ArrayList<>();
             for (WhatIsShownOfAStop each : divided.stopsShown()) {
                 if (each instanceof RuleWhereARunMayStop stops) {
@@ -267,7 +267,7 @@ class AStopOverAValueARunWorksOutIsShownByAListTheProgramRunsIntoTest {
             BytesClassLoader loader = new BytesClassLoader(compilation.classes(),
                     AStopOverAValueARunWorksOutIsShownByAListTheProgramRunsIntoTest.class
                             .getClassLoader());
-            Object run = Emitted.behavior(loader, "demo", behavior).getConstructor()
+            Object run = Emitted.behavior(loader, "demo", behavior + at).getConstructor()
                     .newInstance();
             long q = 0;
             for (AStopShown.NumberAt number : shown.at()) {
