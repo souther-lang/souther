@@ -272,6 +272,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
          * are equal where they are the same node, as two stops of a run are the same only where
          * they are worked out at the same place. What an operation is as a number, wherever it is
          * worked out, is {@link IntOperation#sameOperationAs}.
+         *
+         * <p>The node is where the operation is told, and the operation may stop anywhere in what
+         * that node works out: a product, or a total over a list, stops in the middle of its
+         * node, not at its own step. So an operation is after another place only where the whole
+         * of its node is ({@link EvaluationPlaces#comesAfter}), and never by
+         * {@link EvaluationPlaces#isWorkedOutAfter}, which says where a node's own step stands
+         * and is for a quotient's divisor.
          */
         static final class Origin {
 
