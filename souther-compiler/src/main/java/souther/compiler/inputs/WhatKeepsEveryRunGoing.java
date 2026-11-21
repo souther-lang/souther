@@ -30,15 +30,26 @@ import java.util.Set;
  * holding, is shown to stop ({@code asFarOutAsCanBe}). That is a claim about the region, so it is
  * made once the region is whole and never of a bound alone.
  *
+ * <p>That a value of the input holds every declaration at once is shown by a reading over the
+ * places its own declarations hold ({@code shownTogether}), and is a third fact, kept apart from
+ * the bounds: readings put together hold every one of theirs, and the region is said only where
+ * one of them holds all it declares on ({@link #heldTogether}), which is asked once every reading
+ * of the rule is put together, whatever order they came in.
+ *
  * @param bounds          the declarations, each data and side once
  * @param asFarOutAsCanBe the bounds of {@code bounds} as far out as one can be
+ * @param shownTogether   each set of what is declared on that a value of the input was shown to
+ *                        hold at once, every combination of what its rules leave the places of
+ *                        each being held
  */
 public record WhatKeepsEveryRunGoing(Set<ABoundThatKeepsEveryRunGoing> bounds,
-                                     Set<ABoundThatKeepsEveryRunGoing> asFarOutAsCanBe) {
+                                     Set<ABoundThatKeepsEveryRunGoing> asFarOutAsCanBe,
+                                     Set<Set<ABoundThatKeepsEveryRunGoing.Holder>> shownTogether) {
 
     public WhatKeepsEveryRunGoing {
         bounds = Collections.unmodifiableSequencedSet(new LinkedHashSet<>(bounds));
         asFarOutAsCanBe = Set.copyOf(asFarOutAsCanBe);
+        shownTogether = Set.copyOf(shownTogether);
         if (bounds.stream().map(ABoundThatKeepsEveryRunGoing::side).distinct().count()
                 != bounds.size() || !keepsEveryDataAValue(bounds)) {
             throw new IllegalArgumentException("a region declares each data and side once, and"
@@ -51,11 +62,22 @@ public record WhatKeepsEveryRunGoing(Set<ABoundThatKeepsEveryRunGoing> bounds,
     }
 
     /**
-     * The region {@code asked} declare, each data and side bounded by the tightest of them, with
-     * nothing yet said of how far out — or none where that leaves some data no value.
+     * The region one reading's {@code asked} declare, each data and side bounded by the tightest of
+     * them, a value of the input shown to hold all they declare on at once, with nothing yet said
+     * of how far out — or none where that leaves some data no value.
      */
     public static Optional<WhatKeepsEveryRunGoing> of(
             Collection<ABoundThatKeepsEveryRunGoing> asked) {
+        Set<ABoundThatKeepsEveryRunGoing.Holder> declaredOn = new LinkedHashSet<>();
+        asked.forEach(each -> declaredOn.add(each.holder()));
+        return tightest(asked, Set.of(declaredOn));
+    }
+
+    /** The region {@code asked} declare, each data and side bounded by the tightest of them, with
+     *  {@code shown} — or none where that leaves some data no value. */
+    private static Optional<WhatKeepsEveryRunGoing> tightest(
+            Collection<ABoundThatKeepsEveryRunGoing> asked,
+            Set<Set<ABoundThatKeepsEveryRunGoing.Holder>> shown) {
         Map<ABoundThatKeepsEveryRunGoing.Side, ABoundThatKeepsEveryRunGoing> tightest =
                 new LinkedHashMap<>();
         for (ABoundThatKeepsEveryRunGoing each : asked) {
@@ -63,59 +85,58 @@ public record WhatKeepsEveryRunGoing(Set<ABoundThatKeepsEveryRunGoing> bounds,
         }
         return keepsEveryDataAValue(tightest.values())
                 ? Optional.of(new WhatKeepsEveryRunGoing(new LinkedHashSet<>(tightest.values()),
-                        Set.of()))
+                        Set.of(), shown))
                 : Optional.empty();
     }
 
     /** The same region, with {@code farOut}, bounds of it, said as far out as each can be. */
     public WhatKeepsEveryRunGoing asFarOutAsCanBe(Set<ABoundThatKeepsEveryRunGoing> farOut) {
-        return new WhatKeepsEveryRunGoing(bounds, farOut);
+        return new WhatKeepsEveryRunGoing(bounds, farOut, shownTogether);
     }
 
     /**
      * What two readings of one rule say of the region, as one: the declarations of both, each data
-     * and side bounded by the tighter, so that a run within it is within each — and none where
-     * either says none, a run of that reading being one no declaration said keeps going, or where
-     * the two together leave some data no value. How far out a bound goes is shown of one region,
-     * and stands only where the two together are that region, whatever order either met its
-     * declarations in.
+     * and side bounded by the tighter, so that a run within it is within each, and every set of
+     * what is declared on either was shown to hold at once — and none where either says none, a
+     * run of that reading being one no declaration said keeps going, or where the two together
+     * leave some data no value. How far out a bound goes is shown of one region, and stands only
+     * where the two together are that region, whatever order either met its declarations in.
      *
-     * <p>That a value of the input holds every declaration together was shown of each reading's
-     * own, over the places its declarations hold. Two that declare on what neither alone does
-     * hold places no reading asked together, and a clause may tie them: none is said of them.
-     * Where the two together declare on what one of them does, they hold its places, and only
-     * tighter.
+     * <p>Nothing here asks whether a value holds them all at once ({@link #heldTogether}): that is
+     * of every reading of the rule, and a reading put in later may be the one that shows it. So
+     * putting readings together comes to one region whatever order they are put in.
      */
     public static Optional<WhatKeepsEveryRunGoing> together(Optional<WhatKeepsEveryRunGoing> one,
                                                             Optional<WhatKeepsEveryRunGoing> other) {
         if (one.isEmpty() || other.isEmpty()) {
             return Optional.empty();
         }
-        Set<ABoundThatKeepsEveryRunGoing.Holder> declaredOn = new LinkedHashSet<>(
-                one.get().declaredOn());
-        declaredOn.addAll(other.get().declaredOn());
-        if (!declaredOn.equals(one.get().declaredOn())
-                && !declaredOn.equals(other.get().declaredOn())) {
-            return Optional.empty();
-        }
         Set<ABoundThatKeepsEveryRunGoing> both = new LinkedHashSet<>(one.get().bounds);
         both.addAll(other.get().bounds);
-        return of(both).map(region -> {
-            Set<ABoundThatKeepsEveryRunGoing> farOut = new LinkedHashSet<>();
+        Set<Set<ABoundThatKeepsEveryRunGoing.Holder>> shown =
+                new LinkedHashSet<>(one.get().shownTogether);
+        shown.addAll(other.get().shownTogether);
+        return tightest(both, shown).map(region -> {
+            Set<ABoundThatKeepsEveryRunGoing> standing = new LinkedHashSet<>();
             for (WhatKeepsEveryRunGoing each : List.of(one.get(), other.get())) {
                 if (each.bounds.equals(region.bounds)) {
-                    farOut.addAll(each.asFarOutAsCanBe);
+                    standing.addAll(each.asFarOutAsCanBe);
                 }
             }
-            return region.asFarOutAsCanBe(farOut);
+            return region.asFarOutAsCanBe(standing);
         });
     }
 
-    /** What the bounds are declared on. */
-    private Set<ABoundThatKeepsEveryRunGoing.Holder> declaredOn() {
-        Set<ABoundThatKeepsEveryRunGoing.Holder> out = new LinkedHashSet<>();
-        bounds.forEach(each -> out.add(each.holder()));
-        return out;
+    /**
+     * Whether a value of the input was shown to hold every declaration of the region at once: one
+     * reading showed it of all they declare on, and the bounds the others add are of the same
+     * places, each only tighter. Asked of the region of every reading of a rule put together, and
+     * the region is said only where it holds.
+     */
+    public boolean heldTogether() {
+        Set<ABoundThatKeepsEveryRunGoing.Holder> declaredOn = new LinkedHashSet<>();
+        bounds.forEach(each -> declaredOn.add(each.holder()));
+        return shownTogether.stream().anyMatch(shown -> shown.containsAll(declaredOn));
     }
 
     /** Whether {@code bound} is as far out as a bound of this region can be. */

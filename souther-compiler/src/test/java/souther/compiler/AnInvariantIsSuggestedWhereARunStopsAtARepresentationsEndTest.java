@@ -346,6 +346,27 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
         assertEquals(List.of(), suggested(report), report);
     }
 
+    /** Readings that bound one field each are said together where another reading of the rule
+     *  showed a value holding both at once, whichever order they came in. */
+    @Test
+    void readingsBoundingAFieldEachAreSaidWhereAnotherShowsBothTogether() {
+        String report = report("""
+                module m
+
+                data P = { x: Int, y: Int }
+
+                let h (a: Int, b: Int): Bool = a + 1 > b + 1
+
+                behavior f : (p: P) -> Bool
+                let f (p) = h(p.x, 0) && h(0, p.y) && h(p.x, p.y)
+                """);
+
+        assertEquals(Set.of("invariant x <= 9223372036854775806` on m.P",
+                        "invariant y <= 9223372036854775806` on m.P"),
+                Set.copyOf(suggested(report).stream().map(line -> line.substring(
+                        line.indexOf("invariant"), line.indexOf(" keeps"))).toList()), report);
+    }
+
     /** A bound a record's clause on the same field leaves no value beside is no region. */
     @Test
     void aBoundARecordsClauseLeavesNoValueBesideIsNoRegion() {

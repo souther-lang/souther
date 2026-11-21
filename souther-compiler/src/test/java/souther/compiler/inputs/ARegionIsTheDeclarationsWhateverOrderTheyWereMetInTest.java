@@ -9,6 +9,8 @@ import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Two readings of one rule that declare the same bounds, met in another order, are one region,
@@ -23,6 +25,31 @@ class ARegionIsTheDeclarationsWhateverOrderTheyWereMetInTest {
         return new ABoundThatKeepsEveryRunGoing(
                 new ABoundThatKeepsEveryRunGoing.Holder.AParameter(parameter, "Int"), atMost,
                 BigInteger.valueOf(at), new ObservedValue.Integer(at), OPEN);
+    }
+
+    /** Readings put together in any order come to one region, and a value holding all of it at
+     *  once is shown wherever one reading showed it of everything the region declares on, put in
+     *  first or last — and nowhere none did. */
+    @Test
+    void readingsPutTogetherInAnyOrderComeToOneRegion() {
+        ABoundThatKeepsEveryRunGoing x = on("x", true, 10);
+        ABoundThatKeepsEveryRunGoing y = on("y", true, 20);
+        WhatKeepsEveryRunGoing ofX = WhatKeepsEveryRunGoing.of(List.of(x)).orElseThrow();
+        WhatKeepsEveryRunGoing ofY = WhatKeepsEveryRunGoing.of(List.of(y)).orElseThrow();
+        WhatKeepsEveryRunGoing ofBoth = WhatKeepsEveryRunGoing.of(List.of(x, y)).orElseThrow();
+
+        for (List<WhatKeepsEveryRunGoing> order : List.of(List.of(ofX, ofY, ofBoth),
+                List.of(ofX, ofBoth, ofY), List.of(ofY, ofX, ofBoth), List.of(ofY, ofBoth, ofX),
+                List.of(ofBoth, ofX, ofY), List.of(ofBoth, ofY, ofX))) {
+            Optional<WhatKeepsEveryRunGoing> region = Optional.of(order.getFirst());
+            for (WhatKeepsEveryRunGoing each : order.subList(1, 3)) {
+                region = WhatKeepsEveryRunGoing.together(region, Optional.of(each));
+            }
+            assertEquals(Set.of(x, y), region.orElseThrow().bounds(), order.toString());
+            assertTrue(region.orElseThrow().heldTogether(), order.toString());
+        }
+        assertFalse(WhatKeepsEveryRunGoing.together(Optional.of(ofX), Optional.of(ofY))
+                .orElseThrow().heldTogether());
     }
 
     @Test
