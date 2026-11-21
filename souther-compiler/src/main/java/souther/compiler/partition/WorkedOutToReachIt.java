@@ -768,6 +768,11 @@ final class WorkedOutToReachIt {
         return ownWorkingEndsNoRun(value, question) && partsAndNamesEndNoRun(value, question);
     }
 
+    /** How many ways a stop is looked for by at one site, and so the most that are made of a value:
+     *  the one figure the search of a site is given. */
+    private static final int MOST_WAYS_LOOKED_AT =
+            CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT.maximum();
+
     /** The ends of an {@code Int}, which a total of whole numbers and each operation of them
      *  answers within. */
     private static final WhereAnOperatorAnswers.WhereItsExactValueIsHeld AN_INT =
@@ -1521,6 +1526,11 @@ final class WorkedOutToReachIt {
                 case ValuesHeld.At(TermPath at) -> attainmentsAtAPlace(at, arms);
                 case ValuesHeld.MayStandAt _, ValuesHeld.NotAPosition _ -> List.of();
             };
+        }
+        // A stop is looked for by no more ways than the figure of the search allows
+        // ({@link StopAssessment}), and each of these is made of a comparison with every other.
+        if (written.size() > MOST_WAYS_LOOKED_AT) {
+            return List.of();
         }
         List<Attainment> each = new ArrayList<>(written.size());
         for (Denotation element : written) {

@@ -356,8 +356,12 @@ final class AValueOfTheInput {
     }
 
     /**
-     * What a list at {@code at} holds of how many it has: any whole number from nought, and a run
-     * of the numbers its element holds where its one element is asked, put on
+     * What a list at {@code at} holds of how many it has: every whole number from nought to the
+     * most a list holds ({@link NumericTerm#reachBounds}, which the term of its size states and
+     * which is no number of the model's), where an element of it is shown to exist, and none but
+     * nought where it is not. A list of some elements is a list of values of the type of its
+     * elements, so it exists only where a value of that type does ({@link #aValueIsShownToExist}).
+     * Where its one element is asked, the run of the numbers that element holds, put on
      * {@code lists}. A list is a value wherever no clause is written on the name it is held
      * under; and a set is one with a number of elements of its own, which is no list's. Null where
      * that is not shown.
@@ -366,6 +370,12 @@ final class AValueOfTheInput {
         if (!(view.shape() instanceof Shape.Sequence(Shape.Sequence.Kind kind, Type element))
                 || kind != Shape.Sequence.Kind.LIST
                 || !view.wrappers().stream().allMatch(name -> writesNoClause(name, read.rules()))) {
+            return null;
+        }
+        NumericTerm size = howMany(at, read);
+        FormRange limit = size == null ? null : FormRange.endsOf(size, read);
+        BigInteger most = limit == null ? null : limit.greatest().floor().orNull();
+        if (most == null) {
             return null;
         }
         if (lists.elements.contains(at)) {
@@ -382,7 +392,8 @@ final class AValueOfTheInput {
             }
             lists.elementRuns.put(at, run);
         }
-        return new WholeRun(BigInteger.ZERO, null);
+        return new WholeRun(BigInteger.ZERO, aValueIsShownToExist(element, read) ? most
+                : BigInteger.ZERO);
     }
 
     /**

@@ -32,6 +32,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 /**
  * Whether a run stops in each operation a comparison works out: shown not to, shown to, or
@@ -559,36 +560,95 @@ final class StopAssessment {
         // What the site is over, as numbers of the input: where it is over a value a run works out,
         // by each way a row makes that value come to a number, which a stop is looked for by in
         // turn.
-        List<Attainment> attained = switch (site) {
-            case Site.PastItsEnds(var operation) -> operation.overTheInputAttained();
-            case Site.ByNought(var divisor) -> divisor == null ? List.of()
-                    : List.of(Attainment.always(divisor));
+        // One figure is spent for the whole site: every value tried is one unit of it, and so is
+        // every way beyond the first, which is the site as it stands. What a site costs is no
+        // product of the ways and the values.
+        Tries tries = new Tries();
+        List<Judgement> judged = new ArrayList<>();
+        Predicate<Attainment> lookFor = how -> {
+            if (!judged.isEmpty() && !tries.spend()) {
+                return false;
+            }
+            Judgement one = aStopAttainedBy(how, site, others, quotients, kept, way, read, tries);
+            judged.add(one);
+            return !(one instanceof Judgement.Stops);
         };
-        if (attained.isEmpty()) {
+        switch (site) {
+            case Site.PastItsEnds(var operation) -> operation.forEachAttained(lookFor);
+            case Site.ByNought(var divisor) -> {
+                if (divisor != null) {
+                    lookFor.test(Attainment.always(divisor));
+                }
+            }
+        }
+        if (judged.isEmpty()) {
             return new Judgement.Unresolved(site, WhyAStopIsNotShown.NOT_OVER_THE_INPUT);
         }
-        Judgement notShown = null;
-        for (Attainment how : attained) {
-            Judgement one = aStopAttainedBy(how, site, others, quotients, kept, way, read);
-            if (one instanceof Judgement.Stops) {
-                return one;
-            }
-            notShown = notShown == null ? one : notShown;
+        Judgement last = judged.getLast();
+        if (last instanceof Judgement.Stops) {
+            return last;
         }
-        return notShown;
+        // Where the figure ran out with ways or values left, more may be left untried, and that
+        // is said.
+        return tries.cutShort()
+                ? new Judgement.Unresolved(site,
+                        WhyAStopIsNotShown.NO_VALUE_FOUND_WITHIN_WHAT_IS_TRIED)
+                : judged.getFirst();
+    }
+
+    /**
+     * The one figure a site is searched by ({@link #MOST_VALUES_TRIED}): every value tried is one
+     * unit of it, and so is every way a stop is looked for by beyond the first, so what a site
+     * costs is no product of the ways and the values.
+     *
+     * <p>Cut short is where a unit was asked for and there was none, and not where the last was
+     * spent and the search was done: that a search used all it was given says nothing of whether
+     * it left anything.
+     */
+    private static final class Tries {
+
+        private int left = MOST_VALUES_TRIED;
+        private boolean refused;
+
+        /** Whether a unit is spent: one is, where there is one, and where there is none that is
+         *  asked for and refused. */
+        boolean spend() {
+            if (left <= 0) {
+                refused = true;
+                return false;
+            }
+            left--;
+            return true;
+        }
+
+        /** Whether none is left. */
+        boolean spent() {
+            return left <= 0;
+        }
+
+        /** That something was left undone for want of one. */
+        void leftSomethingUndone() {
+            refused = true;
+        }
+
+        boolean cutShort() {
+            return refused;
+        }
     }
 
     /**
      * That a run stops at {@code site}, which is over the numbers of the input as {@code how} says,
      * or why that is not shown: a value of the input is looked for that meets {@code way} and what
      * {@code how} holds, gets past {@code others} and {@code quotients}, and takes the site past
-     * its ends. {@code kept} are what that value is then held against.
+     * its ends. {@code kept} are what that value is then held against. Each value tried spends one
+     * of {@code tries}, which the site as a whole is given.
      */
     private static Judgement aStopAttainedBy(Attainment how, Site site,
                                              List<UndividedByARelation.IntOperation> others,
                                              List<LinearForm<NumericTerm>> quotients,
                                              List<UndividedByARelation.IntOperation> kept,
-                                             List<TakenConstraint.Affine> way, InputReading read) {
+                                             List<TakenConstraint.Affine> way, InputReading read,
+                                             Tries tries) {
         List<TakenConstraint.Affine> holding = new ArrayList<>(way);
         holding.addAll(how.holding());
         List<LinearForm<NumericTerm>> forms = new ArrayList<>();
@@ -623,14 +683,13 @@ final class StopAssessment {
             return new Judgement.Unresolved(site, WhyAStopIsNotShown.NO_VALUE_SHOWN);
         }
         holding.addAll(declared.get().constraints());
-        int[] tries = {MOST_VALUES_TRIED};
         Before before = new Before(how.form(), others, quotients, holding, declared.get());
         Shown shown = aValueItStopsAt(site, before, List.copyOf(numbers), read, tries);
         if (shown != null) {
             return new Judgement.Stops(againstWhatIsKept(shown, kept));
         }
         // Where the values ran out with the figure, more may be left untried, and that is said.
-        return new Judgement.Unresolved(site, tries[0] <= 0
+        return new Judgement.Unresolved(site, tries.cutShort()
                 ? WhyAStopIsNotShown.NO_VALUE_FOUND_WITHIN_WHAT_IS_TRIED
                 : WhyAStopIsNotShown.NO_VALUE_FOUND);
     }
@@ -710,16 +769,20 @@ final class StopAssessment {
      * tried spends one of {@code left}, and none is tried once it is spent.
      */
     private static Shown aValueItStopsAt(Site site, Before before, List<NumericTerm> numbers,
-                                         InputReading read, int[] left) {
+                                         InputReading read, Tries left) {
         LinearForm<NumericTerm> form = before.site();
         List<TakenConstraint.Affine> way = before.way();
         Map<NumericTerm, List<ExactRatio>> tried = new LinkedHashMap<>();
         for (NumericTerm number : numbers) {
             tried.put(number, valuesToTry(number, way, read));
         }
-        // A form of no number comes to its constant whatever the input holds: what is looked for
-        // is a value on the way.
+        // A form of no number comes to its constant whatever the input holds: it stops a run at
+        // every value or at none, so that what is looked for is a value on the way, and only where
+        // the constant is one the site stops at.
         if (form.coefs().isEmpty()) {
+            if (!stopsAtTheSite(site, form.constant())) {
+                return null;
+            }
             return tryingEach(numbers, 0, new LinkedHashMap<>(), tried, left,
                     values -> stopsAt(site, before, values) ? new Shown(site, values) : null);
         }
@@ -730,7 +793,9 @@ final class StopAssessment {
                         : operation.least().subtract(BigInteger.ONE);
                 case Site.ByNought _ -> BigInteger.ZERO;
             };
-            for (NumericTerm free : form.coefs().keySet()) {
+            List<NumericTerm> frees = List.copyOf(form.coefs().keySet());
+            for (int which = 0; which < frees.size(); which++) {
+                NumericTerm free = frees.get(which);
                 List<NumericTerm> rest = numbers.stream().filter(each -> !each.equals(free))
                         .toList();
                 Shown found = tryingEach(rest, 0, new LinkedHashMap<>(), tried, left, values -> {
@@ -743,8 +808,16 @@ final class StopAssessment {
                     at.put(free, put);
                     return stopsAt(site, before, at) ? new Shown(site, at) : null;
                 });
-                if (found != null || left[0] <= 0) {
+                if (found != null) {
                     return found;
+                }
+                // Where the figure is spent with another number to put the value at, or the other
+                // side of the ends to look at, those are left undone.
+                if (left.spent()) {
+                    if (which < frees.size() - 1 || above) {
+                        left.leftSomethingUndone();
+                    }
+                    return null;
                 }
             }
         }
@@ -761,20 +834,23 @@ final class StopAssessment {
      *  for each, while {@code left} lasts, until it answers. */
     private static Shown tryingEach(List<NumericTerm> rest, int from,
                                     Map<NumericTerm, ExactRatio> values,
-                                    Map<NumericTerm, List<ExactRatio>> tried, int[] left,
+                                    Map<NumericTerm, List<ExactRatio>> tried, Tries left,
                                     Asking ask) {
         if (from == rest.size()) {
-            if (left[0] <= 0) {
-                return null;
-            }
-            left[0]--;
-            return ask.at(values);
+            return left.spend() ? ask.at(values) : null;
         }
-        for (ExactRatio value : tried.get(rest.get(from))) {
-            values.put(rest.get(from), value);
+        List<ExactRatio> tryAt = tried.get(rest.get(from));
+        for (int at = 0; at < tryAt.size(); at++) {
+            values.put(rest.get(from), tryAt.get(at));
             Shown found = tryingEach(rest, from + 1, values, tried, left, ask);
-            if (found != null || left[0] <= 0) {
+            if (found != null) {
                 return found;
+            }
+            if (left.spent()) {
+                if (at < tryAt.size() - 1) {
+                    left.leftSomethingUndone();
+                }
+                return null;
             }
         }
         values.remove(rest.get(from));
@@ -829,11 +905,16 @@ final class StopAssessment {
             }
         }
         ExactRatio comes = WholeValuesMeeting.valueOf(before.site(), at);
-        boolean stops = comes != null && switch (site) {
+        return comes != null && stopsAtTheSite(site, comes) && before.declared().tiesHoldAt(at);
+    }
+
+    /** Whether a run that works {@code site} out as {@code comes} stops there: past the ends of
+     *  its operation, or with the divisor at nought. */
+    private static boolean stopsAtTheSite(Site site, ExactRatio comes) {
+        return switch (site) {
             case Site.PastItsEnds(var operation) -> !withinItsEnds(comes, operation);
             case Site.ByNought _ -> comes.signum() == 0;
         };
-        return stops && before.declared().tiesHoldAt(at);
     }
 
     private static boolean withinItsEnds(ExactRatio value,
@@ -887,6 +968,22 @@ final class StopAssessment {
                 out.add(ExactRatio.of(each));
             }
         }
-        return out.stream().filter(each -> ends == null || within(each, ends)).toList();
+        return out.stream().filter(each -> ends == null || within(each, ends))
+                .filter(each -> holdsOfItAlone(number, each, way)).toList();
+    }
+
+    /** Whether every condition of {@code way} over {@code number} alone holds with it at
+     *  {@code value}: one that does not is a value no run on the way has, so it is not tried. */
+    private static boolean holdsOfItAlone(NumericTerm number, ExactRatio value,
+                                          List<TakenConstraint.Affine> way) {
+        Map<NumericTerm, ExactRatio> at = Map.of(number, value);
+        for (TakenConstraint.Affine condition : way) {
+            Map<NumericTerm, ExactRatio> coefs = condition.form().coefs();
+            if (coefs.size() == 1 && coefs.containsKey(number)
+                    && !WholeValuesMeeting.holdsAt(condition, at)) {
+                return false;
+            }
+        }
+        return true;
     }
 }

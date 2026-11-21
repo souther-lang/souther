@@ -355,46 +355,65 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
 
         /**
-         * Each way this is over numbers of the input alone: as it is, where it is over nothing
-         * else, and otherwise by each way a row makes every value it is over come to a number
+         * Each way this is over numbers of the input alone, visited one at a time until
+         * {@code visit} answers that it wants no more: as it is, where it is over nothing else,
+         * and otherwise by each way a row makes every value it is over come to a number
          * ({@link Attainment}), with what a row meets for that. None where some value it is over
          * has no such way.
+         *
+         * <p>Put together as they are asked for and not all at once. The ways of several values
+         * are as many as the product of how many each has, and a reader that spends a figure on
+         * every one it looks at must not be handed the whole product before it has spent any.
          */
-        List<Attainment> overTheInputAttained() {
+        void forEachAttained(Predicate<Attainment> visit) {
             LinearForm<NumericTerm> alone = overTheInput();
             if (alone != null) {
-                return List.of(Attainment.always(alone));
+                visit.test(Attainment.always(alone));
+                return;
             }
-            List<Attainment> out = List.of(Attainment.always(LinearForm.constant(
-                    form.constant())));
-            for (Map.Entry<IntOperand, ExactRatio> operand : form.coefs().entrySet()) {
-                List<Attainment> ways = switch (operand.getKey()) {
+            List<Map.Entry<IntOperand, ExactRatio>> operands = List.copyOf(form.coefs().entrySet());
+            List<List<Attainment>> ways = new ArrayList<>(operands.size());
+            for (Map.Entry<IntOperand, ExactRatio> operand : operands) {
+                List<Attainment> some = switch (operand.getKey()) {
                     case IntOperand.OfTheInput(NumericTerm term) ->
                             List.of(Attainment.always(LinearForm.atom(term)));
                     case IntOperand.OfAValueWorkedOut worked -> worked.attainments();
                     default -> List.of();
                 };
-                if (ways.isEmpty()) {
-                    return List.of();
+                if (some.isEmpty()) {
+                    return;
                 }
-                List<Attainment> next = new ArrayList<>();
-                for (Attainment sofar : out) {
-                    for (Attainment way : ways) {
-                        LinearForm<NumericTerm> scaled = way.form().times(operand.getValue())
-                                .orNull();
-                        LinearForm<NumericTerm> sum = scaled == null ? null
-                                : sofar.form().plus(scaled).orNull();
-                        if (sum == null) {
-                            return List.of();
-                        }
-                        List<TakenConstraint.Affine> holding = new ArrayList<>(sofar.holding());
-                        holding.addAll(way.holding());
-                        next.add(new Attainment(sum, holding));
-                    }
-                }
-                out = next;
+                ways.add(some);
             }
-            return out;
+            puttingTogether(operands, ways, 0,
+                    Attainment.always(LinearForm.constant(form.constant())), visit);
+        }
+
+        /** Each way of the operands from {@code at} on, after {@code sofar}, visited in turn;
+         *  false where {@code visit} wants no more. A number the arithmetic cannot hold is a way
+         *  of none. */
+        private static boolean puttingTogether(List<Map.Entry<IntOperand, ExactRatio>> operands,
+                                               List<List<Attainment>> ways, int at,
+                                               Attainment sofar, Predicate<Attainment> visit) {
+            if (at == operands.size()) {
+                return visit.test(sofar);
+            }
+            for (Attainment way : ways.get(at)) {
+                LinearForm<NumericTerm> scaled = way.form().times(operands.get(at).getValue())
+                        .orNull();
+                LinearForm<NumericTerm> sum = scaled == null ? null
+                        : sofar.form().plus(scaled).orNull();
+                if (sum == null) {
+                    continue;
+                }
+                List<TakenConstraint.Affine> holding = new ArrayList<>(sofar.holding());
+                holding.addAll(way.holding());
+                if (!puttingTogether(operands, ways, at + 1, new Attainment(sum, holding),
+                        visit)) {
+                    return false;
+                }
+            }
+            return true;
         }
 
         /**
