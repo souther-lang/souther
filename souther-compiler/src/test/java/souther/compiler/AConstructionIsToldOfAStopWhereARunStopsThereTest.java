@@ -96,13 +96,62 @@ class AConstructionIsToldOfAStopWhereARunStopsThereTest {
         FORMS.put("anArmBesideEveryRun", new Form("TwoC", "Count",
                 "{ let m = if Decimal.compare(d, 0.0m) < 0 then Count(q) else Count(0) \n "
                         + "TwoC { a = m, b = Count(q), w = q <= 3 } }"));
-        // one in a function bound by a name, before the rule the function holds
+        // one in a function bound by a name, before the rule the function holds, which the one
+        // call applying it applies once
         FORMS.put("inANamedFunction", new Form("OneC", "Count",
                 "{ let f = x -> { let n = Count(x) \n n.value <= 3 } \n "
                         + "OneC { a = Count(0), w = List.all(f, [q]) } }"));
-        // which applications of the function a run makes before the rule is not read, so no run
-        // is shown to get to it
-        NOT_SHOWN.put("inANamedFunction", WhyAConstructionStopIsNotShown.REACH_NOT_SHOWN);
+        // the same applied to two elements, the second application coming after the first ran
+        // the body whole, so no run is shown to get to it first
+        FORMS.put("inANamedFunctionAppliedTwice", new Form("OneC", "Count",
+                "{ let f = x -> { let n = Count(x) \n n.value <= 3 } \n "
+                        + "OneC { a = Count(0), w = List.all(f, [q, q]) } }"));
+        NOT_SHOWN.put("inANamedFunctionAppliedTwice",
+                WhyAConstructionStopIsNotShown.REACH_NOT_SHOWN);
+        // the same written at one call, which a closure around it makes on each of two elements:
+        // one call written is not one application made, and the first ran the body whole
+        FORMS.put("inANamedFunctionAtOneCallMadeTwice", new Form("OneC", "Count",
+                "{ let p: (Int) -> Bool = x -> { let ok = x <= 3 \n let later = Count(x) \n "
+                        + "ok && later.value >= 0 } \n "
+                        + "OneC { a = Count(0), w = List.all(y -> List.all(p, [y]), [q, q]) } }"));
+        NOT_SHOWN.put("inANamedFunctionAtOneCallMadeTwice",
+                WhyAConstructionStopIsNotShown.REACH_NOT_SHOWN);
+        // one before a function bound by a name, on the way to the rule the function holds where
+        // the call applying it is
+        FORMS.put("beforeANamedFunction", new Form("OneC", "Count",
+                "{ let m = Count(q) \n let f = x -> x <= 3 \n "
+                        + "OneC { a = m, w = List.all(f, [q]) } }"));
+        // one in what a call applying a function bound by a name is handed, worked out before
+        // the call applies it
+        FORMS.put("inWhatTheCallIsHanded", new Form("OneC", "Count",
+                "{ let f = x -> x <= 3 \n OneC { a = Count(0), w = List.all(f, [Count(q).value]) } }"));
+        // the same function applied by two calls, and a construction between them, which only a
+        // run on the way to the rule by the second call gets to first
+        FORMS.put("beforeTwoCallsOfANamedFunction", new Form("OneC", "Count",
+                "{ let m = Count(q) \n let f = x -> x <= 3 \n "
+                        + "OneC { a = m, w = List.all(f, [q]) && List.any(f, [q]) } }"));
+        // which elements the applications of a function two calls hand values to are made on is
+        // not said, so that a run makes one whatever the row is is not shown
+        NOT_SHOWN.put("beforeTwoCallsOfANamedFunction",
+                WhyAConstructionStopIsNotShown.A_CONDITION_NOT_READ);
+        FORMS.put("betweenTwoCallsOfANamedFunction", new Form("CountFlag", "Count",
+                "{ let f = x -> x <= 3 \n let ok = List.all(f, [q]) \n let m = Count(q) \n "
+                        + "CountFlag { a = m, ok = ok, w = List.any(f, [q]) } }"));
+        // the first call, worked out before it by a run on the way by the second, applies a body
+        // the call does not hold, which may end the run for all that is read of it
+        NOT_SHOWN.put("betweenTwoCallsOfANamedFunction",
+                WhyAConstructionStopIsNotShown.SOMETHING_BEFORE_IT_MAY_STOP);
+        // the same with the second call made only where the first came out false: a run on the
+        // way by it stops at the construction for no value that comes out so, and one that stops
+        // there got to the rule by the first call already
+        FORMS.put("betweenTwoCallsTheSecondOnSomeRuns", new Form("CountFlag", "Count",
+                "{ let f = x -> x <= 3 \n let ok = List.all(f, [q]) \n let m = Count(q) \n "
+                        + "CountFlag { a = m, ok = ok, w = ok || List.any(f, [q]) } }"));
+        NOT_SHOWN.put("betweenTwoCallsTheSecondOnSomeRuns",
+                WhyAConstructionStopIsNotShown.SOMETHING_BEFORE_IT_MAY_STOP);
+        // one after a value is built whose template ends every run, before the rule
+        FORMS.put("afterAValueThatStops", new Form("OneC", "Count",
+                "{ let t = past \n let m = Count(q) \n OneC { a = m, w = q <= t } }"));
         // a construction over a place no rule on the way reads
         FORMS.put("overAPlaceNoRuleReads", new Form("OneC", "Count",
                 "OneC { a = Count(q), w = Decimal.compare(d, e) <= 0 }"));
@@ -184,6 +233,8 @@ class AConstructionIsToldOfAStopWhereARunStopsThereTest {
                 data OneS = { s: Small, w: Bool }
                 data OneH = { h: Held, w: Bool }
                 data TwoH = { a: Held, b: Held, w: Bool }
+
+                let past: Int = Int.abs(9223372036854775807) + 1
                 """);
         for (int at = 0; at < names.size(); at++) {
             Form form = FORMS.get(names.get(at));
