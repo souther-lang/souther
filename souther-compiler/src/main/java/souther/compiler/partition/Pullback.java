@@ -2260,7 +2260,8 @@ final class Pullback {
     /**
      * What a run gets past at {@code e}, apart from the closures written at it: on every run,
      * where it is a construction no clause of its type refuses
-     * ({@link WorkedOutToReachIt#aConstructionEndsNoRun}), comes to a number where it answers
+     * ({@link WorkedOutToReachIt#aConstructionEndsNoRun}), a reference to a value whose definition
+     * ends no run ({@link WorkedOutToReachIt#endsNoRun}), comes to a number where it answers
      * whatever its operands are ({@link #comesToWhereItAnswers}); else as the owner of what a node
      * ends a run for says ({@link WhatARunMayEndFor}). An operation answering where the collection
      * it answers fits is owed ({@link StopObligation}), and a reader asks how many its collections
@@ -2275,6 +2276,8 @@ final class Pullback {
     private GetsPast completionOf(Core e, InputReads reads) {
         boolean always = (Core.withoutStanding(e) instanceof Core.Construct made
                 && WorkedOutToReachIt.of(read).aConstructionEndsNoRun(made, reads))
+                || (Core.withoutStanding(e) instanceof Core.MaterialisedValue
+                        && WorkedOutToReachIt.of(read).endsNoRun(new Denotation(e, reads)))
                 || comesToWhereItAnswers(e, reads);
         if (always) {
             return new GetsPast.Always();
