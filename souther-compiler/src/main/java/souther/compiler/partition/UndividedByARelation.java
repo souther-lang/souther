@@ -8,7 +8,6 @@ import souther.compiler.check.ClauseRead;
 import souther.compiler.check.ContainerSizesUnderAWitness;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.Extreme;
-import souther.compiler.check.FieldDomains;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.PartId;
 import souther.compiler.check.ProjectionEvidence;
@@ -18,7 +17,6 @@ import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.Shape;
-import souther.compiler.check.SumCases;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
 import souther.compiler.check.ValueUniverse;
@@ -40,6 +38,8 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Position;
+import souther.compiler.inputs.RuleAddress;
+import souther.compiler.inputs.WhatKeepsEveryRunGoing;
 import souther.compiler.inputs.WhereAnEquationHolds;
 import souther.compiler.inputs.PositionBounds;
 import souther.compiler.inputs.Quantities;
@@ -318,7 +318,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
 
         /** Whether {@code other} is this operation told again: the same number held to the same
-         *  ends, whatever it is worked out after. */
+         *  ends, whatever it is worked out after. A question of what was told; whether a run that
+         *  stops at it stops in this as a finding says it is the site's
+         *  ({@code StopAssessment.Site#sameStopAs}). */
         boolean sameOperationAs(IntOperation other) {
             return form.equals(other.form) && least.equals(other.least)
                     && greatest.equals(other.greatest);
@@ -2325,6 +2327,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * end to give.
      */
     static boolean stopsNoRow(IntOperation operation, InputReading read) {
+        // A count of the months of one date comes to what the dates there do, which is no sum of
+        // what its year and its month come to apart.
+        FormRange counted = MonthCount.rangeOf(operation.overTheInput(), read);
+        if (counted != null) {
+            return counted.liesWithin(operation.least(), operation.greatest());
+        }
         Map<IntOperand, FormRange> ranges = new HashMap<>();
         for (IntOperand each : operation.form().coefs().keySet()) {
             FormRange range = each.range(read);
@@ -2922,8 +2930,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 rows.add(past);
                 List<EveryRunStops.Within> where = rowsWhere(rows, read, regions);
                 if (where != null && !where.isEmpty()) {
-                    out.add(new EveryRunStops(written(it.form()), where,
-                            it.ofTheRepresentation() ? keepingEveryRunGoing(where, read) : null));
+                    out.add(new EveryRunStops(written(it.form()), where));
                 }
             }
         }
@@ -2931,48 +2938,239 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * The bound on the input that keeps every run from the rows {@code where}: where they are the
-     * values of one place an input holds from some value on, or up to some value, that place held
-     * on the other side of it — or null where they are anything else, the place is held by no data
-     * an invariant can be declared on, or its values are no whole numbers or dates.
+     * The bounds on the input that keep every run getting to the comparison from stopping in what
+     * it works out, wherever it works it out ({@code worked}): for each place and side, the
+     * furthest out a bound on the values of that place can be with every operation that may stop
+     * a run over that place alone and within its type wherever the place is within the bound.
      *
-     * <p>The data is the place's own type where it is written under a name ({@code data Today =
-     * Date}), whose invariant names it as its value, and otherwise the record the place is a field
-     * of. A place that is a parameter of no such type is held by nothing an author declares.
+     * <p>Said only where every stop a run may meet is said among {@code worked}
+     * ({@link StopEvidence#everyStopSaid}), and every operation of them that may stop a run stops
+     * where the representation of its number does and is over the values of one place — its
+     * number weighed, or the count of the month its dates fall in ({@link MonthCount}). A bound
+     * value an operation is over is taken at the ends of what it takes. Nothing where any one is
+     * over several places or over a value a run works out, since no bound on one place keeps it
+     * within its type, or stops where the
+     * clauses of a type a construction makes leave the number, which the model states and no
+     * bound on the input is suggested for.
+     *
+     * <p>The bounds are one region, of what they are declared on ({@link WhatKeepsEveryRunGoing}):
+     * within all of them no run stops in what is told, wherever it is worked out, and a bound
+     * needed and not said leaves the region unsaid, since the rest keep no run from the stop it
+     * would. Each is declared beside what the rules already leave what it is declared on, as a
+     * value of the input is shown to hold it ({@link AValueOfTheInput#wholeNumbersAt}), and where
+     * that is not shown no region is said. How far out each goes is asked of the region once it is
+     * whole ({@code GuardThresholds}), and not here. Not said past every value the place holds.
+     *
+     * @return the region, of no bound where no stop asks one; empty where it is not said
      */
-    private static ABoundThatKeepsEveryRunGoing keepingEveryRunGoing(
-            List<EveryRunStops.Within> where, InputReading read) {
-        if (where.size() != 1
-                || !(where.getFirst().alone() instanceof NumericTerm.ValueOf value)
-                || (where.getFirst().least() == null) == (where.getFirst().greatest() == null)) {
+    static Optional<WhatKeepsEveryRunGoing> boundsThatKeepEveryRunGoing(
+            List<StopEvidence> worked, InputReading read) {
+        Map<TermPath, BigInteger[]> kept = new LinkedHashMap<>();
+        for (StopEvidence each : worked) {
+            if (!each.everyStopSaid()) {
+                return Optional.empty();
+            }
+            for (IntOperation it : each.operations().operations()) {
+                // Over a value a run works out, the operation is over no one place, and whether a
+                // run stops in it is the stop assessment's to say, not what that value's type is.
+                if (it.overAValueWorkedOut()) {
+                    return Optional.empty();
+                }
+                if (stopsNoRow(it, read)) {
+                    continue;
+                }
+                LinearForm<NumericTerm> atItsLeast = it.atItsEnd(false);
+                LinearForm<NumericTerm> atItsGreatest = it.atItsEnd(true);
+                if (!it.ofTheRepresentation() || atItsLeast == null || atItsGreatest == null
+                        || !keptWithin(atItsLeast, it.least(), null, kept)
+                        || !keptWithin(atItsGreatest, null, it.greatest(), kept)) {
+                    return Optional.empty();
+                }
+            }
+        }
+        // What each bound is declared on, and every place of the input those declarations hold:
+        // a value of the input has to be shown to hold them all together, beside the rules
+        // already written, and not each apart.
+        List<ABoundThatKeepsEveryRunGoing> out = new ArrayList<>();
+        Map<TermPath, ABoundThatKeepsEveryRunGoing.Holder> holders = new LinkedHashMap<>();
+        Set<TermPath> held = new LinkedHashSet<>();
+        for (TermPath place : kept.keySet()) {
+            ABoundThatKeepsEveryRunGoing.Holder holder = holderOf(place, read);
+            if (holder == null) {
+                return Optional.empty();
+            }
+            holders.put(place, holder);
+            held.addAll(placesHeldBy(holder, read));
+        }
+        Optional<Map<TermPath, AValueOfTheInput.WholeRun>> runs =
+                AValueOfTheInput.wholeNumbersAt(read, held);
+        if (runs.isEmpty()) {
+            return Optional.empty();
+        }
+        Map<ABoundThatKeepsEveryRunGoing.Holder, ABoundThatKeepsEveryRunGoing.Held> left =
+                new LinkedHashMap<>();
+        for (Map.Entry<TermPath, BigInteger[]> each : kept.entrySet()) {
+            ABoundThatKeepsEveryRunGoing.Holder holder = holders.get(each.getKey());
+            ABoundThatKeepsEveryRunGoing.Held range = heldBy(holder, runs.get(), read);
+            if (range == null) {
+                return Optional.empty();
+            }
+            left.put(holder, range);
+            for (boolean atMost : new boolean[] {false, true}) {
+                BigInteger bound = each.getValue()[atMost ? 1 : 0];
+                // Within what the rules and the order already leave every value: none is asked.
+                if (bound == null || range.within(bound, atMost)) {
+                    continue;
+                }
+                // Past the other end of it: declared, it leaves the data no value, which no
+                // declaration of the region keeps going.
+                if (range.past(bound, atMost)) {
+                    return Optional.empty();
+                }
+                ABoundThatKeepsEveryRunGoing one = aBoundOn(
+                        new NumericTerm.ValueOf(each.getKey()), bound, atMost, holder, read);
+                if (one == null) {
+                    return Optional.empty();
+                }
+                out.add(one);
+            }
+        }
+        // What each holder is left is said of the holders a bound is declared on alone.
+        left.keySet().retainAll(out.stream().map(ABoundThatKeepsEveryRunGoing::holder).toList());
+        return WhatKeepsEveryRunGoing.of(out, left);
+    }
+
+    /**
+     * The whole numbers a value of the input holds at every place {@code holder} holds, as
+     * {@code runs} say each, together — or null where it holds one they do not say. Each run is
+     * within what the place's order holds ({@link AValueOfTheInput#wholeNumbersAt}).
+     */
+    private static ABoundThatKeepsEveryRunGoing.Held heldBy(
+            ABoundThatKeepsEveryRunGoing.Holder holder,
+            Map<TermPath, AValueOfTheInput.WholeRun> runs, InputReading read) {
+        List<TermPath> places = placesHeldBy(holder, read);
+        if (places.isEmpty() || !runs.keySet().containsAll(places)) {
             return null;
         }
-        // From the least the run stops at up, so the place is held below it; or up to the
-        // greatest, so it is held above it.
-        boolean atMost = where.getFirst().least() != null;
-        BigInteger bound = atMost ? where.getFirst().least().subtract(BigInteger.ONE)
-                : where.getFirst().greatest().add(BigInteger.ONE);
+        BigInteger least = null;
+        BigInteger greatest = null;
+        for (TermPath place : places) {
+            AValueOfTheInput.WholeRun run = runs.get(place);
+            least = run.least() == null ? least : least == null ? run.least()
+                    : least.max(run.least());
+            greatest = run.greatest() == null ? greatest : greatest == null ? run.greatest()
+                    : greatest.min(run.greatest());
+        }
+        return new ABoundThatKeepsEveryRunGoing.Held(least, greatest);
+    }
+
+    /** The places of the input, reached from a parameter through fields alone, whose values an
+     *  invariant declared on {@code holder} bounds: those {@link #holderOf} says it holds. */
+    static List<TermPath> placesHeldBy(ABoundThatKeepsEveryRunGoing.Holder holder,
+                                       InputReading read) {
+        List<TermPath> out = new ArrayList<>();
+        for (Position each : read.domain().positions()) {
+            if (each.path().steps().stream().allMatch(TermPath.Step.Field.class::isInstance)
+                    && holder.equals(holderOf(each.path(), read))) {
+                out.add(each.path());
+            }
+        }
+        return out;
+    }
+
+    /**
+     * What an invariant bounding the values at {@code place} is declared on, or null where it is
+     * held by nothing one can be: the place's own type where it is written under a name
+     * ({@code data Today = Date}), whose invariant names it as the value itself, and otherwise the
+     * record the place is a field of, under what that record's rules call it
+     * ({@link RuleAddress#of}). A parameter whose type is a primitive is held by no data, and the
+     * bound is on a data of that type the author introduces for it.
+     *
+     * <p>The one answer to it: what a declaration bounds is asked of this, both ways.
+     */
+    static ABoundThatKeepsEveryRunGoing.Holder holderOf(TermPath place, InputReading read) {
+        Position position = read.domain().at(place);
+        if (position != null && position.view().outermostName() != null) {
+            return position.view().outermostName() instanceof TypeSymbol.AtModule named
+                    ? new ABoundThatKeepsEveryRunGoing.Holder.AData(named, RuleKey.THE_VALUE)
+                    : null;
+        }
+        if (place.steps().isEmpty()) {
+            return read.domain().typeAt(place, read.rules()) instanceof Type.Prim primitive
+                    ? new ABoundThatKeepsEveryRunGoing.Holder.AParameter(place.head(),
+                            primitive.shown())
+                    : null;
+        }
+        TermPath record = place.prefix(place.steps().size() - 1);
+        RuleAddress named = RuleAddress.of(record, place);
+        return named != null && read.domain().typeAt(record, read.rules())
+                instanceof Type.Ref(TypeSymbol.AtModule data)
+                ? new ABoundThatKeepsEveryRunGoing.Holder.AData(data, named.key()) : null;
+    }
+
+    /**
+     * Into {@code kept}, what {@code form} being from {@code least} or to {@code greatest} — the
+     * other null — asks of the one place it is over, met with what was there: whether it is that
+     * place's number weighed, or the count of the month of its dates, and some value of the place
+     * meets it.
+     */
+    private static boolean keptWithin(LinearForm<NumericTerm> form, BigInteger least,
+                                      BigInteger greatest, Map<TermPath, BigInteger[]> kept) {
+        BigInteger shift = wholeOf(form.constant());
+        if (shift == null || form.coefs().isEmpty()) {
+            return false;
+        }
+        BigInteger from = least == null ? null : least.subtract(shift);
+        BigInteger to = greatest == null ? null : greatest.subtract(shift);
+        TermPath place;
+        BigInteger[] days;
+        if (form.coefs().size() == 1
+                && form.coefs().keySet().iterator().next() instanceof NumericTerm.ValueOf value
+                && wholeOf(form.coefs().get(value)) instanceof BigInteger weight
+                && weight.signum() != 0) {
+            place = value.position();
+            BigInteger low = from == null ? null : weight.signum() > 0 ? ceilingOf(from, weight)
+                    : floorOf(from, weight);
+            BigInteger high = to == null ? null : weight.signum() > 0 ? floorOf(to, weight)
+                    : ceilingOf(to, weight);
+            days = weight.signum() > 0 ? new BigInteger[] {low, high}
+                    : new BigInteger[] {high, low};
+        } else if (MonthCount.placeCounted(new LinearForm<>(ExactRatio.ZERO, form.coefs()))
+                instanceof TermPath dates) {
+            place = dates;
+            days = MonthCount.daysWithin(from, to);
+            if (days == null) {
+                return false;
+            }
+        } else {
+            return false;
+        }
+        BigInteger[] ends = kept.computeIfAbsent(place, _ -> new BigInteger[2]);
+        if (days[0] != null) {
+            ends[0] = ends[0] == null ? days[0] : ends[0].max(days[0]);
+        }
+        if (days[1] != null) {
+            ends[1] = ends[1] == null ? days[1] : ends[1].min(days[1]);
+        }
+        return ends[0] == null || ends[1] == null || ends[0].compareTo(ends[1]) <= 0;
+    }
+
+    /**
+     * {@code bound} on the values of {@code value}'s place, from above where {@code atMost}, as
+     * the invariant an author declares it on {@code holder} — or null where the place's values are
+     * no whole numbers or dates. The caller has met the bound with what the holder is left
+     * ({@link #heldBy}), which is within what the place's order holds, so it is a value of the
+     * place.
+     */
+    private static ABoundThatKeepsEveryRunGoing aBoundOn(
+            NumericTerm.ValueOf value, BigInteger bound, boolean atMost,
+            ABoundThatKeepsEveryRunGoing.Holder holder, InputReading read) {
         TermOrders orders = read.quantities().ordersOf(value);
         Carrier carrier = orders == null ? null : orders.answered();
         ObservedValue at = carrier == null ? null
                 : carrier.valueOf(Count.of(new BigDecimal(bound)));
-        if (!(at instanceof ObservedValue.Integer || at instanceof ObservedValue.Temporal)) {
-            return null;
-        }
-        TermPath place = value.position();
-        Position position = read.domain().at(place);
-        if (position != null && position.view().outermostName() != null) {
-            return new ABoundThatKeepsEveryRunGoing(position.view().outermostName().name(),
-                    "value", atMost, at);
-        }
-        if (place.steps().isEmpty()
-                || !(place.steps().getLast() instanceof TermPath.Step.Field(String field))) {
-            return null;
-        }
-        TermPath record = TermPath.of(place.head(),
-                place.steps().subList(0, place.steps().size() - 1));
-        return read.domain().typeAt(record, read.rules()) instanceof Type.Ref(TypeSymbol data)
-                ? new ABoundThatKeepsEveryRunGoing(data.name(), field, atMost, at) : null;
+        return at instanceof ObservedValue.Integer || at instanceof ObservedValue.Temporal
+                ? new ABoundThatKeepsEveryRunGoing(holder, atMost, bound, at) : null;
     }
 
     /**
@@ -3540,7 +3738,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
             @Override
             public boolean leaveAValueOf(TypeSymbol leaf) {
-                return aValueIsShownToExist(Type.ref(leaf), read);
+                return AValueOfTheInput.aValueIsShownToExist(Type.ref(leaf), read);
             }
         };
     }
@@ -4444,7 +4642,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     && sides.get(at).madeOf().equals(List.of(FilingCoordinate.of(number)))
                     && (remainder == null || at != 0)
                     && (comesOut != null || WhatARelationLeavesUndivided.showsRowsEachWayOf(
-                            granularityOf(carriers.get(at)), constant, relation))) {
+                            granularityOf(carriers.get(at)), constant, relation)
+                            || settledAtEveryValue(leaves, at))) {
                 asked.add(at);
             }
         }
@@ -4467,6 +4666,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     ? WhatARelationLeavesUndivided.alongAWayThatDecidesIt(along.terms(), at,
                             constant, comesOut, granularityOf(carriers.get(at)),
                             greatestOf(carriers.get(at)), along.operations())
+                    : settledAtEveryValue(leaves, at)
+                    ? WhatARelationLeavesUndivided.ofASettledWholeNumber(along.terms().get(at),
+                            (WhatARelationLeavesUndivided.Leaves.Settled) leaves.get(at))
                     : WhatARelationLeavesUndivided.eachWayItComesOut(along.terms(), at, constant,
                             relation, FilingCoordinate::sharesAPlaceWith, along.independent(),
                             granularityOf(carriers.get(at)), greatestOf(carriers.get(at)),
@@ -4478,6 +4680,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         return out;
+    }
+
+    /** Whether the way's reading of the side at {@code at} settles it at whole numbers, which is
+     *  what says how a row at each of its values comes out ({@link
+     *  WhatARelationLeavesUndivided#ofASettledWholeNumber}). */
+    private static boolean settledAtEveryValue(List<WhatARelationLeavesUndivided.Leaves> leaves,
+                                               int at) {
+        return leaves != null && leaves.get(at)
+                instanceof WhatARelationLeavesUndivided.Leaves.Settled settled
+                && settled.whole();
     }
 
     /**
@@ -13568,7 +13780,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         for (Refinement narrowing : cases.atoms()) {
             if (!(there.admissionOf(narrowing) instanceof Admits.Admitted)
                     || (narrowing instanceof Refinement.SumCase sum
-                            && !aValueIsShownToExist(Type.ref(sum.leaf()), read))) {
+                            && !AValueOfTheInput.aValueIsShownToExist(Type.ref(sum.leaf()),
+                                    read))) {
                 return false;
             }
         }
@@ -13680,7 +13893,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * many such a container may hold. A rule reading the container for how many it holds is a
      * rule on the count, which the region holds. And the rules of the element's own type may
      * leave it no value, so past nought the run is taken only where a value of the element is
-     * shown to exist ({@link #aValueIsShownToExist}). A map's entry is a key as well as a value, and both are
+     * shown to exist ({@link AValueOfTheInput#aValueIsShownToExist}). A map's entry is a key as well as a value, and both are
      * asked each of these. Then a list of so many copies of one such value is a row
      * at every count the region leaves. A set, or the keys of a map, holds a value once, and how
      * many different values the element has is not asked here, so past one nothing is shown of
@@ -13747,7 +13960,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         int most;
         if (!anElementShown && !entry.stream().allMatch(part ->
-                aValueIsShownToExist(read.domain().typeAt(part, rules), read))) {
+                AValueOfTheInput.aValueIsShownToExist(read.domain().typeAt(part, rules),
+                        read))) {
             most = 0;
         } else if (apart.found) {
             most = writtenApart(container, read, wanted);
@@ -14016,39 +14230,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return ends == null || ends.low() == null || ends.high() == null
                 || ends.high().subtract(ends.low()).add(BigInteger.ONE)
                         .compareTo(GetsPast.MOST_ELEMENTS) > 0;
-    }
-
-    /**
-     * Whether some value of {@code type} is shown to exist: one no rule of its own is written on —
-     * a number, a string, a time, a container, which may hold nothing, an option, which may be
-     * none — or a declaration whose rules are shown to leave it one
-     * ({@link FieldDomains#shownToHoldAValue}), the name it is written under and the record it
-     * names alike. A sum, a tuple, or anything else, is not asked and shows nothing.
-     */
-    private static boolean aValueIsShownToExist(Type type, InputReading read) {
-        if (type == null) {
-            return false;
-        }
-        RuleReadingSource rules = read.rules();
-        if (TypeOps.outermost(type, rules.inners()) instanceof TypeOps.Unwrapped worn
-                && worn.layer().named() instanceof TypeSymbol.AtModule name
-                && !FieldDomains.of(name, read.ruleReading()).shownToHoldAValue()) {
-            return false;
-        }
-        return switch (TypeView.shapeOf(type, rules.inners(), rules.symbols(), rules.kinds(),
-                rules.sums())) {
-            case Shape.Scalar _, Shape.Unit _, Shape.Sequence _, Shape.Mapping _,
-                 Shape.Optional _ -> true;
-            case Shape.Product(TypeSymbol.AtModule record, var _) ->
-                    FieldDomains.of(record, read.ruleReading()).shownToHoldAValue();
-            // A sum holds a value where a case of it does and nothing of its own rules the value
-            // out: the case is a value of the sum.
-            case Shape.Sum(var _, SumCases.Cases reaches, var _) ->
-                    reaches.cases().stream().anyMatch(each ->
-                            each instanceof TypeSymbol.AtModule member
-                            && aValueIsShownToExist(Type.ref(member), read));
-            case null, default -> false;
-        };
     }
 
     /**

@@ -697,15 +697,29 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * @param stops   what a run making it works out there, for where a run stops in it
      * @param arms    what a run taking each arm of a choice the comparison is read through works
      *                out on it, where the application is made
+     * @param handed  what making each value it is handed works out, where the walk handing it is
+     *                entered ({@link ClosureApplications.Handed})
      */
     record OnAnApplication(Proposition reached, UndividedByARelation.Working working,
-                           StopEvidence stops, List<StopEvidence.OnAnArm> arms) {
+                           StopEvidence stops, List<StopEvidence.OnAnArm> arms,
+                           List<MadeByAWalk> handed) {
 
         OnAnApplication {
             Objects.requireNonNull(reached, "an application is made somewhere");
             Objects.requireNonNull(working, "and works something out");
             Objects.requireNonNull(stops, "and a run making it works something out");
             Objects.requireNonNull(arms, "and what it works out on each arm it takes, if any");
+            handed = List.copyOf(handed);
+        }
+    }
+
+    /** What making a value a walk hands an application works out, and where it is made: where
+     *  the container holds it, which every run there works out. */
+    record MadeByAWalk(StopEvidence stops, Proposition madeWhere) {
+
+        MadeByAWalk {
+            Objects.requireNonNull(stops, "making a value works something out");
+            Objects.requireNonNull(madeWhere, "and it is made somewhere");
         }
     }
 
@@ -729,8 +743,13 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 continue;
             }
             Pullback.OnTheInput onTheInput = conditions.comparison(comparison, one.reads(), read);
+            List<MadeByAWalk> handed = new ArrayList<>();
+            for (ClosureApplications.Handed each : one.handed()) {
+                handed.add(new MadeByAWalk(onTheInput.evaluating().apply(each.value()),
+                        each.madeWhere()));
+            }
             out.add(new OnAnApplication(one.reached(), workingOf(onTheInput),
-                    onTheInput.stops().get(), onTheInput.onTheArms().get()));
+                    onTheInput.stops().get(), onTheInput.onTheArms().get(), handed));
         }
         return Optional.of(out);
     }

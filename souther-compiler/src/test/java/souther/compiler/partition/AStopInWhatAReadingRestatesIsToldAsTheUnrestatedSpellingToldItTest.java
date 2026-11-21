@@ -30,11 +30,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
 
-    /** The note of {@code q + 1}. The input holds a value of a sum, which a value of the input is
-     *  not shown to exist over, so the stop is one not resolved, with the rows every run getting
-     *  there stops at. */
-    private static final String THE_STOP = "a run that gets there stops in q + 1 where q is at"
-            + " least 9223372036854775807, and no such run is shown to exist";
+    /** The note of {@code q + 1}. The number is a field of a record that writes a clause, and no
+     *  run its rules leave it is shown, so no value of the input is shown holding it and the stop
+     *  is one not resolved, with the rows every run getting there stops at. */
+    private static final String THE_STOP = "a run that gets there stops in k.q + 1 where k.q is"
+            + " at least 9223372036854775807, and no such run is shown to exist";
 
     private static final Map<String, String> CONDITIONS = new LinkedHashMap<>();
 
@@ -209,11 +209,12 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
      *  once, as the model says them. */
     private static Map<String, List<String>> told() {
         StringBuilder model = new StringBuilder("module m\n\ndata Tier = Low | High\n"
-                + "data Row = { price: Int, qty: Int }\n");
+                + "data Row = { price: Int, qty: Int }\n"
+                + "data Kept = { q: Int, n: Int }\n    invariant n >= 0\n");
         CONDITIONS.forEach((name, condition) -> model.append("\nbehavior ").append(name)
-                .append(" : (ds: List<Int>, q: Int, t: Tier, rs: List<Row>) -> Int\nlet ")
-                .append(name).append(" (ds, q, t, rs) = if ").append(condition)
-                .append(" then 1 else 2\n"));
+                .append(" : (ds: List<Int>, k: Kept, t: Tier, rs: List<Row>) -> Int\nlet ")
+                .append(name).append(" (ds, k, t, rs) = {\n    let q = k.q\n    if ")
+                .append(condition).append(" then 1 else 2\n}\n"));
         Compilation compilation = ACompiledModel.measured(model.toString(),
                 new Adequacy.Asked(Adequacy.Level.OFF, false));
         Pattern header = Pattern.compile("^(\\w+)\\s+implemented\\b.*");

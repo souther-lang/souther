@@ -90,8 +90,20 @@ final class WaysToACase {
 
     /** The way to the comparison with {@code decides} taken in beside it. */
     Reachability apply(Proposition decides) {
-        return ways.answer(decides, asked -> reading.apply(put.apply(asked)));
+        return ways.answer(decides, asked -> along(put.apply(asked)));
     }
+
+    /**
+     * The way to the comparison with {@code entries} put on it beside the way, by the entries:
+     * two cases that put the same on it, and a case's whole way and what it asks of the regions
+     * where that is all it puts on, are one reading. Kept as {@link #ways} are.
+     */
+    private Reachability along(List<OnTheWay> entries) {
+        return readAlong.answer(new OneReading.Conditions(entries), _ -> reading.apply(entries));
+    }
+
+    private final LatelyAsked<OneReading.Conditions, Reachability> readAlong =
+            new LatelyAsked<>(CASES_KEPT);
 
     /** What taking {@code decides} in puts on the way at the comparison, the entries
      *  {@link #apply} reads beside the way to it. */
@@ -133,7 +145,7 @@ final class WaysToACase {
             OneReading.Conditions key = new OneReading.Conditions(asked);
             had = reachedAlong.get(key);
             if (had == null) {
-                Reachability way = reading.apply(asked);
+                Reachability way = along(asked);
                 had = new Reached(way instanceof Reachability.Reaching, way.leavesARow());
                 reachedAlong.put(key, had);
             }
@@ -196,7 +208,7 @@ final class WaysToACase {
             // Where the case asks the regions all it puts on the way, the way is its own, and kept
             // for it.
             Reachability toIt = ofTheRegions.size() == putOn.size() ? apply(decides)
-                    : reading.apply(ofTheRegions);
+                    : along(ofTheRegions);
             had = asked.test(toIt, cutting.keptTo(onIt));
             inCases.put(key, had);
         }

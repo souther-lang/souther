@@ -273,6 +273,21 @@ public record EachWayItComesOut(Granularity spacing, List<Stretch> stretches) {
         return null;
     }
 
+    /** What is shown of the statement failing where the term is at {@code value}: not shown where
+     *  that is no value of the term. */
+    public Shown failingAt(ExactRatio value) {
+        for (Stretch each : stretches) {
+            boolean fromBelow = each.from() == null || each.from().at().compareTo(value) < 0
+                    || (each.from().inclusive() && each.from().at().compareTo(value) == 0);
+            boolean toAbove = each.to() == null || each.to().at().compareTo(value) > 0
+                    || (each.to().inclusive() && each.to().at().compareTo(value) == 0);
+            if (fromBelow && toAbove) {
+                return each.failing();
+            }
+        }
+        return Shown.NOT_SHOWN;
+    }
+
     /** Whether the term may hold some value, and neither way is left unshown at any of them. */
     public boolean showsEveryValue() {
         return !stretches.isEmpty() && stretches.stream().allMatch(each ->

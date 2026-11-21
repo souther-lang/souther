@@ -26,14 +26,8 @@ import java.util.List;
  * @param operation the operation, written as the numbers it is over weighed and a constant
  * @param where     the rows, as forms each of which lies between two ends: every row meeting all
  *                  of them stops in the operation
- * @param keeping   the bound on the input that keeps every run from stopping there, where the
- *                  operation stops where the representation of its number does and the rows are
- *                  the values of one place on one side ({@link ABoundThatKeepsEveryRunGoing}); null
- *                  where it stops where the clauses of a type a construction makes leave the
- *                  number, which the model states, or the rows are any others
  */
-public record EveryRunStops(String operation, List<Within> where,
-                            ABoundThatKeepsEveryRunGoing keeping) {
+public record EveryRunStops(String operation, List<Within> where) {
 
     public EveryRunStops {
         if (operation == null || where == null || where.isEmpty()) {

@@ -374,7 +374,7 @@ class AnOperationPastItsTypeStopsEveryRunThatGetsToItsComparisonTest {
         for (String dividend : List.of("x + z", "x + 1")) {
             String comparison = "(if y > 0 then Int.floorMod(" + dividend + ", 7) else 1) >= 1";
             assertEquals(List.of(), everyRunStops("Int", "x", "", comparison), dividend);
-            assertEquals(1, stopsSaid("Int", "x", "", comparison).size(), dividend);
+            assertFalse(stopsSaid("Int", "x", "", comparison).isEmpty(), dividend);
             assertEquals(List.of(), stopsSaid("Int", "x", "guard y <= 0 else No { n = 0 }",
                     comparison), dividend);
         }

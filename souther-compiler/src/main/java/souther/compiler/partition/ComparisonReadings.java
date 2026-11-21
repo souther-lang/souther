@@ -29,6 +29,8 @@ import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.Type;
 import souther.compiler.types.WrittenOwner;
+import souther.compiler.check.WhatARunMayEndFor;
+import souther.compiler.core.Evaluated;
 import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.ElementsNamed;
 import souther.compiler.inputs.InputReading;
@@ -335,10 +337,10 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      *                   whose applications are not one run
      * @param readOn     which applications of the closures the comparison stands in read each
      *                   line and relation it drew, beside them; nothing where it was read once
-     * @param beforeIt   whether nothing a run works out before the comparison ends it, whatever
-     *                   the input ({@link #nothingBeforeItEndsARun}), worked out the first time it
-     *                   is asked: most comparisons are never asked it, and the walk goes down the
-     *                   body from its top
+     * @param first      what a run works out before the comparison, and first in it
+     *                   ({@link WorkedOutFirst}), worked out the first time it is asked: most
+     *                   comparisons are never asked it, and the walk goes down the body from its
+     *                   top
      * @param constructionsOnTheWay every construction a run on the way may work out before the
      *                   comparison, with what it asks and each way a run gets to it on
      *                   ({@link AConstructionOnTheWay}), worked out the first time it is asked;
@@ -363,7 +365,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                    SaidOnTheWay saidOnTheWay, ComparisonWitnesses.AtAComparison witnesses,
                    DemandReading.Answered getsPast, List<ConstructionAsk> asks,
                    ElementsNamed readsTheElements, LinesReadOn readOn,
-                   Supplier<Boolean> beforeIt,
+                   Supplier<WorkedOutFirst> first,
                    Supplier<List<AConstructionOnTheWay>> constructionsOnTheWay,
                    List<Core.Binary> quotients, EvaluationPlaces places,
                    ValueTemplates definitions) {
@@ -376,21 +378,17 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     || context == null
                     || saidOnTheWay == null || witnesses == null || getsPast == null
                     || asks == null || readsTheElements == null || readOn == null
-                    || beforeIt == null || constructionsOnTheWay == null || definitions == null) {
+                    || first == null || constructionsOnTheWay == null || definitions == null) {
                 throw new IllegalArgumentException(
                         "a reading is of some comparison of the model, placed somewhere");
             }
             asks = List.copyOf(asks);
         }
 
-        /**
-         * Whether nothing a run works out before the comparison ends it, whatever the input
-         * ({@link WhatARunWorksOutBeforeACount#nothingBeforeItEndsARun}), in the behavior's own
-         * body: false inside a helper's body read at a call, whose parts before it are not this
-         * body's.
-         */
-        boolean nothingBeforeItEndsARun() {
-            return beforeIt.get();
+        /** What a run may work out before the comparison that may end it
+         *  ({@link WorkedOutFirst#beforeIt}). */
+        Optional<UndividedByARelation.Working> workedOutBeforeIt() {
+            return first.get().beforeIt();
         }
 
         /** Every construction a run on the way may work out before the comparison
@@ -419,8 +417,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
              *  whichever arm is taken. */
             Proposition takenWhere() {
                 return onAnArm == null ? null : onAnArm.reached();
-            }
-        }
+            }        }
 
         /**
          * Every stop evidence a run getting to the comparison works out, each with where it is
@@ -432,8 +429,16 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         List<WorkedOutAt> whatARunWorksOut() {
             List<WorkedOutAt> out = new ArrayList<>();
             stopsIn.ifPresent(stops -> out.add(new WorkedOutAt(stops, null, null)));
+            // Where what it works out is not told in full, what every run works out first in it,
+            // before taking any arm, is told apart: a run gets there whichever arm it takes after.
+            if (stopsIn.isPresent() && !toldInFull(stopsIn.get().operations())) {
+                first.get().firstInIt().ifPresent(stops -> out.add(new WorkedOutAt(stops, null,
+                        null)));
+            }
             worksOutOnEach.ifPresent(applications -> applications.forEach(one -> {
                 out.add(new WorkedOutAt(one.stops(), one.reached(), null));
+                one.handed().forEach(made -> out.add(new WorkedOutAt(made.stops(),
+                        made.madeWhere(), null)));
                 one.arms().forEach(arm -> out.add(new WorkedOutAt(arm.stops(),
                         one.reached(), arm)));
             }));
@@ -823,6 +828,150 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             }
             return new Entry(null, null, List.copyOf(common), live, null);
         }
+    }
+
+    /**
+     * What a run works out before a comparison and first in it, in the behavior's own body, each
+     * part read as what evaluating it works out ({@link Pullback.OnTheInput#evaluating}).
+     *
+     * @param beforeIt  what a run may work out before the comparison that may end it
+     *                  ({@link WhatARunWorksOutBeforeACount#whatMayEndARunBefore}), every operation
+     *                  of it, a part that runs only on some runs counted as running; nothing where
+     *                  some part works out what is not told so, or inside a helper's body read at a
+     *                  call, whose parts before it are not this body's
+     * @param firstInIt what every run evaluating the comparison works out first, before it takes
+     *                  any arm in it: the steps that always run ({@link Evaluated#inOrder}), in
+     *                  order, each read whole where all of it is told and worked out on every run,
+     *                  and opened where it is not, nothing after that being first. Nothing where it
+     *                  works out no operation that way
+     */
+    record WorkedOutFirst(Optional<UndividedByARelation.Working> beforeIt,
+                          Optional<StopEvidence> firstInIt) {
+
+        static final WorkedOutFirst UNREAD = new WorkedOutFirst(Optional.empty(),
+                Optional.empty());
+    }
+
+    /** What a run works out before {@code e}, the node {@code statement} is stated at, and first
+     *  in it ({@link WorkedOutFirst}). */
+    private static WorkedOutFirst workedOutFirst(Core e, Stated statement, Body in,
+                                                 InputReads reads) {
+        if (!in.context().equals(CallContext.OF_THE_BODY)
+                || !(statement instanceof Stated.AComparison(var comparison))) {
+            return WorkedOutFirst.UNREAD;
+        }
+        WhatARunMayEndFor.WithDefinitions endings = in.templates().endings();
+        List<Core> parts = WhatARunWorksOutBeforeACount.whatMayEndARunBefore(in.root(), e,
+                endings);
+        Function<Denotation, StopEvidence> evaluating =
+                in.conditions().comparison(comparison, reads, in.read()).evaluating();
+        Optional<UndividedByARelation.Working> before = Optional.empty();
+        if (parts != null) {
+            // Once a part is not told in full, nothing after it is read.
+            UndividedByARelation.Working worked = UndividedByARelation.Working.NO_STOPS;
+            for (Core part : parts) {
+                worked = workedOut(part, reads, evaluating, endings, worked);
+                if (!toldInFull(worked)) {
+                    break;
+                }
+            }
+            before = Optional.of(worked).filter(ComparisonReadings::toldInFull);
+        }
+        UndividedByARelation.Working first = firstIn(e, reads, evaluating, endings,
+                UndividedByARelation.Working.NO_STOPS);
+        return new WorkedOutFirst(before, first.operations().isEmpty() ? Optional.empty()
+                : Optional.of(StopEvidence.ofWhatIsToldOf(first)));
+    }
+
+    /** Whether {@code worked} tells every operation a run may stop in, and every run works each
+     *  out. */
+    private static boolean toldInFull(UndividedByARelation.Working worked) {
+        return worked.exact() && worked.onEveryRun() && !worked.aStopUntold();
+    }
+
+    /**
+     * What a run works out evaluating {@code part} after {@code earlier}: nothing where
+     * {@code endings} says it ends no run, a build answered by its template; a node that of itself
+     * ends no run is what its parts work out, and any other what {@code evaluating} tells of it —
+     * which reads numbers, and not what is made of them, such as a comparison of two. The arms of
+     * a choice are parts of it, each counted as worked out, which asks more of the value a stop is
+     * looked for at and never less.
+     */
+    private static UndividedByARelation.Working workedOut(Core part, InputReads reads,
+                                                          Function<Denotation, StopEvidence>
+                                                                  evaluating,
+                                                          WhatARunMayEndFor.WithDefinitions
+                                                                  endings,
+                                                          UndividedByARelation.Working earlier) {
+        if (endings.of(part).endsNone()) {
+            return earlier;
+        }
+        if (!WhatARunMayEndFor.itself(part).endsNone()) {
+            return evaluating.apply(new Denotation(part, reads)).operations().after(earlier);
+        }
+        UndividedByARelation.Working[] worked = {earlier};
+        Core.forEachChild(part, child -> worked[0] = workedOut(child, reads, evaluating,
+                endings, worked[0]));
+        return worked[0];
+    }
+
+    /**
+     * What every run evaluating {@code node} works out first, after {@code earlier}
+     * ({@link WorkedOutFirst#firstInIt}): each step that always runs, in order, and then the body
+     * of a {@code let}, which runs once its value has. Each is read whole where every part of it
+     * runs whenever it does and what it works out is told in full, and the first that is not is
+     * opened in its turn, with nothing after it.
+     */
+    private static UndividedByARelation.Working firstIn(Core node, InputReads reads,
+                                                        Function<Denotation, StopEvidence>
+                                                                evaluating,
+                                                        WhatARunMayEndFor.WithDefinitions
+                                                                endings,
+                                                        UndividedByARelation.Working earlier) {
+        List<Denotation> parts = new ArrayList<>();
+        for (Evaluated.Step step : Evaluated.inOrder(node)) {
+            if (!(step instanceof Evaluated.Step.Always(Core part))) {
+                break;
+            }
+            parts.add(new Denotation(part, reads));
+        }
+        // The body names the value as it was given, as the walk of the comparison reads it; a
+        // value built from a template holds no body here, and nothing after it is read.
+        if (parts.size() == Evaluated.inOrder(node).size()
+                && Core.withoutStanding(node) instanceof Core.LetIn let
+                && !(Core.withoutStanding(let.value()) instanceof Core.MaterialisedValue)) {
+            parts.add(new Denotation(let.body(), reads.and(let.binder(), let.value())));
+        }
+        UndividedByARelation.Working worked = earlier;
+        for (Denotation part : parts) {
+            UndividedByARelation.Working read = runsWholeWhenever(part.value())
+                    ? workedOut(part.value(), part.at(), evaluating, endings,
+                            UndividedByARelation.Working.NO_STOPS)
+                    : null;
+            if (read == null || !toldInFull(read)) {
+                return firstIn(part.value(), part.at(), evaluating, endings, worked);
+            }
+            worked = read.after(worked);
+        }
+        return worked;
+    }
+
+    /** Whether every part of {@code e} runs whenever {@code e} does: each a step of it that always
+     *  runs ({@link Evaluated#inOrder}), or the body of a {@code let}, and so on down. */
+    private static boolean runsWholeWhenever(Core e) {
+        List<Core> run = new ArrayList<>();
+        for (Evaluated.Step step : Evaluated.inOrder(e)) {
+            if (step instanceof Evaluated.Step.Always(Core part)) {
+                run.add(part);
+            }
+        }
+        if (Core.withoutStanding(e) instanceof Core.LetIn let) {
+            run.add(let.body());
+        }
+        boolean[] whole = {true};
+        Core.forEachChild(e, child -> whole[0] &= run.stream().anyMatch(it -> it == child)
+                && runsWholeWhenever(child));
+        return whole[0];
     }
 
     /**
@@ -1931,9 +2080,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     worksOutOnEach, stopsIn, onTheArms, applying, stated.written(), in.context(),
                     besideIt.said(), witnesses,
                     past.answered(), past.asks(), readsTheElements, readOn,
-                    new Pullback.Once<>(() -> in.context().equals(CallContext.OF_THE_BODY)
-                            && WhatARunWorksOutBeforeACount.nothingBeforeItEndsARun(in.root(),
-                                    e, in.templates().endings())),
+                    new Pullback.Once<>(() -> workedOutFirst(e, stated.statement(), in, reads)),
                     new Pullback.Once<>(() -> constructionsOnTheWay(e, past.asks(),
                             besideIt.way(), applying, in)),
                     stated.statement() instanceof Stated.AComparison
@@ -2317,7 +2464,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 new ClosureApplications.Each(List.of(new ClosureApplications.Application(step,
                         WhereAnApplicationIsMade.nothingAsked(), Map.of(),
                         metOn.madeWhere(made.stated()).stoppingIn(list, onward.denied()),
-                        List.of(), ClosureApplications.MadeOnEvery.NOT_SHOWN))));
+                        List.of(), ClosureApplications.MadeOnEvery.NOT_SHOWN, List.of()))));
     }
 
     /**

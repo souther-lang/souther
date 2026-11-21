@@ -127,6 +127,7 @@ import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.MonthMoveCases;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.UnheldNumber;
@@ -939,24 +940,28 @@ final class Pullback {
      *                   gets past ({@link StopEvidence})
      * @param onTheArms  what a run taking each arm of a choice the comparison was read through
      *                   works out there, with where the arm is taken
+     * @param evaluating what a run works out evaluating a value, read with what the rule that read
+     *                   the comparison answers for, as the answer of an arm is
      */
     record OnTheInput(Pulled stated, Supplier<AffineReading.OfAComparison> arithmetic,
                       Supplier<UndividedByARelation.Working> working,
                       Function<Relation, UndividedByARelation.Working> workingOfRelation,
                       Map<Quantity.HowManyMeet, Core> readOff, Supplier<StopEvidence> stops,
-                      Supplier<List<StopEvidence.OnAnArm>> onTheArms) {
+                      Supplier<List<StopEvidence.OnAnArm>> onTheArms,
+                      Function<Denotation, StopEvidence> evaluating) {
 
         OnTheInput {
             readOff = Map.copyOf(readOff);
             Objects.requireNonNull(stops, "what a run works out, or that it is not known");
             Objects.requireNonNull(onTheArms, "what runs taking each arm work out, if none");
+            Objects.requireNonNull(evaluating, "what evaluating a value works out");
         }
 
         /** This, with what it states as a reader of the lines it draws is told of it
          *  ({@link Pulled#forTheLines}). */
         OnTheInput forTheLines() {
             return new OnTheInput(stated.forTheLines(), arithmetic, working, workingOfRelation,
-                    readOff, stops, onTheArms);
+                    readOff, stops, onTheArms, evaluating);
         }
     }
 
@@ -1104,7 +1109,10 @@ final class Pullback {
                 new Once<>(() -> reading.worksOut(theRule, arithmetic));
         return new OnTheInput(stated, arithmetic, () -> worksOut.get().toGetPast(),
                 theRule == null ? _ -> null : theRule::workingOf, reading.readOff,
-                () -> worksOut.get().stops(), new Once<>(() -> onTheArms(stated, theRule)));
+                () -> worksOut.get().stops(), new Once<>(() -> onTheArms(stated, theRule)),
+                value -> AffineReading.stopsOfEvaluating(value.value(), value.at(), read,
+                        theRule == null ? AffineReading.WhatTheAnalysisAnswersFor.NOTHING
+                                : reading.answersOf(theRule)));
     }
 
     /**
@@ -3577,7 +3585,7 @@ final class Pullback {
      *                   taking it gets past is not told
      */
     record OnThisArm(Supplier<AffineReading.WorkedOut> worksOut,
-                     Supplier<UndividedByARelation.Working> evaluated,
+                     Supplier<StopEvidence> evaluated,
                      List<UndividedByARelation.Working> decidedBy) {
 
         /** What a row taking the arm gets past: what the arm works out, after what decided it. */
@@ -3605,7 +3613,7 @@ final class Pullback {
 
         /** What a run taking the arm works out evaluating the answer of the arm. */
         StopEvidence evaluatedStops() {
-            return new StopEvidence(evaluated.get());
+            return evaluated.get();
         }
     }
 
@@ -3702,7 +3710,8 @@ final class Pullback {
                 this::boundValueOf,
                 held -> theRule.landsInAMonth(Core.withoutStanding(held)),
                 held -> theRule.saidOnItsWays(Core.withoutStanding(held)),
-                held -> theRule.saidOnItsArms(Core.withoutStanding(held)));
+                held -> theRule.saidOnItsArms(Core.withoutStanding(held)),
+                this::monthsWorkedOut);
     }
 
     /**
@@ -11942,10 +11951,12 @@ final class Pullback {
         List<UndividedByARelation.Working> decided = whatDecidedTheArm();
         trial().readOnAnArm(new ArmRead.OfAWayOfATotal(read),
                 new OnThisArm(() -> AffineReading.WorkedOut.ofWhatIsToldOf(worked),
-                        () -> UndividedByARelation.Working.AS_THE_FORM, decided));
+                        () -> StopEvidence.ofWhatIsToldOf(UndividedByARelation.Working.AS_THE_FORM),
+                        decided));
+        StopEvidence asTheForm =
+                StopEvidence.ofWhatIsToldOf(UndividedByARelation.Working.AS_THE_FORM);
         OnThisArm forTheRows = new OnThisArm(() -> new AffineReading.WorkedOut(worked,
-                StopEvidence.ofWhatIsToldOf(UndividedByARelation.Working.AS_THE_FORM)),
-                () -> UndividedByARelation.Working.AS_THE_FORM, decided);
+                asTheForm), () -> asTheForm, decided);
         for (ArmRead each : ArmRead.in(read)) {
             trial().readOnAnArm(each, forTheRows);
         }
@@ -13723,9 +13734,9 @@ final class Pullback {
         Trial theRule = concluded != null ? concluded : trial();
         Once<AffineReading.WorkedOut> worksOut =
                 new Once<>(() -> worksOut(theRule, arithmeticOf(stated, there)));
-        Once<UndividedByARelation.Working> evaluated = new Once<>(() -> answered == null
-                ? UndividedByARelation.Working.AS_THE_FORM
-                : AffineReading.workedOutByEvaluating(answered.value(), answered.at(), this.read,
+        Once<StopEvidence> evaluated = new Once<>(() -> answered == null
+                ? StopEvidence.ofWhatIsToldOf(UndividedByARelation.Working.AS_THE_FORM)
+                : AffineReading.stopsOfEvaluating(answered.value(), answered.at(), this.read,
                         answersOf(theRule), onTheArmItAnswers(answered, fork, forkAt)));
         OnThisArm arm = new OnThisArm(worksOut, evaluated,
                 restatingAQuotient.get() ? List.of() : whatDecidedTheArm());
@@ -15863,7 +15874,8 @@ final class Pullback {
         if (month == null) {
             return null;
         }
-        UndividedByARelation.IntOperation count = monthsToWhereAMoveLands(step, month, moved.at());
+        UndividedByARelation.IntOperation count = monthsToWhereAMoveLands(step, month, moved.at(),
+                read);
         if (count != null) {
             trial().landsInAMonth(Core.withoutStanding(node), count);
         }
@@ -15884,8 +15896,8 @@ final class Pullback {
      * its last. Null where the date moved is no date at a place as it stands, which {@code month},
      * the month of it, says.
      */
-    private UndividedByARelation.IntOperation monthsToWhereAMoveLands(
-            DateMonthMoves.Step step, NumericTerm month, InputReads at) {
+    private static UndividedByARelation.IntOperation monthsToWhereAMoveLands(
+            DateMonthMoves.Step step, NumericTerm month, InputReads at, InputReading read) {
         if (!(month instanceof NumericTerm.TakenOf ofTheDate)
                 || !ValueTransformation.NONE.equals(ofTheDate.transformation())
                 || !(step.law().year().operation() instanceof ValueName.Stdlib yearOf)) {
@@ -15896,17 +15908,108 @@ final class Pullback {
         if (year == null) {
             return null;
         }
-        BigInteger aYear = BigInteger.valueOf(CalendarMonths.A_YEAR);
-        Map<NumericTerm, ExactRatio> weights = new LinkedHashMap<>();
-        weights.put(year, ExactRatio.of(aYear));
-        weights.put(month, ExactRatio.ONE);
+        BigInteger[] held = MonthCount.monthsHeld();
         return UndividedByARelation.IntOperation.overTheInput(
-                new LinearForm<>(ExactRatio.of(BigInteger.valueOf(step.months())
-                        .subtract(BigInteger.valueOf(CalendarMonths.FIRST))), weights),
-                BigInteger.valueOf(Year.MIN_VALUE).multiply(aYear),
-                BigInteger.valueOf(Year.MAX_VALUE).multiply(aYear).add(aYear)
-                        .subtract(BigInteger.ONE),
-                List.of());
+                MonthCount.of(year, month, BigInteger.valueOf(step.months())
+                        .subtract(BigInteger.valueOf(CalendarMonths.FIRST))),
+                held[0], held[1], List.of());
+    }
+
+    /**
+     * What working {@code e} out, read where {@code at} is, may stop a run at, where that is
+     * where the month of a date at a place lands: an operation over the count of that month
+     * ({@link MonthCount}) — or null where {@code e} is none of these.
+     *
+     * <p>A move by a count of months written out stops past the calendar's first or last month
+     * ({@link #monthsToWhereAMoveLands}). The date it moves is the date at the place, or the
+     * first of a month of it moved by months ({@link #theMonthStartOf}), which is in the month
+     * those months on from the place's. A move by a count of days written out of such a first of
+     * a month stops where that first day moved is no day of the calendar, which the first days
+     * do in a run of the months. And the first of a date's own month is a day of the calendar
+     * wherever the date is, so the move to it stops no run; told as an operation whose ends are
+     * every month there is, which no place is past.
+     */
+    UndividedByARelation.IntOperation monthsWorkedOut(Core e, InputReads at) {
+        Symbols symbols = read.rules().symbols();
+        DeclarationNewtypes newtypes = read.rules().newtypes();
+        Denotation stands = at.standing(e, symbols, newtypes);
+        DateMonthMoves.Step step = DateMonthMoves.stepOf(stands.value(),
+                each -> stands.at().folded(each, symbols, newtypes));
+        if (step != null) {
+            MonthMovesInCases.MonthStart start = theMonthStartOf(step.date(), stands.at(),
+                    step.law().day().operation(), 0);
+            if (start == null) {
+                return step.law().month().operation() instanceof ValueName.Stdlib month
+                        && InputNumber.takenOf(month, step.date(), read.domain(), stands.at(),
+                                read.rules()) instanceof NumericTerm ofTheDate
+                        ? monthsToWhereAMoveLands(step, ofTheDate, stands.at(), read) : null;
+            }
+            OptionalLong months = MonthMoveCases.chained(start.moved(), step.months());
+            return months.isEmpty() ? null : monthsOn(start.of(), stands.at(),
+                    months.getAsLong() - CalendarMonths.FIRST, MonthCount.monthsHeld());
+        }
+        DateShifts.Moved shifted = DateShifts.movedBy(stands.value());
+        ValueName.Stdlib dayOfTheMonth =
+                DefaultBoundOperationFacts.get().takesThePart(TakenAs.DatePart.DAY);
+        if (shifted == null || dayOfTheMonth == null) {
+            return null;
+        }
+        if (theDateWhoseMonthItStarts(stands, dayOfTheMonth) != null) {
+            MonthMovesInCases.MonthStart start = theMonthStartOf(e, at, dayOfTheMonth, 0);
+            return start == null ? null : monthsOn(start.of(), stands.at(),
+                    start.moved() - CalendarMonths.FIRST, MonthCount.monthsHeld());
+        }
+        // Moves by counts of days written out, one over another, down to a first of a month: the
+        // last stops where that first day moved by all of them is no day of the calendar, every
+        // move under it having got its own day.
+        BigInteger days = BigInteger.ZERO;
+        Denotation moving = stands;
+        DateShifts.Moved move = shifted;
+        while (true) {
+            if (move.weight().compareTo(ExactRatio.ONE) != 0
+                    || !(moving.at().folded(move.count(), symbols, newtypes).orElse(null)
+                            instanceof Long by)) {
+                return null;
+            }
+            days = days.add(BigInteger.valueOf(by));
+            MonthMovesInCases.MonthStart start = theMonthStartOf(move.date(), moving.at(),
+                    dayOfTheMonth, 0);
+            if (start != null) {
+                BigInteger[] counts = days.bitLength() >= Long.SIZE ? null
+                        : MonthCount.countsWhoseFirstDayMoves(days.longValueExact());
+                return counts == null ? null
+                        : monthsOn(start.of(), moving.at(), start.moved(), counts);
+            }
+            moving = moving.at().standing(move.date(), symbols, newtypes);
+            move = DateShifts.movedBy(moving.value());
+            if (move == null) {
+                return null;
+            }
+        }
+    }
+
+    /**
+     * The count of the month of {@code of}, read where {@code at} is, and {@code more}, as an
+     * operation between the counts {@code within} — or null where {@code of} is no date at a
+     * place as it stands.
+     */
+    private UndividedByARelation.IntOperation monthsOn(Core of, InputReads at, long more,
+                                                       BigInteger[] within) {
+        NumericTerm year = takenOfThePart(of, at, TakenAs.DatePart.YEAR);
+        NumericTerm month = takenOfThePart(of, at, TakenAs.DatePart.MONTH);
+        return (year == null || month == null) ? null
+                : UndividedByARelation.IntOperation.overTheInput(
+                        MonthCount.of(year, month, BigInteger.valueOf(more)), within[0],
+                        within[1], List.of());
+    }
+
+    /** The number {@code part} of the date {@code of} is, at a place as it stands, or null. */
+    private NumericTerm takenOfThePart(Core of, InputReads at, TakenAs.DatePart part) {
+        ValueName.Stdlib taking = DefaultBoundOperationFacts.get().takesThePart(part);
+        NumericTerm taken = taking == null ? null
+                : InputNumber.takenOf(taking, of, read.domain(), at, read.rules());
+        return (taken instanceof NumericTerm.TakenOf it
+                && ValueTransformation.NONE.equals(it.transformation())) ? taken : null;
     }
 
     /**

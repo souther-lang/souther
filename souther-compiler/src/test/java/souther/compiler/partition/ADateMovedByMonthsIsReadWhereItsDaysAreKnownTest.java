@@ -46,21 +46,25 @@ class ADateMovedByMonthsIsReadWhereItsDaysAreKnownTest {
     @BeforeAll
     static void measure() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.measure(new Adequacy.Asked(Adequacy.Level.OFF, false));
         measured = ACompiledModel.compiles(compilation);
     }
 
     /**
-     * The weekday is read to the end. A move by months near either end of the calendar stops a
-     * run, and no operation of whole numbers is that move, so where it stops is said of the run
-     * and not of how it is read ({@link UnreadBesideItsStops}).
+     * The weekday is read to the end, and a move by months near the end of the calendar stops a
+     * run where the month it lands in is past it: each move is told over the count of the month
+     * of {@code x}, the first of a month being in the month of the date it is the first of. The
+     * second lands two months on, so the furthest out {@code x} can be held is the last day of
+     * the month two before the calendar's last.
      */
     @Test
-    void theWeekdayOfAMonthStartMovedByMonthsIsRead() {
+    void theWeekdayOfAMonthStartMovedByMonthsIsReadAndItsStopIsTold() {
         String report = AdequacyReport.of(measured)
                 .humanInEnglish(SourceRendering.namedByIdentity(measured.texts()));
         assertFalse(UnreadBesideItsStops.in(report), report);
-        assertTrue(report.contains(UnreadBesideItsStops.STOPS_NOT_ALL_TOLD), report);
+        assertFalse(report.contains(UnreadBesideItsStops.STOPS_NOT_ALL_TOLD), report);
+        assertTrue(report.contains("declares `invariant value <= Date(\"+999999999-10-31\")`"),
+                report);
     }
 
     /** What the date moved is, as cases, draws no line of its own: the lines are the weekday's,

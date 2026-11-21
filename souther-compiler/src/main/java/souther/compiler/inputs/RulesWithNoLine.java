@@ -1,6 +1,7 @@
 package souther.compiler.inputs;
 
 import souther.compiler.check.RuleCitation;
+import souther.compiler.check.RuleRef;
 import souther.compiler.meaning.CaseExpansion;
 import souther.compiler.types.ModelOccurrences;
 import souther.compiler.values.ValuesWithin;
@@ -9,6 +10,7 @@ import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * What the readers found about the rules that came to no line here, and the rules among them
@@ -208,12 +210,15 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
 
         /** A rule some run on its way is shown to stop in, as {@code shown} and
          *  {@code constructions} show it, with the values at which every run getting to the rule
-         *  stops ({@link RuleWhereARunMayStop}). */
+         *  stops, and the region of the input that keeps every run from stopping in it
+         *  ({@link RuleWhereARunMayStop}). */
         public void mayStopARun(RuleCitation cited, ModelOccurrences readAt,
                                 List<AStopShown> shown,
                                 List<AConstructionStopShown> constructions,
-                                List<EveryRunStops> everyRunStops) {
-            stopped(RuleWhereARunMayStop.of(cited, readAt, shown, constructions, everyRunStops));
+                                List<EveryRunStops> everyRunStops,
+                                Optional<WhatKeepsEveryRunGoing> keeping) {
+            stopped(RuleWhereARunMayStop.of(cited, readAt, shown, constructions, everyRunStops,
+                    keeping));
         }
 
         /** A rule where whether a run stops is not resolved, why, each construction on the way to
@@ -222,8 +227,10 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
         public void stopNotShown(RuleCitation cited, ModelOccurrences readAt,
                                  List<AStopNotShown> notShown,
                                  List<AConstructionStopNotShown> asks,
-                                 List<EveryRunStops> everyRunStops) {
-            stopped(RuleWhereAStopIsNotShown.of(cited, readAt, notShown, asks, everyRunStops));
+                                 List<EveryRunStops> everyRunStops,
+                                 Optional<WhatKeepsEveryRunGoing> keeping) {
+            stopped(RuleWhereAStopIsNotShown.of(cited, readAt, notShown, asks, everyRunStops,
+                    keeping));
         }
 
         /** One a reader already made, folded with what is said of the same rule alike. */
@@ -340,10 +347,19 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
             other.costly().forEach(this::costly);
         }
 
-        /** What this gathering came to, which is what a reader hands on. */
+        /** What this gathering came to, which is what a reader hands on. Each rule's findings of a
+         *  stop carry one region that keeps its runs going, the region every reading of it says
+         *  together, whichever of the findings each reading made. Whether it is said is asked
+         *  where a report says it ({@link WhatKeepsEveryRunGoing#said}), and not here: what is
+         *  gathered here may be put together with more, a reading of which may be what shows it. */
         public RulesWithNoLine found() {
+            Map<RuleRef, Optional<WhatKeepsEveryRunGoing>> kept = new LinkedHashMap<>();
+            stopping.values().forEach(one -> kept.merge(one.rule(), one.keeping(),
+                    WhatKeepsEveryRunGoing::together));
+            List<WhatIsShownOfAStop> stops = stopping.values().stream()
+                    .map(one -> one.keptBy(kept.get(one.rule()))).toList();
             return new RulesWithNoLine(List.copyOf(reported.values()),
-                    List.copyOf(unclassified.values()), List.copyOf(stopping.values()),
+                    List.copyOf(unclassified.values()), stops,
                     List.copyOf(expanded.values()), List.copyOf(costly.values()));
         }
     }

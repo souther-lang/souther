@@ -116,16 +116,37 @@ final class EvaluationPlaces {
     }
 
     /**
+     * Whether {@code later} itself is worked out after everything {@code earlier} works out: both
+     * have a place, and its own is past where the other's ends. So what stops at {@code later}'s
+     * own step — a quotient, at its divisor — stops after any stop of {@code earlier}, though what
+     * {@code later} works out on its way to it, such as its operands, may come first. False where
+     * either has none.
+     */
+    boolean isWorkedOutAfter(Core later, Core earlier) {
+        if (later == null || earlier == null) {
+            return false;
+        }
+        Stretch after = stretches.get(Core.withoutStanding(later));
+        Stretch before = stretches.get(Core.withoutStanding(earlier));
+        return after != null && before != null && after.own() > before.own();
+    }
+
+    /** Whether {@code node} has a place in the order. */
+    boolean hasAPlace(Core node) {
+        return node != null && stretches.containsKey(Core.withoutStanding(node));
+    }
+
+    /**
      * Whether {@code holds} is true of every node of {@code root}'s tree that a run may work out
      * before it takes the step {@code site} stands for: the one walk over what a run stopping at
      * {@code site} has got past.
      *
-     * <p>A node whose stretch of the order begins past {@code site} is worked out after it, and so
-     * is everything under it, a branch or an arm included: none of it is asked. A node whose own
-     * step comes after {@code site}'s is not asked of itself, but what it is made of may come
-     * before and is walked. A node with no place may come before, and is asked, as is everything
-     * under it that has none either; that holds of every node the tree holds and this does not
-     * place, so what is not known is not taken to be after.
+     * <p>A node whose stretch of the order begins past {@code site} is worked out after it
+     * ({@link #comesAfter}), and so is everything under it, a branch or an arm included: none of it
+     * is asked. A node whose own step comes after {@code site}'s ({@link #isWorkedOutAfter}) is not
+     * asked of itself, but what it is made of may come before and is walked. A node with no place
+     * may come before, and is asked, as is everything under it that has none either: what is not
+     * known is not taken to be after.
      */
     boolean everyNodeNotAfter(Core root, Core site, Predicate<Core> holds) {
         return everyNodeNotAfter(root, site, holds,
@@ -138,7 +159,7 @@ final class EvaluationPlaces {
         if (!met.add(node) || comesAfter(node, site)) {
             return true;
         }
-        if (!ownStepBefore(site, node) && !holds.test(node)) {
+        if (!isWorkedOutAfter(node, site) && !holds.test(node)) {
             return false;
         }
         boolean[] every = {true};
@@ -148,26 +169,5 @@ final class EvaluationPlaces {
             }
         });
         return every[0];
-    }
-
-    /** Whether {@code node} has a place in the order. */
-    boolean hasAPlace(Core node) {
-        return node != null && stretches.containsKey(Core.withoutStanding(node));
-    }
-
-    /**
-     * Whether the step {@code earlier} itself takes — its own operation, once what it is made of
-     * is worked out — is taken before the one {@code later} takes. A quotient by a sum is worked
-     * out after the sum though the stretch of the quotient begins before it, so this asks what
-     * {@link #comesAfter} does not: of an operation and the quotient it is the operand of. False
-     * where either has no place, which says no more than that it is not known.
-     */
-    boolean ownStepBefore(Core earlier, Core later) {
-        if (earlier == null || later == null) {
-            return false;
-        }
-        Stretch first = stretches.get(Core.withoutStanding(earlier));
-        Stretch second = stretches.get(Core.withoutStanding(later));
-        return first != null && second != null && first.own() < second.own();
     }
 }

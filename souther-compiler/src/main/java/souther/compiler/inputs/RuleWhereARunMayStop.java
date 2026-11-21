@@ -9,6 +9,8 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -45,11 +47,16 @@ import java.util.Set;
  *                  input is shown to come to is not this
  * @param everyRunStops the runs of the values at the rule's places at which every run getting to
  *                  it stops, each once; empty where none is known
+ * @param keeping   the region of the input that keeps every run getting to the rule from
+ *                  stopping in it, where every operation it may stop in stops where the
+ *                  representation of its number does and is over the values of one place
+ *                  ({@link WhatKeepsEveryRunGoing}); none where some stop is any other
  */
 public record RuleWhereARunMayStop(RuleRef rule, Set<RuleReportAnchor> reachedBy,
                                    ModelOccurrences readAt, List<AStopShown> shown,
                                    List<AConstructionStopShown> constructions,
-                                   List<EveryRunStops> everyRunStops)
+                                   List<EveryRunStops> everyRunStops,
+                                   Optional<WhatKeepsEveryRunGoing> keeping)
         implements WhatIsShownOfAStop {
 
     public RuleWhereARunMayStop {
@@ -65,17 +72,25 @@ public record RuleWhereARunMayStop(RuleRef rule, Set<RuleReportAnchor> reachedBy
                     + " is shown by some value of the input");
         }
         everyRunStops = List.copyOf(new LinkedHashSet<>(everyRunStops));
+        Objects.requireNonNull(keeping, "a region kept, or none");
     }
 
     /** One reader's finding about a rule a run is shown to stop in, as {@code shown} and
      *  {@code constructions} show it, with the values at which every run getting to the rule
-     *  stops. */
+     *  stops, and the region that keeps every run from stopping in it. */
     public static RuleWhereARunMayStop of(RuleCitation cited, ModelOccurrences readAt,
                                           List<AStopShown> shown,
                                           List<AConstructionStopShown> constructions,
-                                          List<EveryRunStops> everyRunStops) {
+                                          List<EveryRunStops> everyRunStops,
+                                          Optional<WhatKeepsEveryRunGoing> keeping) {
         return new RuleWhereARunMayStop(cited.rule(), RuleCitation.anchorOf(cited), readAt,
-                shown, constructions, everyRunStops);
+                shown, constructions, everyRunStops, keeping);
+    }
+
+    @Override
+    public RuleWhereARunMayStop keptBy(Optional<WhatKeepsEveryRunGoing> region) {
+        return new RuleWhereARunMayStop(rule, reachedBy, readAt, shown, constructions,
+                everyRunStops, region);
     }
 
     /** How a reader finds the rule, as for a rule with no line ({@link RuleWithoutALine#cited}). */
@@ -99,6 +114,6 @@ public record RuleWhereARunMayStop(RuleRef rule, Set<RuleReportAnchor> reachedBy
         List<EveryRunStops> stops = new ArrayList<>(everyRunStops);
         stops.addAll(that.everyRunStops);
         return new RuleWhereARunMayStop(rule, both, readAt.and(that.readAt), shownBoth,
-                constructionsBoth, stops);
+                constructionsBoth, stops, WhatKeepsEveryRunGoing.together(keeping, that.keeping));
     }
 }

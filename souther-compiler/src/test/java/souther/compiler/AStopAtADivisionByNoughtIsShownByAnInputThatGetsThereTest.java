@@ -8,6 +8,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -50,6 +51,55 @@ class AStopAtADivisionByNoughtIsShownByAnInputThatGetsThereTest {
                 .filter(each -> each.place().toString().equals("p")).count());
         shown.getFirst().at().stream().filter(each -> each.place().toString().equals("p"))
                 .forEach(each -> assertEquals(0, each.number().signum()));
+    }
+
+    /**
+     * A quotient a run works out before an operation, whose divisor is no form of the input's
+     * numbers, is one a value is not shown to get past: here every run stops at it, and none gets
+     * to {@code q + 1}, so no stop there is shown. Its stop is left untold, which no operation
+     * after it is shown past, and a value looked for is asked to get past it as well.
+     */
+    @Test
+    void anOperationAfterAQuotientNotReadIsNotShownToStop() {
+        List<AStopShown> shown = shownIn(
+                "if Rational.toInt(UP, e / (if p > 0 then 0 else 0)) >= q + 1 then 1 else 2");
+
+        assertEquals(List.of(), shown.stream().filter(each -> each.operation().equals("q + 1"))
+                .toList(), shown::toString);
+    }
+
+    /**
+     * What is shown is that a run stops in an operation as written, at a value, and not at which
+     * of the places writing it a run stops first: two places working out {@code p + 1} take a
+     * value past its ends both, so a run with it stops in {@code p + 1} at the first, which is
+     * what is said.
+     */
+    @Test
+    void aStopShownInAnOperationWrittenAtTwoPlacesIsOneARunWithTheValueStopsIn() {
+        List<AStopShown> shown = shownIn("if (p + 1) + (p + 1) > q then 1 else 2");
+
+        assertEquals(List.of(BigInteger.valueOf(Long.MAX_VALUE)), shown.stream()
+                .filter(each -> each.operation().equals("p + 1"))
+                .flatMap(each -> each.at().stream())
+                .filter(each -> each.place().toString().equals("p"))
+                .map(AStopShown.NumberAt::number).distinct().toList(), shown::toString);
+    }
+
+    /**
+     * A quotient stops a run at its own step, past its operands: an operation of its dividend is
+     * worked out before it divides, so a run stops in {@code p + 1} at the greatest {@code p},
+     * though the divisor is nought there and a run that got past would divide by it.
+     */
+    @Test
+    void anOperationOfADividendStopsARunBeforeTheQuotientDoes() {
+        List<AStopShown> shown = shownIn("if Rational.toInt(UP, (p + 1) / (p - 9223372036854775807))"
+                + " >= 2 then 1 else 2");
+
+        assertEquals(List.of(BigInteger.valueOf(Long.MAX_VALUE)), shown.stream()
+                .filter(each -> each.operation().equals("p + 1"))
+                .flatMap(each -> each.at().stream())
+                .filter(each -> each.place().toString().equals("p"))
+                .map(AStopShown.NumberAt::number).toList(), shown::toString);
     }
 
     /** A divisor of several numbers is one form of them, and a run stops where it is nought. */

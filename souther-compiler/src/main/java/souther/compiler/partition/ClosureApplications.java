@@ -191,10 +191,12 @@ sealed interface ClosureApplications {
      *                          inside whose call some source wrote, the outermost first
      * @param madeOnEvery       the elements a run making what stands in it once is shown to make
      *                          it on every one of
+     * @param handed            the values handed to each closure it stands in, the outermost
+     *                          first, with where the walk handing each is entered
      */
     record Application(InputReads reads, Proposition reached,
                        Map<BindingId, Denotation> carriedIntoTheFirst, ElementsMetOn metOn,
-                       List<MadeBy> madeBy, MadeOnEvery madeOnEvery) {
+                       List<MadeBy> madeBy, MadeOnEvery madeOnEvery, List<Handed> handed) {
 
         public Application {
             Objects.requireNonNull(reads, "an application is read in some names");
@@ -204,29 +206,30 @@ sealed interface ClosureApplications {
             carriedIntoTheFirst = Collections.unmodifiableMap(
                     new LinkedHashMap<>(carriedIntoTheFirst));
             madeBy = List.copyOf(madeBy);
+            handed = List.copyOf(handed);
         }
 
         /** The same application, read in {@code names}. */
         Application readIn(InputReads names) {
             return new Application(names, reached, carriedIntoTheFirst, metOn, madeBy,
-                    madeOnEvery);
+                    madeOnEvery, handed);
         }
 
         /** The same application, made under {@code where}. */
         Application madeUnder(Proposition where) {
             return new Application(reads, where, carriedIntoTheFirst, metOn, madeBy,
-                    madeOnEvery);
+                    madeOnEvery, handed);
         }
 
         /** The same application, carrying {@code carried} into the first step of each walk. */
         Application carrying(Map<BindingId, Denotation> carried) {
-            return new Application(reads, reached, carried, metOn, madeBy, madeOnEvery);
+            return new Application(reads, reached, carried, metOn, madeBy, madeOnEvery, handed);
         }
 
         /** The same application, past a fork ({@link MadeOnEvery#forked}). */
         Application forked() {
             return new Application(reads, reached, carriedIntoTheFirst, metOn, madeBy,
-                    madeOnEvery.forked());
+                    madeOnEvery.forked(), handed);
         }
 
         /**
@@ -234,17 +237,21 @@ sealed interface ClosureApplications {
          * on {@code on}, carrying what this one carries, and made by the calls this one is and
          * by {@code by}, where a call some source wrote made it — and made on every element of
          * {@code everyOf}, where it is one application standing for every element of that
-         * position, on every element this one is.
+         * position, on every element this one is — and handed {@code values}, which are made
+         * wherever {@code held} holds: where the container holds them.
          *
          * <p>Which call made an application is carried here and handed on only by these, so
          * nothing a reading reads it in passing ({@code WhatExplainsACountIsReadOnlyWhereItIsTold}).
          */
         Application inside(InputReads names, Proposition where, ElementsMetOn on,
-                           Optional<MadeBy> by, Optional<TermPath> everyOf) {
+                           Optional<MadeBy> by, Optional<TermPath> everyOf,
+                           List<Denotation> values, Proposition held) {
             List<MadeBy> deeper = new ArrayList<>(madeBy);
             by.ifPresent(deeper::add);
+            List<Handed> handedDeeper = new ArrayList<>(handed);
+            values.forEach(value -> handedDeeper.add(new Handed(value, held)));
             return new Application(names, where, carriedIntoTheFirst, on, deeper,
-                    madeOnEvery.inside(everyOf));
+                    madeOnEvery.inside(everyOf), handedDeeper);
         }
 
         /** {@code stated}, said to be the statement of this application of each call it is
@@ -275,6 +282,20 @@ sealed interface ClosureApplications {
          *  made on none. */
         boolean isMadeOnSomeRow() {
             return !(reached instanceof Proposition.Always(boolean made) && !made);
+        }
+    }
+
+    /**
+     * A value a walk hands an application of a closure, and where it is made: where the container
+     * holds it. A container holds every element of it before a walk hands any, so what making the
+     * value works out is worked out wherever the container holds it, whether or not the
+     * application is made.
+     */
+    record Handed(Denotation value, Proposition madeWhere) {
+
+        public Handed {
+            Objects.requireNonNull(value, "a value is handed");
+            Objects.requireNonNull(madeWhere, "and is made somewhere");
         }
     }
 
@@ -377,7 +398,7 @@ sealed interface ClosureApplications {
         return switch (this) {
             case Outside(var metOn, var made) -> applied(block, step,
                     List.of(new Application(reads, WhereAnApplicationIsMade.nothingAsked(),
-                            Map.of(), metOn, List.of(), made)),
+                            Map.of(), metOn, List.of(), made, List.of())),
                     read, true);
             case Each(var outer) -> applied(block, step, outer, read, false);
             case NotSaid _, None _ -> this;
@@ -430,12 +451,25 @@ sealed interface ClosureApplications {
                             .map(one -> keptBy(one.keptWhere(), read)).toList();
                     List<Proposition> reached = WhereAnApplicationIsMade.reached(answers, keptBy,
                             how, around.reached());
+                    // Where the container holds each element, which is where it is made: kept,
+                    // whatever the applications before it answered.
+                    List<Proposition> held = WhereAnApplicationIsMade.reached(null, keptBy,
+                            HowAClosureIsApplied.TO_EVERY_ELEMENT, around.reached());
                     for (int at = 0; at < each.size(); at++) {
                         int ordinal = at;
-                        out.add(around.inside(each.get(at).reads(), reached.get(at),
-                                around.metOn(), madeBy.map(call ->
-                                        new MadeBy(asWritten(call, symbols), ordinal)),
-                                Optional.empty()));
+                        InputReads names = each.get(at).reads();
+                        List<Denotation> values = new ArrayList<>();
+                        for (int param = 0; param < block.params().size(); param++) {
+                            Core.Binder binder = block.params().get(param);
+                            if (names.meaningOf(new Core.Read(binder.name(), binder.binding(),
+                                    block.paramTypes().get(param), block.pos()), symbols,
+                                    newtypes) instanceof ReadMeaning.Through(var written)) {
+                                values.add(written);
+                            }
+                        }
+                        out.add(around.inside(names, reached.get(at), around.metOn(),
+                                madeBy.map(call -> new MadeBy(asWritten(call, symbols), ordinal)),
+                                Optional.empty(), values, held.get(at)));
                     }
                 }
                 case InputReads.Applications.NoneHanded _ -> {
@@ -451,7 +485,8 @@ sealed interface ClosureApplications {
                             where.map(some -> WhereAnApplicationIsMade.past(around.reached(),
                                     some.holdingSomething())).orElse(around.reached()),
                             metOn(block, containers, around, entered, read), Optional.empty(),
-                            everyElementOf(block, containers, around, read)));
+                            everyElementOf(block, containers, around, read), List.of(),
+                            around.reached()));
                 }
                 case InputReads.Applications.Unsaid _ -> {
                     return new NotSaid(around.metOn().notSaidAnywhere(new ReadingGap.ReachNotRead(
