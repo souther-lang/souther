@@ -367,6 +367,104 @@ final class WhatARunWorksOutBeforeACount {
         return List.copyOf(out);
     }
 
+    /** Every construction under {@code e}, each once: what a call is handed, all of which is
+     *  worked out before the body it goes into runs. Not the construction an attempt tests, as
+     *  above. */
+    static List<Core.Construct> everyConstructionUnder(Core e) {
+        Set<Core> met = Collections.newSetFromMap(new IdentityHashMap<>());
+        List<Core.Construct> out = new ArrayList<>();
+        constructionsUnder(e, null, null, met, out);
+        return List.copyOf(out);
+    }
+
+    /**
+     * The function value on the way down from {@code root} to {@code node} that no call it is
+     * handed to applies ({@link #workedOutUpTo}), with the node it stands under, the outermost
+     * where there are several — or null where there is none, or {@code node} is not in the tree.
+     */
+    static NotHanded notHandedOnTheWay(Core root, Core node) {
+        List<Core> way = root == null ? null : wayDownTo(root, node);
+        if (way == null) {
+            return null;
+        }
+        for (int i = 0; i < way.size(); i++) {
+            if (way.get(i) instanceof Core.Block block) {
+                Core above = i == 0 ? null : way.get(i - 1);
+                if (above == null || Within.argumentsOf(above).stream()
+                        .noneMatch(arg -> Core.withoutStanding(arg) == block)) {
+                    return new NotHanded(block, above);
+                }
+            }
+        }
+        return null;
+    }
+
+    /** A function value no call it is handed to applies, and what it stands under: a
+     *  {@code let} binding it to a name, or anything else that holds it. */
+    record NotHanded(Core.Block closure, Core above) {}
+
+    /**
+     * Whether the way down from {@code from} to {@code node} takes an arm, or the right of an
+     * operator that stops at an answer, inside a function value — every step of it where
+     * {@code inside}, as from the body of one. What the walk meets there is said of each
+     * application where the applications are said, and not on the way the walk carries
+     * ({@link ClosureApplications#saysWhatStandsInIt}), so a way that takes one is not read whole
+     * from what the walk carried. True where {@code node} is not under {@code from}.
+     */
+    static boolean choosesInsideAFunctionValue(Core from, Core node, boolean inside) {
+        List<Core> way = wayDownTo(from, node);
+        if (way == null) {
+            return true;
+        }
+        boolean in = inside;
+        for (int i = 0; i + 1 < way.size(); i++) {
+            Core child = way.get(i + 1);
+            boolean chosen = switch (way.get(i)) {
+                case Core.Block _ -> {
+                    in = true;
+                    yield false;
+                }
+                case Core.If iff -> child != iff.cond();
+                case Core.Match match -> child != match.scrutinee();
+                case Core.IfConstructed attempt -> child != attempt.construct();
+                case Core.Binary both -> both.op().stopsWhenItsAnswerIsSettled()
+                        && child == both.right();
+                default -> false;
+            };
+            if (in && chosen) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * What a run works out before {@code made}, a construction in {@code inner}, a tree a run
+     * goes into once where it gets to {@code at}, a node of {@code root}'s tree — as a value's
+     * template is gone into where it is built — where a run that gets to {@code at} and takes the
+     * way to {@code comparison} in {@code inner} and the way to {@code made} works {@code made}
+     * out before the comparison unless something before it ends the run: everything it works out
+     * before {@code at}, and then what it works out in {@code inner}
+     * ({@link #workedOutBeforeAConstruction}). Empty where either is not shown.
+     */
+    static Optional<BeforeAConstruction> workedOutBeforeAConstructionPast(Core root, Core at,
+                                                                         Core inner,
+                                                                         Core comparison,
+                                                                         Core.Construct made) {
+        List<Core> some = root == null ? null : workedOutUpTo(root, at, false);
+        List<Core> every = root == null ? null : workedOutUpTo(root, at, true);
+        Optional<BeforeAConstruction> within =
+                workedOutBeforeAConstruction(inner, comparison, made);
+        if (some == null || every == null || within.isEmpty()) {
+            return Optional.empty();
+        }
+        List<Core> onSomeRun = new ArrayList<>(some.subList(0, some.size() - 1));
+        onSomeRun.addAll(within.get().onSomeRun());
+        List<Core> onEveryRun = new ArrayList<>(every.subList(0, every.size() - 1));
+        onEveryRun.addAll(within.get().onEveryRun());
+        return Optional.of(new BeforeAConstruction(onSomeRun, onEveryRun));
+    }
+
     /** Every construction under {@code e} but {@code tested}, the construction the attempt above
      *  it tests, and nothing under {@code apart}, into {@code out}, each once. */
     private static void constructionsUnder(Core e, Core apart, Core tested, Set<Core> met,

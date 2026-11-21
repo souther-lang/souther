@@ -338,16 +338,12 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      *                   the input ({@link #nothingBeforeItEndsARun}), worked out the first time it
      *                   is asked: most comparisons are never asked it, and the walk goes down the
      *                   body from its top
-     * @param beforeAConstruction what a run works out before each construction on the way, where
-     *                   a run taking the way to it gets to it unless something before ends the run
-     *                   ({@link WhatARunWorksOutBeforeACount#workedOutBeforeAConstruction}); empty
-     *                   where that is not shown, and inside a helper's body read at a call, whose
-     *                   parts before it are not this body's
      * @param constructionsOnTheWay every construction a run on the way may work out before the
-     *                   comparison, with what it asks and the way to it
+     *                   comparison, with what it asks and each way a run gets to it on
      *                   ({@link AConstructionOnTheWay}), worked out the first time it is asked;
-     *                   where what a run works out before it is not read, every construction that
-     *                   may come first, with no way to any of them
+     *                   where what a run works out before it is not read by some way into the body
+     *                   it stands in, every construction that may come first as well, with no way
+     *                   to any of them shown by that one
      */
     record Reading(ConstructOccurrence occurrence, Stated statement, Citation at,
                    InputReads reads,
@@ -360,9 +356,6 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                    DemandReading.Answered getsPast, List<ConstructionAsk> asks,
                    ElementsNamed readsTheElements, LinesReadOn readOn,
                    Supplier<Boolean> beforeIt,
-                   Function<Core.Construct,
-                           Optional<WhatARunWorksOutBeforeACount.BeforeAConstruction>>
-                           beforeAConstruction,
                    Supplier<List<AConstructionOnTheWay>> constructionsOnTheWay) {
 
         Reading {
@@ -372,8 +365,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     || context == null
                     || saidOnTheWay == null || witnesses == null || getsPast == null
                     || asks == null || readsTheElements == null || readOn == null
-                    || beforeIt == null || beforeAConstruction == null
-                    || constructionsOnTheWay == null) {
+                    || beforeIt == null || constructionsOnTheWay == null) {
                 throw new IllegalArgumentException(
                         "a reading is of some comparison of the model, placed somewhere");
             }
@@ -388,13 +380,6 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
          */
         boolean nothingBeforeItEndsARun() {
             return beforeIt.get();
-        }
-
-        /** What a run works out before {@code made}, one of the constructions on the way
-         *  ({@code beforeAConstruction}). */
-        Optional<WhatARunWorksOutBeforeACount.BeforeAConstruction> workedOutBefore(
-                Core.Construct made) {
-            return beforeAConstruction.apply(made);
         }
 
         /** Every construction a run on the way may work out before the comparison
@@ -561,6 +546,9 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * body, a helper's body read at a call, or a value's template. A run on the way to a comparison
      * in either may have worked out anything written in both, which is what is asked of where the
      * way to it is not read.
+     *
+     * <p>{@code calledAt} is the call of the behavior's body a helper's body is read at, and the
+     * way to it: empty everywhere else.
      */
     private record Body(String behavior, InputReading read,
                         Arrivals answering, Templates templates,
@@ -571,15 +559,15 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                         WithinOneApplication.Gathered oneApplication,
                         ComparisonWitnesses.AtComparisons witnesses, WaysToNodes ways,
                         WhereConstructionsAreMet constructions, Core whole, Core within,
-                        Optional<List<AConstructMet>> metOnly) {
+                        Optional<WayIn> calledAt, Optional<List<AConstructMet>> metOnly) {
 
-        /** The same reading, in the body of a recursive helper read at a call of it: its own
-         *  tree, and the copy that call makes of each construct in it. */
-        Body inside(Core helperBody, CallContext called, InputReads reads) {
+        /** The same reading, in the body of a recursive helper read at {@code at}, a call of it:
+         *  its own tree, and the copy that call makes of each construct in it. */
+        Body inside(Core helperBody, CallContext called, InputReads reads, WayIn at) {
             return new Body(behavior, read, Arrivals.inTheTree(helperBody), templates, outcomes,
                     decided, stated, conditions, called, helperBody, reads, armsNamed,
                     dependencies, oneApplication, witnesses, ways, constructions, whole,
-                    helperBody, metOnly);
+                    helperBody, Optional.of(at), metOnly);
         }
 
         /** The trees a run on the way to a comparison here may have worked out anything of: the
@@ -702,7 +690,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         walk(body, new Body(behavior, read, answering,
                         templates, outcomes, decided, stated, conditions,
                         CallContext.OF_THE_BODY, body, reads, armsNamed, dependencies,
-                        oneApplication, witnesses, ways, constructions, body, body, metOnly),
+                        oneApplication, witnesses, ways, constructions, body, body,
+                        Optional.empty(), metOnly),
                 reads, ClosureApplications.OUTSIDE,
                 LiveFlow.of(body), List.of(), true, readings, forks, numbering);
         // What each value the body builds states, read once. A value means the same wherever it is
@@ -720,7 +709,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                         templates, outcomes, decided, stated, conditions,
                         CallContext.OF_THE_BODY, null, null, armsNamed, dependencies,
                         oneApplication, witnesses, ways, constructions, body, template,
-                        metOnly),
+                        Optional.empty(), metOnly),
                         defined, ClosureApplications.OUTSIDE, LiveFlow.of(template),
                         entry.assumed(), entry.live(),
                         readings, forks, numbering);
@@ -731,9 +720,19 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                         oneApplication.read()));
     }
 
-    /** How one build of a value was reached: what stood on the way to it, and whether what it
-     *  computes is read on the way to what the behavior answers with. */
-    private record Entry(List<OnTheWay> assumed, boolean live) { }
+    /** How one build of a value was reached: where it is, what stood on the way to it, and
+     *  whether what it computes is read on the way to what the behavior answers with. The build
+     *  is null in what every build stood under ({@link Templates#joined}). */
+    private record Entry(Core build, List<OnTheWay> assumed, boolean live) { }
+
+    /** Where a run goes from the behavior's body into another body a comparison stands in: a
+     *  node of the behavior's body, and what stood on the way to it. */
+    private record WayIn(Core at, List<OnTheWay> way) {
+
+        WayIn {
+            way = List.copyOf(way);
+        }
+    }
 
     /**
      * The builds of values this walk met, by the template each is a build of.
@@ -755,8 +754,18 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             return held.bodyOf(build);
         }
 
-        void entered(Core template, List<OnTheWay> assumed, boolean live) {
-            entered.computeIfAbsent(template, _ -> new ArrayList<>()).add(new Entry(assumed, live));
+        void entered(Core template, Core build, List<OnTheWay> assumed, boolean live) {
+            entered.computeIfAbsent(template, _ -> new ArrayList<>())
+                    .add(new Entry(build, assumed, live));
+        }
+
+        /** Every build of {@code template} the walk met, each where it is and on the way to it,
+         *  in the order met. */
+        List<WayIn> builds(Core template) {
+            List<WayIn> out = new ArrayList<>();
+            entered.getOrDefault(template, List.of())
+                    .forEach(each -> out.add(new WayIn(each.build(), each.assumed())));
+            return out;
         }
 
         /**
@@ -788,7 +797,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     }
                 }
             }
-            return new Entry(List.copyOf(common), live);
+            return new Entry(null, List.copyOf(common), live);
         }
     }
 
@@ -808,40 +817,310 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
 
     /**
      * Every construction a run on the way to {@code comparison} may work out before it, each with
-     * what it asks and the way the walk met it on.
+     * what it asks and each way a run on the way gets to it on.
      *
-     * <p>Where what a run works out before the comparison is read — in the behavior's own body,
-     * and not in a function value no call it is handed to applies
-     * ({@link WhatARunWorksOutBeforeACount#constructionsARunMayMeetBefore}) — those it may meet.
-     * Where it is not — in a helper's body read at a call, a value's template, or such a function
-     * value — every construction written in the behavior's body and in the tree the comparison
-     * stands in but under it, with no way to it: any of them may come first, and that a run gets to
-     * one is shown of none. Never none for want of a reading.
+     * <p>A run gets to the comparison by one or more ways into the tree it stands in
+     * ({@link #waysInto}), and on each of those, the constructions it may meet first are read
+     * ({@link WhatARunWorksOutBeforeACount#constructionsARunMayMeetBefore}). Where some way in is
+     * not read, every construction written in the behavior's body and in the tree the comparison
+     * stands in but under it is among them as well, with no way to it shown by that one: any of
+     * them may come first. Never none for want of a reading.
      *
      * <p>What one of the parts every run works out asks is what the run to the comparison read
      * ({@code asks}), which is the one condition that also narrows the rows. Of any other, what it
      * asks is read of it alone, with the names as they stand where the walk met it, and narrows
      * nothing: only some runs work it out.
+     *
+     * @param assumed  what stood on the way to the comparison, as the walk carried it
+     * @param applying the applications of the closures the comparison stands inside
      */
     private static List<AConstructionOnTheWay> constructionsOnTheWay(Core comparison,
                                                                      List<ConstructionAsk> asks,
+                                                                     List<OnTheWay> assumed,
+                                                                     ClosureApplications applying,
                                                                      Body in) {
-        Optional<List<Core.Construct>> read = in.context().equals(CallContext.OF_THE_BODY)
-                ? WhatARunWorksOutBeforeACount.constructionsARunMayMeetBefore(in.root(),
-                        comparison)
-                : Optional.empty();
-        List<Core.Construct> made = read.orElseGet(() ->
-                WhatARunWorksOutBeforeACount.everyConstructionIn(in.trees(), comparison));
+        WaysInto into = waysInto(comparison, assumed, applying.saysWhatStandsInIt(), in);
+        Set<Core> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        List<Core.Construct> made = new ArrayList<>();
+        for (WayInto way : into.each()) {
+            way.mayMeet().forEach(each -> {
+                if (seen.add(each)) {
+                    made.add(each);
+                }
+            });
+        }
+        if (!into.every()) {
+            for (Core.Construct each
+                    : WhatARunWorksOutBeforeACount.everyConstructionIn(in.trees(), comparison)) {
+                if (seen.add(each)) {
+                    made.add(each);
+                }
+            }
+        }
         List<AConstructionOnTheWay> out = new ArrayList<>();
         for (Core.Construct each : made) {
             Optional<WhereConstructionsAreMet.Met> met = in.constructions().at(each);
             AConstructionOnTheWay.Asked asked = asks.stream().filter(ask -> ask.of(each))
                     .findFirst().<AConstructionOnTheWay.Asked>map(AConstructionOnTheWay.Asked.Read::new)
                     .orElseGet(() -> askedAlone(each, met, in));
-            out.add(new AConstructionOnTheWay(each, asked, read.isPresent()
-                    ? met.map(WhereConstructionsAreMet.Met::way) : Optional.empty()));
+            List<AConstructionOnTheWay.Reach> reaches = new ArrayList<>();
+            boolean everyWay = into.every();
+            for (int entry = 0; entry < into.each().size(); entry++) {
+                WayInto way = into.each().get(entry);
+                if (way.mayMeet().stream().noneMatch(one -> one == each)) {
+                    continue;
+                }
+                Optional<AConstructionOnTheWay.Reach> reach = met.isEmpty() ? Optional.empty()
+                        : way.reach().reach(entry, each, met.get());
+                reach.ifPresent(reaches::add);
+                everyWay &= reach.isPresent();
+            }
+            out.add(new AConstructionOnTheWay(each, asked, reaches, everyWay));
         }
         return List.copyOf(out);
+    }
+
+    /**
+     * The ways a run gets into the tree a comparison stands in, as far as they are read.
+     *
+     * @param each  each way in that is read, with what a run on it may meet first
+     * @param every whether {@code each} is every way a run gets to the comparison by
+     */
+    private record WaysInto(List<WayInto> each, boolean every) {
+
+        static final WaysInto NOT_READ = new WaysInto(List.of(), false);
+
+        WaysInto {
+            each = List.copyOf(each);
+        }
+    }
+
+    /**
+     * One way a run gets into the tree a comparison stands in.
+     *
+     * @param mayMeet every construction a run by it may work out before the comparison
+     * @param reach   the way a run by it gets to one of those, where the walk met it on
+     *                {@code met}: empty where nothing is shown of it
+     */
+    private record WayInto(List<Core.Construct> mayMeet, Reaching reach) {
+
+        WayInto {
+            mayMeet = List.copyOf(mayMeet);
+        }
+    }
+
+    /** How a run by one way in gets to a construction on it ({@link WayInto#reach}). */
+    @FunctionalInterface
+    private interface Reaching {
+        Optional<AConstructionOnTheWay.Reach> reach(int entry, Core.Construct made,
+                                                    WhereConstructionsAreMet.Met met);
+    }
+
+    /**
+     * Each way a run gets to {@code comparison} by, where {@code assumed} stood on the way to it
+     * as the walk carried it, and {@code saidOfEach} is whether what the closures around it meet
+     * is said of each application and not carried there.
+     *
+     * <p>In the behavior's own body, outside every function value no call it is handed to
+     * applies, one: the body. In a function value bound by a name, one for each call the body
+     * makes handing it to an operation that applies it ({@link ClosureUses}), each where the call
+     * is — every one of them only where nothing else uses it. In a helper's body read at a call,
+     * that call. In a value's template, one for each build of it the walk met.
+     *
+     * <p>What a run by a call works out first is what the body works out before the call and what
+     * the call is handed, and the body of what it goes into whole: an application or a step
+     * before this one ran all of it. So a construction in that body is among those it may meet,
+     * and none of them is shown to be got to. A template is gone into once at its build, so what
+     * a run works out there first is what the body works out before the build and then what the
+     * template works out before the comparison.
+     *
+     * <p>What stood on the way to the comparison by a way in is what stood on the way to where it
+     * goes in, and what stood on the way inside the tree past what the walk carried into it.
+     */
+    private static WaysInto waysInto(Core comparison, List<OnTheWay> assumed,
+                                     boolean saidOfEach, Body in) {
+        Core body = in.whole();
+        if (in.context().equals(CallContext.OF_THE_BODY) && in.root() != null) {
+            WhatARunWorksOutBeforeACount.NotHanded notHanded =
+                    WhatARunWorksOutBeforeACount.notHandedOnTheWay(in.root(), comparison);
+            if (notHanded == null) {
+                Optional<List<Core.Construct>> mayMeet =
+                        WhatARunWorksOutBeforeACount.constructionsARunMayMeetBefore(in.root(),
+                                comparison);
+                boolean wayRead = !(saidOfEach && WhatARunWorksOutBeforeACount
+                        .choosesInsideAFunctionValue(in.root(), comparison, false));
+                return mayMeet.map(meets -> new WaysInto(List.of(new WayInto(meets,
+                        (entry, made, met) -> Optional.of(new AConstructionOnTheWay.Reach(entry,
+                                assumed, met.way(),
+                                WhatARunWorksOutBeforeACount.workedOutBeforeAConstruction(
+                                        in.root(), comparison, made),
+                                wayRead)))), true))
+                        .orElse(WaysInto.NOT_READ);
+            }
+            return byTheCallsApplying(notHanded, comparison, assumed, saidOfEach, in);
+        }
+        if (in.context().equals(CallContext.OF_THE_BODY) && in.within() != body) {
+            Entry joined = in.templates().joined(in.within());
+            List<WayIn> builds = in.templates().builds(in.within());
+            if (joined == null || builds.isEmpty()) {
+                return WaysInto.NOT_READ;
+            }
+            List<OnTheWay> inside = without(assumed, joined.assumed());
+            boolean every = true;
+            List<WayInto> each = new ArrayList<>();
+            for (WayIn build : builds) {
+                Optional<WayInto> by = byABuild(build, comparison, inside, joined.assumed(),
+                        saidOfEach, in);
+                by.ifPresent(each::add);
+                every &= by.isPresent();
+            }
+            return new WaysInto(each, every);
+        }
+        if (in.calledAt().isPresent()) {
+            WayIn call = in.calledAt().get();
+            return byACall(call, in.root(), comparison,
+                    union(call.way(), without(assumed, call.way())), saidOfEach, in)
+                    .map(by -> new WaysInto(List.of(by), true)).orElse(WaysInto.NOT_READ);
+        }
+        return WaysInto.NOT_READ;
+    }
+
+    /**
+     * The ways into {@code notHanded}'s function value a run on the way to {@code comparison}
+     * takes: each call applying it, where it is bound by a name. Every one of them only where
+     * nothing else uses it and the walk met each call on one way.
+     */
+    private static WaysInto byTheCallsApplying(WhatARunWorksOutBeforeACount.NotHanded notHanded,
+                                               Core comparison, List<OnTheWay> assumed,
+                                               boolean saidOfEach, Body in) {
+        Core.Block closure = notHanded.closure();
+        Optional<List<OnTheWay>> made = in.constructions().madeOn(closure);
+        ClosureUses uses = in.atTheRoot().usesOf(closure);
+        if (!(notHanded.above() instanceof Core.LetIn) || made.isEmpty() || uses == null) {
+            return WaysInto.NOT_READ;
+        }
+        List<OnTheWay> inside = without(assumed, made.get());
+        boolean every = !uses.usedElsewhere();
+        List<WayInto> each = new ArrayList<>();
+        for (ClosureUses.Application applied : uses.applications()) {
+            Core call = Core.withoutStanding(applied.call());
+            Optional<WayInto> by = in.constructions().handingOn(call).flatMap(way ->
+                    byACall(new WayIn(call, way), closure.body(), comparison,
+                            union(way, inside), saidOfEach, in));
+            by.ifPresent(each::add);
+            every &= by.isPresent();
+        }
+        return new WaysInto(each, every);
+    }
+
+    /**
+     * A run going into {@code inner}, a body run on each application or step, at {@code call}, a
+     * call of the behavior's body, on the way to {@code comparison} in it, which stood under
+     * {@code toTheComparison} by that way: empty where what the body works out before the call is
+     * not read.
+     */
+    private static Optional<WayInto> byACall(WayIn call, Core inner, Core comparison,
+                                             List<OnTheWay> toTheComparison, boolean saidOfEach,
+                                             Body in) {
+        Core body = in.whole();
+        Optional<List<Core.Construct>> first =
+                WhatARunWorksOutBeforeACount.constructionsARunMayMeetBefore(body, call.at());
+        if (first.isEmpty()) {
+            return Optional.empty();
+        }
+        List<Core.Construct> mayMeet = new ArrayList<>(first.get());
+        mayMeet.addAll(WhatARunWorksOutBeforeACount.everyConstructionUnder(call.at()));
+        mayMeet.addAll(WhatARunWorksOutBeforeACount.everyConstructionIn(List.of(inner),
+                comparison));
+        boolean wayRead = !WhatARunWorksOutBeforeACount.choosesInsideAFunctionValue(body,
+                call.at(), false)
+                && !(saidOfEach && WhatARunWorksOutBeforeACount.choosesInsideAFunctionValue(inner,
+                        comparison, true));
+        List<Core.Construct> before = first.get();
+        return Optional.of(new WayInto(mayMeet, (entry, made, met) ->
+                before.stream().noneMatch(one -> one == made) ? Optional.empty()
+                        : Optional.of(new AConstructionOnTheWay.Reach(entry, toTheComparison,
+                                met.way(),
+                                WhatARunWorksOutBeforeACount.workedOutBeforeAConstruction(body,
+                                        call.at(), made),
+                                wayRead))));
+    }
+
+    /**
+     * A run going into the template {@code in} is walking at {@code build}, on the way to
+     * {@code comparison} in it, which stood under {@code inside} in the template past what every
+     * build stood under, {@code joined}: empty where what the body works out before the build, or
+     * the template before the comparison, is not read.
+     */
+    private static Optional<WayInto> byABuild(WayIn build, Core comparison,
+                                              List<OnTheWay> inside, List<OnTheWay> joined,
+                                              boolean saidOfEach, Body in) {
+        Core body = in.whole();
+        Core template = in.within();
+        Optional<List<Core.Construct>> first =
+                WhatARunWorksOutBeforeACount.constructionsARunMayMeetBefore(body, build.at());
+        Optional<List<Core.Construct>> within =
+                WhatARunWorksOutBeforeACount.constructionsARunMayMeetBefore(template,
+                        comparison);
+        if (first.isEmpty() || within.isEmpty()) {
+            return Optional.empty();
+        }
+        List<Core.Construct> mayMeet = new ArrayList<>(first.get());
+        mayMeet.addAll(within.get());
+        List<OnTheWay> toTheComparison = union(build.way(), inside);
+        boolean wayRead = !WhatARunWorksOutBeforeACount.choosesInsideAFunctionValue(body,
+                build.at(), false)
+                && !(saidOfEach && WhatARunWorksOutBeforeACount.choosesInsideAFunctionValue(
+                        template, comparison, false));
+        List<Core.Construct> before = first.get();
+        return Optional.of(new WayInto(mayMeet, (entry, made, met) ->
+                Optional.of(before.stream().anyMatch(one -> one == made)
+                        ? new AConstructionOnTheWay.Reach(entry, toTheComparison, met.way(),
+                                WhatARunWorksOutBeforeACount.workedOutBeforeAConstruction(body,
+                                        build.at(), made),
+                                wayRead)
+                        : new AConstructionOnTheWay.Reach(entry, toTheComparison,
+                                union(build.way(), without(met.way(), joined)),
+                                WhatARunWorksOutBeforeACount.workedOutBeforeAConstructionPast(
+                                        body, build.at(), template, comparison, made),
+                                wayRead))));
+    }
+
+    /** {@code way} and then every entry of {@code more} it does not hold. */
+    private static List<OnTheWay> union(List<OnTheWay> way, List<OnTheWay> more) {
+        List<OnTheWay> out = new ArrayList<>(way);
+        for (OnTheWay each : more) {
+            if (!out.contains(each)) {
+                out.add(each);
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /** Every entry of {@code way} that {@code carried} does not hold, in order. */
+    private static List<OnTheWay> without(List<OnTheWay> way, List<OnTheWay> carried) {
+        return way.stream().filter(each -> !carried.contains(each)).toList();
+    }
+
+    /** Whether {@code e} is a call handed a function value by a name: where a run goes into the
+     *  value's body, if the call applies it. */
+    private static boolean handsAFunctionValueByAName(Core e, InputReads reads, Body in) {
+        if (!(Core.withoutStanding(e) instanceof Core.Call)
+                && !(Core.withoutStanding(e) instanceof Core.PreservedCall)) {
+            return false;
+        }
+        AnOperationApplied applied = AnOperationApplied.of(e);
+        if (applied == null) {
+            return false;
+        }
+        for (Core arg : applied.args()) {
+            if (Core.withoutStanding(arg) instanceof Core.Read
+                    && Core.withoutStanding(reads.standing(arg, in.symbols(), in.newtypes())
+                            .value()) instanceof Core.Block) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** What {@code made} asks, read of it alone with the names as they stand where the walk met
@@ -1281,11 +1560,16 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         // The way this node is reached on, for whoever asks whether a part of a fork's condition is
         // evaluated at all.
         in.ways().reached(e, assumed);
-        // And, of a construction of the behavior's own body, for whoever asks whether a run on the
-        // way to a rule gets to it, and which.
-        if (e instanceof Core.Construct made && in.root() != null && in.metOnly().isEmpty()
-                && in.context().equals(CallContext.OF_THE_BODY)) {
-            in.constructions().met(made, assumed, reads);
+        // And, of a construction of the behavior's own body or of a value's template, for whoever
+        // asks whether a run on the way to a rule gets to it, and which; and of a call handed a
+        // function value by a name, where a run goes into the body of the function value.
+        if (in.metOnly().isEmpty() && in.context().equals(CallContext.OF_THE_BODY)) {
+            if (e instanceof Core.Construct made) {
+                in.constructions().met(made, assumed, reads);
+            }
+            if (in.root() != null && handsAFunctionValueByAName(e, reads, in)) {
+                in.constructions().handing(Core.withoutStanding(e), assumed);
+            }
         }
         // The one place the two readings part: what is done at a construct. Where only where each
         // stands is asked, it is said and nothing of it is read; everything else in this walk,
@@ -1393,11 +1677,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     new Pullback.Once<>(() -> in.context().equals(CallContext.OF_THE_BODY)
                             && WhatARunWorksOutBeforeACount.nothingBeforeItEndsARun(in.root(),
                                     e)),
-                    made -> in.context().equals(CallContext.OF_THE_BODY)
-                            ? WhatARunWorksOutBeforeACount.workedOutBeforeAConstruction(in.root(),
-                                    e, made)
-                            : Optional.empty(),
-                    new Pullback.Once<>(() -> constructionsOnTheWay(e, past.asks(), in))));
+                    new Pullback.Once<>(() -> constructionsOnTheWay(e, past.asks(),
+                            besideIt.way(), applying, in))));
         }
         // A fork the reading of the runs takes a way out of, under the closures the walk is in. A
         // value standing as a wider type is no fork, and a fork under it is met one step down.
@@ -1516,7 +1797,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 Core given = let.value();
                 if (Core.withoutStanding(let.value()) instanceof Core.MaterialisedValue build) {
                     given = in.templates().bodyOf(build);
-                    in.templates().entered(given, assumed, live && flow.reads(let));
+                    in.templates().entered(given, build, assumed, live && flow.reads(let));
                 } else {
                     walk(let.value(), in, reads, applying, flow, assumed,
                             live && flow.reads(let), out, forks, numbering);
@@ -1599,7 +1880,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                         walk(child, in, reads.entering(step, symbols, in.newtypes()),
                                 applying.entering(step, symbols, in.newtypes()), flow, assumed,
                                 live, out, forks, numbering));
-                walk(over.step(), in.inside(over.body(), over.context(), over.reads()),
+                walk(over.step(), in.inside(over.body(), over.context(), over.reads(),
+                                new WayIn(Core.withoutStanding(call), assumed)),
                         over.reads(),
                         over.applying(), LiveFlow.of(over.body()), assumed, live, out, forks,
                         numbering.within(over.context()));
@@ -1615,6 +1897,9 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             // a run handed it is on the way that arm is: what entering the arm states goes onto the
             // way in here, as it does onto the way of what is written inside the arm.
             case Core.Block block -> {
+                if (in.metOnly().isEmpty() && in.context().equals(CallContext.OF_THE_BODY)) {
+                    in.constructions().made(block, assumed);
+                }
                 in.oneApplication().entering(block, shortOfEachElement(block, reads, in));
                 List<OnTheWay> handed = past(assumed, writtenUnder(block, reads, in, numbering));
                 ScopeStep.forEachChild(block, (child, step) -> {

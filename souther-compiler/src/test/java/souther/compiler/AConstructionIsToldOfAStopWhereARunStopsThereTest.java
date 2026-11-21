@@ -103,6 +103,23 @@ class AConstructionIsToldOfAStopWhereARunStopsThereTest {
         // which applications of the function a run makes before the rule is not read, so no run
         // is shown to get to it
         NOT_SHOWN.put("inANamedFunction", WhyAConstructionStopIsNotShown.REACH_NOT_SHOWN);
+        // one before a function bound by a name, on the way to the rule the function holds where
+        // the call applying it is
+        FORMS.put("beforeANamedFunction", new Form("OneC", "Count",
+                "{ let m = Count(q) \n let f = x -> x <= 3 \n "
+                        + "OneC { a = m, w = List.all(f, [q]) } }"));
+        // the same function applied by two calls, and a construction between them, which only a
+        // run on the way to the rule by the second call gets to first
+        FORMS.put("beforeTwoCallsOfANamedFunction", new Form("OneC", "Count",
+                "{ let m = Count(q) \n let f = x -> x <= 3 \n "
+                        + "OneC { a = m, w = List.all(f, [q]) && List.any(f, [q]) } }"));
+        FORMS.put("betweenTwoCallsOfANamedFunction", new Form("CountFlag", "Count",
+                "{ let f = x -> x <= 3 \n let ok = List.all(f, [q]) \n let m = Count(q) \n "
+                        + "CountFlag { a = m, ok = ok, w = List.any(f, [q]) } }"));
+        // the first call, worked out before it by a run on the way by the second, applies a body
+        // the call does not hold, which may end the run for all that is read of it
+        NOT_SHOWN.put("betweenTwoCallsOfANamedFunction",
+                WhyAConstructionStopIsNotShown.SOMETHING_BEFORE_IT_MAY_STOP);
         // a construction over a place no rule on the way reads
         FORMS.put("overAPlaceNoRuleReads", new Form("OneC", "Count",
                 "OneC { a = Count(q), w = Decimal.compare(d, e) <= 0 }"));
