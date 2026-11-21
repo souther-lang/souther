@@ -854,6 +854,41 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
     }
 
     /**
+     * A build written in one place inside a closure is made on each application of the closure:
+     * applied to two elements, the first ran the template whole before the second, and what it
+     * works out after the rule may come before the rule; applied to one, it runs once.
+     */
+    @Test
+    void aTemplateBuiltInAClosureAppliedTwiceHasOnTheWayWhatTheFirstWorkedOutAfterTheRule() {
+        String model = """
+                module demo
+
+                data Span = { lo: Decimal, hi: Decimal }
+                    invariant lo <= hi
+                data Plan = { within: Bool }
+                let small: Bool = {
+                    let ok = Decimal.compare(1.0m, 2.0m) <= 0
+                    let s = Span { lo = 1.0m, hi = 2.0m }
+                    ok && Decimal.compare(s.lo, 3.0m) <= 0
+                }
+
+                behavior f : (q: Int) -> Plan
+                    constructs Plan
+                let f (q) = Plan { within = List.all(x -> {
+                    let t = small
+                    t && x <= 3
+                }, ELEMENTS) }
+                """;
+        String rule = "7:" + ("    let ok = Decimal.compare(1.0m, 2.0m) <= 0".indexOf(" <= ") + 2);
+        Map<String, Map<Integer, Set<String>>> once = ConstructionsJudged.byRule(compiled(model
+                .replace("ELEMENTS", "[q]")), "f");
+        Map<String, Map<Integer, Set<String>>> twice = ConstructionsJudged.byRule(compiled(model
+                .replace("ELEMENTS", "[q, q]")), "f");
+        assertEquals(Map.of(), once.get(rule), once::toString);
+        assertEquals(Set.of(8), twice.get(rule).keySet(), twice::toString);
+    }
+
+    /**
      * A value built in the template of another is gone into by way of the other's builds: a
      * construction in it before a rule it holds is on the way to the rule by those, as one in a
      * template the body builds is.

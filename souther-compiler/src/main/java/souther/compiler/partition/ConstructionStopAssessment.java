@@ -512,8 +512,9 @@ final class ConstructionStopAssessment {
                                  Map<Core, List<OnTheWay>> waysTo, InputReading read,
                                  ValueTemplates definitions) {
         List<ConstructionAsk> passed = new ArrayList<>();
+        Set<Core> through = Collections.newSetFromMap(new IdentityHashMap<>());
         for (Core part : before.onSomeRun()) {
-            if (!getsPast(part, asks, passed, definitions)) {
+            if (!getsPast(part, asks, passed, definitions, through)) {
                 return new Found.None(WhyAConstructionStopIsNotShown.SOMETHING_BEFORE_IT_MAY_STOP);
             }
         }
@@ -583,26 +584,29 @@ final class ConstructionStopAssessment {
      * no tree the build stands in and {@link WhatARunMayEndFor#itself} does not answer for, so a
      * run gets past the build where it gets past every node of the template. Asked here and not of
      * {@link WhatARunMayEndFor.WithDefinitions}: what this asks of a construction is that the value
-     * looked for meets what it asks, which is no ending of a run.
+     * looked for meets what it asks, which is no ending of a run. {@code through} holds the
+     * templates being gone through, so a template built inside itself, by way of others, is one a
+     * run is not shown to get past: the language refuses a value that reaches itself, and the
+     * templates handed here are not what holds that.
      */
     private static boolean getsPast(Core e, List<ConstructionAsk> asks,
                                     List<ConstructionAsk> passed,
-                                    ValueTemplates definitions) {
+                                    ValueTemplates definitions, Set<Core> through) {
         Core node = Core.withoutStanding(e);
         Core template = definitions.builtBy(node);
         if (template != null) {
-            return getsPast(template, asks, passed, definitions);
+            return pastTheTemplate(template, asks, passed, definitions, through);
         }
         if (node instanceof Core.IfConstructed attempt) {
             boolean[] all = {true};
-            WhatARunMayEndFor.forEachWorkedOut(attempt,
-                    (part, _) -> all[0] = all[0] && getsPast(part, asks, passed, definitions));
+            WhatARunMayEndFor.forEachWorkedOut(attempt, (part, _) -> all[0] = all[0]
+                    && getsPast(part, asks, passed, definitions, through));
             return all[0];
         }
         for (Core each : Core.subexpressionsAt(node)) {
             Core built = definitions.builtBy(each);
             if (built != null) {
-                if (!getsPast(built, asks, passed, definitions)) {
+                if (!pastTheTemplate(built, asks, passed, definitions, through)) {
                     return false;
                 }
             } else if (Core.withoutStanding(each) instanceof Core.Construct) {
@@ -618,8 +622,21 @@ final class ConstructionStopAssessment {
         }
         boolean[] all = {true};
         Core.forEachChild(node, child -> all[0] = all[0]
-                && getsPast(child, asks, passed, definitions));
+                && getsPast(child, asks, passed, definitions, through));
         return all[0];
+    }
+
+    /** Whether a run gets past working {@code template} out ({@link #getsPast}): not where it
+     *  is being gone through already. */
+    private static boolean pastTheTemplate(Core template, List<ConstructionAsk> asks,
+                                           List<ConstructionAsk> passed,
+                                           ValueTemplates definitions, Set<Core> through) {
+        if (!through.add(template)) {
+            return false;
+        }
+        boolean past = getsPast(template, asks, passed, definitions, through);
+        through.remove(template);
+        return past;
     }
 
     /** Every form {@code requirement} stands on that is over numbers of the input, into

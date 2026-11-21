@@ -729,10 +729,11 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
     }
 
     /** How one build of a value was reached: where it is and the tree it stands in, what stood on
-     *  the way to it, and whether what it computes is read on the way to what the behavior
-     *  answers with. The build and its tree are null in what every build stood under
-     *  ({@link Templates#joined}). */
-    private record Entry(Core build, Core standsIn, List<OnTheWay> assumed, boolean live) { }
+     *  the way to it, whether what it computes is read on the way to what the behavior answers
+     *  with, and the applications of the closures it stands inside. The build, its tree and the
+     *  applications are null in what every build stood under ({@link Templates#joined}). */
+    private record Entry(Core build, Core standsIn, List<OnTheWay> assumed, boolean live,
+                         ClosureApplications applying) { }
 
     /** Where a run goes from the behavior's body into another body a comparison stands in: a
      *  node of the behavior's body, and what stood on the way to it. */
@@ -777,9 +778,9 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         }
 
         void entered(Core template, Core build, Core standsIn, List<OnTheWay> assumed,
-                     boolean live) {
+                     boolean live, ClosureApplications applying) {
             entered.computeIfAbsent(template, _ -> new ArrayList<>())
-                    .add(new Entry(build, standsIn, assumed, live));
+                    .add(new Entry(build, standsIn, assumed, live, applying));
         }
 
         /** Every build of {@code template} the walk met, each where it is, in which tree, and on
@@ -817,7 +818,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     }
                 }
             }
-            return new Entry(null, null, List.copyOf(common), live);
+            return new Entry(null, null, List.copyOf(common), live, null);
         }
     }
 
@@ -1166,8 +1167,10 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      *
      * @return the ways, whether they are every way — not where a build stands in a template no
      *         way to which is read — and whether a run builds the template once at most: where it
-     *         is built in one place, which is the behavior's body or a template built once. Built in
-     *         two, a run may build it at both, and the first build ran it whole before the second
+     *         is built in one place, made there once ({@link #builtOnce}), and that place is the
+     *         behavior's body or a template built once. Built in two, or made on each application
+     *         of a closure, a run may build it again, and the first build ran it whole before the
+     *         next
      */
     private static Chains chainsInto(Core template, Body in, Set<Core> on) {
         List<Entry> builds = in.templates().builds(template);
@@ -1175,7 +1178,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             return new Chains(List.of(), false, false);
         }
         boolean every = true;
-        boolean once = builds.size() == 1;
+        boolean once = builds.size() == 1 && builtOnce(builds.getFirst());
         List<Chain> out = new ArrayList<>();
         for (Entry build : builds) {
             if (build.standsIn() == in.whole()) {
@@ -1201,6 +1204,18 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         }
         on.remove(template);
         return new Chains(out, every, once);
+    }
+
+    /**
+     * Whether a run that works the tree {@code build} stands in out once makes the build once at
+     * most: where it stands inside no function value, or where the applications of those it
+     * stands inside are one made whatever the row is
+     * ({@link ClosureApplications#oneMadeWhateverTheRow}). A build written once inside a closure is
+     * made on each application of it, and one written once is not one made.
+     */
+    private static boolean builtOnce(Entry build) {
+        return !WhatARunWorksOutBeforeACount.goesIntoAFunctionValue(build.standsIn(),
+                build.build()) || build.applying().oneMadeWhateverTheRow();
     }
 
     /** The ways to a template ({@link #chainsInto}), whether they are every one, and whether a
@@ -2040,7 +2055,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 if (Core.withoutStanding(let.value()) instanceof Core.MaterialisedValue build) {
                     given = in.templates().bodyOf(build);
                     in.templates().entered(given, build, in.within(), assumed,
-                            live && flow.reads(let));
+                            live && flow.reads(let), applying);
                 } else {
                     walk(let.value(), in, reads, applying, flow, assumed,
                             live && flow.reads(let), out, forks, numbering);
