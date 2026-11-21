@@ -186,8 +186,8 @@ public interface LevelSpace {
      *
      * <p>Adjacency, and nothing else. Empty says the run past this level has no end, which is not a
      * statement that it is empty: a decimal difference has no successor and has every larger
-     * difference. That other question is {@link #anythingBeyond}, and both are read off the one
-     * {@link Occupancy} so they cannot disagree.
+     * difference. That other question is whether {@link #inspect} finds the run inhabited, and
+     * both are read off the one {@link Occupancy} so they cannot disagree.
      */
     default ExactAnswer<Optional<Level>> neighbour(Level from, Towards towards) {
         return endAnswer(runFrom(from, towards, false), towards);
@@ -200,7 +200,7 @@ public interface LevelSpace {
         };
     }
 
-    /** Everything one way of a level, which is what the three questions above are asked about. */
+    /** Everything one way of a level, which is what the questions above are asked about. */
     private static LevelInterval runFrom(Level from, Towards towards, boolean itself) {
         Bound at = Bound.at(from, itself);
         return towards == Towards.ABOVE
