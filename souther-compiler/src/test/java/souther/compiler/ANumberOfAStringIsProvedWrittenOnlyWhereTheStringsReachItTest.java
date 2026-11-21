@@ -2,15 +2,19 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.partition.LevelInterval;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.WhereTheReadingsDiffer;
+import souther.compiler.values.TextExtents;
 
+import java.math.BigInteger;
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -208,17 +212,19 @@ class ANumberOfAStringIsProvedWrittenOnlyWhereTheStringsReachItTest {
                 "bad may hold no value, and a row is a value of every parameter");
     }
 
+    /** The line's own length is one no String has, so no point asks for it, and each point that
+     *  is owed is proved exactly where a String has some length it asks for. */
     @Test
-    void aLineBeyondTheLongestStringIsNotProvedWritten() {
+    void aLineBeyondTheLongestStringIsProvedOnlyAtTheLengthsAStringHas() {
         List<BorderAssessment.Point> points = owedPoints(TOO_LONG, "example.toolong");
         assertFalse(points.isEmpty(), "the body draws a line on the length");
-        assertFalse(provedAny(points), "no String has that many code points: " + labels(points));
+        provedExactlyWhereAStringReaches(points);
     }
 
     /**
-     * The line past the longest string is not proved, with another line behind a condition beside
-     * it. What the line a string can reach beside it is proved of, on its own, is held in
-     * {@code ALineBeyondWhatAStringHoldsIsNoLineTest}.
+     * No point named for the line past the longest string is proved, with another line behind a
+     * condition beside it. What the line a string can reach beside it is proved of, on its own,
+     * is held in {@code ALineBeyondWhatAStringHoldsIsNoLineTest}.
      */
     @Test
     void aLineBeyondTheLongestStringIsNotProvedWithAnotherBesideIt() {
@@ -229,13 +235,38 @@ class ANumberOfAStringIsProvedWrittenOnlyWhereTheStringsReachItTest {
                 labels(points).toString());
     }
 
+    /** The longest String is at the line, and the side above it holds none: the point at the
+     *  line is proved, and nothing above it is. */
     @Test
-    void aLineAtTheLongestStringIsNotProvedEither() {
+    void aLineAtTheLongestStringIsProvedOnlyAtTheLengthsAStringHas() {
         List<BorderAssessment.Point> points = owedPoints(LONGEST_LINE, "example.longest");
         assertFalse(points.isEmpty(), "the body draws a line on the length");
-        assertFalse(provedAny(points),
-                "the side above the line holds no String, so the line is not proved: "
-                        + labels(points));
+        provedExactlyWhereAStringReaches(points);
+        assertTrue(provedAny(onNumberNamed(points, "= 268435455").toList()),
+                "a String of the longest length is one: " + labels(points));
+    }
+
+    /**
+     * Every point is proved where some whole number it asks for is a length a String has, from
+     * nought to {@link TextExtents#LONGEST_STRING}, and not proved where none is. Worked out of the
+     * values the point asks for, and not of the line it is on, for a String no rule is written
+     * about.
+     */
+    private static void provedExactlyWhereAStringReaches(List<BorderAssessment.Point> points) {
+        for (BorderAssessment.Point each : points) {
+            boolean reached = each.owed().criterion().region().parts().stream().anyMatch(run -> {
+                LevelInterval.WholeNumbers whole = run.wholeNumbers();
+                if (whole == null) {
+                    return false;
+                }
+                BigInteger least = whole.least() == null ? BigInteger.ZERO
+                        : whole.least().max(BigInteger.ZERO);
+                BigInteger most = BigInteger.valueOf(TextExtents.LONGEST_STRING);
+                return least.compareTo(whole.most() == null ? most : whole.most().min(most)) <= 0;
+            });
+            assertEquals(reached, provedAny(List.of(each)), () -> String.valueOf(
+                    each.asked(WhereTheReadingsDiffer.NONE)));
+        }
     }
 
     @Test

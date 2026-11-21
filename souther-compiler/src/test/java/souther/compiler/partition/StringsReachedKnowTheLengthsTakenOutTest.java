@@ -18,6 +18,7 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
+import souther.compiler.values.TextExtents;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -93,6 +94,19 @@ class StringsReachedKnowTheLengthsTakenOutTest {
         assertTrue(reached.allowsAPointIn(length[0], from(7, 8)));
         assertFalse(reached.allowsAPointIn(length[0], from(7, 7)));
         assertFalse(reached.allowsAPointIn(length[0], from(11, 20)));
+    }
+
+    /** The longest a String holds is a length one has, and a length past it is none: a run across
+     *  it is shown by what it holds below, and a run past it by nothing. */
+    @Test
+    void theLongestStringIsALengthAndNothingPastItIs() {
+        NumericTerm[] length = new NumericTerm[1];
+        StringsReached reached = reachedBy("String.length(value) >= 0", length);
+        long longest = TextExtents.LONGEST_STRING;
+        assertTrue(reached.allowsAPointIn(length[0], at(longest)));
+        assertFalse(reached.allowsAPointIn(length[0], at(longest + 1)));
+        assertTrue(reached.allowsAPointIn(length[0], from(longest - 1, longest + 1)));
+        assertFalse(reached.allowsAPointIn(length[0], from(longest + 1, longest + 9)));
     }
 
     /** The one length {@code n}. */
