@@ -9143,14 +9143,11 @@ public final class Adequacy {
          * out of the module's status while every debt said it had been measured in full.
          */
         public WeakeningSet weakening() {
-            WeakeningSet out = WeakeningSet.none();
-            for (WeakeningSet went : reading.values()) {
-                out = out.union(went);
+            List<WeakeningSet> each = new ArrayList<>(reading.values());
+            for (DeclaredDebt debt : owed) {
+                each.add(debt.debt().item().weakening());
             }
-            for (DeclaredDebt each : owed) {
-                out = out.union(each.debt().item().weakening());
-            }
-            return out;
+            return WeakeningSet.unionOf(each);
         }
     }
 

@@ -579,11 +579,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
          * is a measure's answer and not a renderer's (issue #953).
          */
         public WeakeningSet weakenedBy() {
-            WeakeningSet out = WeakeningSet.none();
+            List<WeakeningSet> each = new ArrayList<>();
             for (BehaviorReport behavior : behaviors) {
-                out = out.union(behavior.weakenedBy());
+                each.add(behavior.weakenedBy());
             }
-            return out.union(declarationsWeakenedBy());
+            each.add(declarationsWeakenedBy());
+            return WeakeningSet.unionOf(each);
         }
 
         /**

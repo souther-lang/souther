@@ -98,6 +98,29 @@ public final class WeakeningSet {
         return folded(causes, other.causes);
     }
 
+    /**
+     * Every one of {@code sets}, as one: what {@link #union} of them, first to last, comes to,
+     * folded once. A union taken set by set folds the whole of what it has so far again for each
+     * one it is given, and a fact is put together with its other evidence in the same order
+     * either way.
+     */
+    public static WeakeningSet unionOf(Iterable<WeakeningSet> sets) {
+        List<WeakeningSet> told = new ArrayList<>();
+        for (WeakeningSet each : sets) {
+            if (each != null && !each.causes.isEmpty()) {
+                told.add(each);
+            }
+        }
+        if (told.size() < 2) {
+            return told.isEmpty() ? NONE : told.getFirst();
+        }
+        Map<Object, Weakening> byFact = new HashMap<>();
+        for (WeakeningSet each : told) {
+            each.causes.forEach(one -> byFact.merge(factOf(one), one, WeakeningSet::merged));
+        }
+        return new WeakeningSet(Set.copyOf(byFact.values()));
+    }
+
     public boolean isEmpty() {
         return causes.isEmpty();
     }
