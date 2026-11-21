@@ -724,10 +724,11 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                         oneApplication.read()));
     }
 
-    /** How one build of a value was reached: where it is, what stood on the way to it, and
-     *  whether what it computes is read on the way to what the behavior answers with. The build
-     *  is null in what every build stood under ({@link Templates#joined}). */
-    private record Entry(Core build, List<OnTheWay> assumed, boolean live) { }
+    /** How one build of a value was reached: where it is and the tree it stands in, what stood on
+     *  the way to it, and whether what it computes is read on the way to what the behavior
+     *  answers with. The build and its tree are null in what every build stood under
+     *  ({@link Templates#joined}). */
+    private record Entry(Core build, Core tree, List<OnTheWay> assumed, boolean live) { }
 
     /** Where a run goes from the behavior's body into another body a comparison stands in: a
      *  node of the behavior's body, and what stood on the way to it. */
@@ -758,18 +759,15 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             return held.bodyOf(build);
         }
 
-        void entered(Core template, Core build, List<OnTheWay> assumed, boolean live) {
+        void entered(Core template, Core build, Core tree, List<OnTheWay> assumed, boolean live) {
             entered.computeIfAbsent(template, _ -> new ArrayList<>())
-                    .add(new Entry(build, assumed, live));
+                    .add(new Entry(build, tree, assumed, live));
         }
 
-        /** Every build of {@code template} the walk met, each where it is and on the way to it,
-         *  in the order met. */
-        List<WayIn> builds(Core template) {
-            List<WayIn> out = new ArrayList<>();
-            entered.getOrDefault(template, List.of())
-                    .forEach(each -> out.add(new WayIn(each.build(), each.assumed())));
-            return out;
+        /** Every build of {@code template} the walk met, each where it is, in which tree, and on
+         *  the way to it, in the order met. */
+        List<Entry> builds(Core template) {
+            return entered.getOrDefault(template, List.of());
         }
 
         /**
@@ -801,7 +799,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     }
                 }
             }
-            return new Entry(null, List.copyOf(common), live);
+            return new Entry(null, null, List.copyOf(common), live);
         }
     }
 
@@ -843,27 +841,30 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                                                                      List<OnTheWay> assumed,
                                                                      ClosureApplications applying,
                                                                      Body in) {
-        WaysInto into = waysInto(comparison, assumed, applying.saysWhatStandsInIt(), in);
+        WaysIn ways = waysIn(comparison, assumed, in);
+        boolean every = ways.every();
+        List<WhatAWayMeets> read = new ArrayList<>();
+        for (AWayIn way : ways.each()) {
+            Optional<WhatAWayMeets> meets = whatItMeets(way, comparison, applying, in);
+            meets.ifPresent(read::add);
+            every &= meets.isPresent();
+        }
         Set<Core> seen = Collections.newSetFromMap(new IdentityHashMap<>());
         List<Core.Construct> made = new ArrayList<>();
-        for (WayInto way : into.each()) {
-            way.mayMeet().forEach(each -> {
+        for (WhatAWayMeets way : read) {
+            way.inOrder().forEach(each -> {
                 if (seen.add(each)) {
                     made.add(each);
                 }
             });
         }
-        if (!into.every()) {
+        if (!every) {
             for (Core.Construct each
                     : WhatARunWorksOutBeforeACount.everyConstructionIn(in.trees(), comparison)) {
                 if (seen.add(each)) {
                     made.add(each);
                 }
             }
-        }
-        List<Set<Core>> metBy = new ArrayList<>();
-        for (WayInto way : into.each()) {
-            metBy.add(identitySetOf(way.mayMeet()));
         }
         List<AConstructionOnTheWay> out = new ArrayList<>();
         for (Core.Construct each : made) {
@@ -872,16 +873,18 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     .findFirst().<AConstructionOnTheWay.Asked>map(AConstructionOnTheWay.Asked.Read::new)
                     .orElseGet(() -> askedAlone(each, met, in));
             List<AConstructionOnTheWay.Reach> reaches = new ArrayList<>();
-            boolean everyWay = into.every();
-            for (int entry = 0; entry < into.each().size(); entry++) {
-                WayInto way = into.each().get(entry);
-                if (!metBy.get(entry).contains(each)) {
+            boolean everyWay = every;
+            for (int entry = 0; entry < read.size(); entry++) {
+                WhatAWayMeets way = read.get(entry);
+                if (!way.meets(each)) {
                     continue;
                 }
-                Optional<AConstructionOnTheWay.Reach> reach = met.isEmpty() ? Optional.empty()
-                        : way.reach().reach(entry, each, met.get());
-                reach.ifPresent(reaches::add);
-                everyWay &= reach.isPresent();
+                Reaching how = way.reaching(each);
+                if (met.isPresent() && how != null) {
+                    reaches.add(how.reach(entry, met.get()));
+                } else {
+                    everyWay = false;
+                }
             }
             out.add(new AConstructionOnTheWay(each, asked, reaches, everyWay));
         }
@@ -891,217 +894,401 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
     /**
      * The ways a run gets into the tree a comparison stands in, as far as they are read.
      *
-     * @param each  each way in that is read, with what a run on it may meet first
+     * @param each  each way in that is read
      * @param every whether {@code each} is every way a run gets to the comparison by
      */
-    private record WaysInto(List<WayInto> each, boolean every) {
+    private record WaysIn(List<AWayIn> each, boolean every) {
 
-        static final WaysInto NOT_READ = new WaysInto(List.of(), false);
+        static final WaysIn NOT_READ = new WaysIn(List.of(), false);
 
-        WaysInto {
+        WaysIn {
             each = List.copyOf(each);
         }
     }
 
     /**
-     * One way a run gets into the tree a comparison stands in.
+     * One way a run goes from the behavior's body into the tree a comparison stands in.
      *
-     * @param mayMeet every construction a run by it may work out before the comparison
-     * @param reach   the way a run by it gets to one of those, where the walk met it on
-     *                {@code met}: empty where nothing is shown of it
+     * @param through         each tree the run goes through on the way, the behavior's body first,
+     *                        with where in it the run goes on into the next; none where the
+     *                        comparison stands in the body itself
+     * @param inner           the tree the comparison stands in, and how a run by this way runs it
+     * @param toTheComparison what stood on the way to the comparison by this way
      */
-    private record WayInto(List<Core.Construct> mayMeet, Reaching reach) {
+    private record AWayIn(List<Stretch> through, Inner inner, List<OnTheWay> toTheComparison) {
 
-        WayInto {
-            mayMeet = List.copyOf(mayMeet);
+        AWayIn {
+            through = List.copyOf(through);
+            toTheComparison = List.copyOf(toTheComparison);
         }
     }
 
-    /** How a run by one way in gets to a construction on it ({@link WayInto#reach}). */
+    /**
+     * A tree a run goes through on the way into another, and {@code at}, the node of it where it
+     * goes on into the next: a call of a function value or a helper, or a build of a value.
+     * {@code into} is what stood on the way to the tree by this way, and {@code carried} what the
+     * walk carried into it, so a way the walk met in it is this way's past what was carried.
+     */
+    private record Stretch(Core root, Core at, List<OnTheWay> into, List<OnTheWay> carried) {
+
+        Stretch {
+            into = List.copyOf(into);
+            carried = List.copyOf(carried);
+        }
+    }
+
+    /**
+     * The tree a comparison stands in, as one way in goes into it.
+     *
+     * @param root    the tree
+     * @param into    what stood on the way to it by this way
+     * @param carried what the walk carried into it ({@link Stretch})
+     * @param once    whether a run by this way runs the tree once before it gets to the
+     *                comparison: the behavior's body, a value's template, a function value one
+     *                call applies once and nothing else does. Otherwise an application or a step
+     *                before this one ran the tree whole, after the comparison as well
+     * @param inside  whether the tree is the body of a function value or a helper, every place
+     *                in which is met on each application ({@link ClosureApplications})
+     * @param reached whether a run that takes the way the walk carried to a place met on each
+     *                application gets there whatever the row is, by this way
+     */
+    private record Inner(Core root, List<OnTheWay> into, List<OnTheWay> carried, boolean once,
+                         boolean inside, ReachedBy reached) {
+
+        Inner {
+            into = List.copyOf(into);
+            carried = List.copyOf(carried);
+        }
+    }
+
+    /** Whether a place inside the applications {@code applying} says is got to whatever the row
+     *  is, by one way in ({@link Inner#reached}). */
+    @FunctionalInterface
+    private interface ReachedBy {
+        boolean wheneverTheWayIs(ClosureApplications applying);
+    }
+
+    /** By any of the applications: there is one way in, and every application is made by it. */
+    private static final ReachedBy BY_ANY_APPLICATION =
+            applying -> applying.reachedWheneverTheWayIs(_ -> true);
+
+    /**
+     * By none: a helper's body read at a call is read from the arm that takes an element and goes
+     * on ({@link #recursionAt}), and what entering that arm asks of a run — that the list holds an
+     * element there — is on neither the way the walk carried nor what the step's application is
+     * said to be made under.
+     */
+    private static final ReachedBy BY_NO_APPLICATION = _ -> false;
+
+    /** How a run by one way in gets to a construction it meets, where the walk met it on
+     *  {@code met}: the {@code entry}-th way in. */
     @FunctionalInterface
     private interface Reaching {
-        Optional<AConstructionOnTheWay.Reach> reach(int entry, Core.Construct made,
-                                                    WhereConstructionsAreMet.Met met);
+        AConstructionOnTheWay.Reach reach(int entry, WhereConstructionsAreMet.Met met);
+    }
+
+    /** What a run by one way in may work out before the comparison: each construction, in the
+     *  order the parts holding them are, and how a run gets to it where that is shown. */
+    private static final class WhatAWayMeets {
+
+        private final List<Core.Construct> inOrder = new ArrayList<>();
+        private final Map<Core, Reaching> reaching = new IdentityHashMap<>();
+        private final Set<Core> met = Collections.newSetFromMap(new IdentityHashMap<>());
+
+        /** That a run by this way may meet {@code made} first, getting to it as {@code how}
+         *  says, or by no way shown where it is null. */
+        void meet(Core.Construct made, Reaching how) {
+            if (met.add(made)) {
+                inOrder.add(made);
+                if (how != null) {
+                    reaching.put(made, how);
+                }
+            }
+        }
+
+        List<Core.Construct> inOrder() {
+            return inOrder;
+        }
+
+        boolean meets(Core made) {
+            return met.contains(made);
+        }
+
+        Reaching reaching(Core made) {
+            return reaching.get(made);
+        }
     }
 
     /**
      * Each way a run gets to {@code comparison} by, where {@code assumed} stood on the way to it
-     * as the walk carried it, and {@code saidOfEach} is whether what the closures around it meet
-     * is said of each application and not carried there.
+     * as the walk carried it.
      *
      * <p>In the behavior's own body, outside every function value no call it is handed to
      * applies, one: the body. In a function value bound by a name, one for each call the body
-     * makes handing it to an operation that applies it ({@link ClosureUses}), each where the call
-     * is — every one of them only where nothing else uses it. In a helper's body read at a call,
-     * that call. In a value's template, one for each build of it the walk met.
-     *
-     * <p>What a run by a call works out first is what the body works out before the call and what
-     * the call is handed, and the body of what it goes into whole: an application or a step
-     * before this one ran all of it. So a construction in that body is among those it may meet,
-     * and none of them is shown to be got to. A template is gone into once at its build, so what
-     * a run works out there first is what the body works out before the build and then what the
-     * template works out before the comparison.
+     * makes handing it to an operation that applies it ({@link ClosureUses}) — every one of them
+     * only where nothing else uses it. In a helper's body read at a call, that call. In a value's
+     * template, one for each way to each build of it, through the builds of the template it is
+     * built in where that is another's ({@link #chainsInto}).
      *
      * <p>What stood on the way to the comparison by a way in is what stood on the way to where it
      * goes in, and what stood on the way inside the tree past what the walk carried into it.
      */
-    private static WaysInto waysInto(Core comparison, List<OnTheWay> assumed,
-                                     boolean saidOfEach, Body in) {
+    private static WaysIn waysIn(Core comparison, List<OnTheWay> assumed, Body in) {
         Core body = in.whole();
         if (in.context().equals(CallContext.OF_THE_BODY) && in.root() != null) {
             WhatARunWorksOutBeforeACount.NotHanded notHanded =
                     WhatARunWorksOutBeforeACount.notHandedOnTheWay(in.root(), comparison);
-            if (notHanded == null) {
-                Optional<List<Core.Construct>> mayMeet =
-                        WhatARunWorksOutBeforeACount.constructionsARunMayMeetBefore(in.root(),
-                                comparison);
-                boolean wayRead = !(saidOfEach && WhatARunWorksOutBeforeACount
-                        .choosesInsideAFunctionValue(in.root(), comparison, false));
-                return mayMeet.map(meets -> new WaysInto(List.of(new WayInto(meets,
-                        (entry, made, met) -> Optional.of(new AConstructionOnTheWay.Reach(entry,
-                                assumed, met.way(), new Pullback.Once<>(() ->
-                                        WhatARunWorksOutBeforeACount.workedOutBeforeAConstruction(
-                                                in.root(), comparison, made)),
-                                wayRead)))), true))
-                        .orElse(WaysInto.NOT_READ);
-            }
-            return byTheCallsApplying(notHanded, comparison, assumed, saidOfEach, in);
+            return notHanded == null
+                    ? new WaysIn(List.of(new AWayIn(List.of(), new Inner(in.root(), List.of(),
+                            List.of(), true, false, BY_ANY_APPLICATION), assumed)), true)
+                    : byTheCallsApplying(notHanded, assumed, in);
         }
         if (in.context().equals(CallContext.OF_THE_BODY) && in.within() != body) {
             Entry joined = in.templates().joined(in.within());
-            List<WayIn> builds = in.templates().builds(in.within());
-            if (joined == null || builds.isEmpty()) {
-                return WaysInto.NOT_READ;
+            if (joined == null) {
+                return WaysIn.NOT_READ;
             }
             List<OnTheWay> inside = without(assumed, joined.assumed());
-            boolean every = true;
-            List<WayInto> each = new ArrayList<>();
-            for (WayIn build : builds) {
-                Optional<WayInto> by = byABuild(build, comparison, inside, joined.assumed(),
-                        saidOfEach, in);
-                by.ifPresent(each::add);
-                every &= by.isPresent();
+            Chains chains = chainsInto(in.within(), in, Collections.newSetFromMap(
+                    new IdentityHashMap<>()));
+            List<AWayIn> each = new ArrayList<>();
+            for (Chain chain : chains.each()) {
+                each.add(new AWayIn(chain.through(), new Inner(in.within(), chain.way(),
+                        joined.assumed(), true, false, BY_ANY_APPLICATION),
+                        union(chain.way(), inside)));
             }
-            return new WaysInto(each, every);
+            return new WaysIn(each, chains.every());
         }
         if (in.calledAt().isPresent()) {
             WayIn call = in.calledAt().get();
-            return byACall(call, in.root(), comparison,
-                    union(call.way(), without(assumed, call.way())), saidOfEach, in)
-                    .map(by -> new WaysInto(List.of(by), true)).orElse(WaysInto.NOT_READ);
+            return new WaysIn(List.of(new AWayIn(
+                    List.of(new Stretch(body, call.at(), List.of(), List.of())),
+                    new Inner(in.root(), call.way(), call.way(), false, true, BY_NO_APPLICATION),
+                    union(call.way(), without(assumed, call.way())))), true);
         }
-        return WaysInto.NOT_READ;
+        return WaysIn.NOT_READ;
     }
 
     /**
      * The ways into {@code notHanded}'s function value a run on the way to {@code comparison}
      * takes: each call applying it, where it is bound by a name. Every one of them only where
      * nothing else uses it and the walk met each call on one way.
+     *
+     * <p>Where one call alone applies the function, every application is that call's, so a place
+     * inside it is got to by the call where one of them is made whatever the row is. Where
+     * several do, which call made an application is not said ({@link InputReads#handingCall}),
+     * and a place is got to by one of them only where the call applies the function on every run
+     * that gets to it — the first element of a container written with some, as an operation
+     * applying it to each in turn does — and every application gets there whatever the row is.
      */
-    private static WaysInto byTheCallsApplying(WhatARunWorksOutBeforeACount.NotHanded notHanded,
-                                               Core comparison, List<OnTheWay> assumed,
-                                               boolean saidOfEach, Body in) {
+    private static WaysIn byTheCallsApplying(WhatARunWorksOutBeforeACount.NotHanded notHanded,
+                                             List<OnTheWay> assumed, Body in) {
         Core.Block closure = notHanded.closure();
         Optional<List<OnTheWay>> made = in.constructions().madeOn(closure);
         ClosureUses uses = in.atTheRoot().usesOf(closure);
         if (notHanded.above() == null
                 || !(Core.withoutStanding(notHanded.above()) instanceof Core.LetIn)
                 || made.isEmpty() || uses == null) {
-            return WaysInto.NOT_READ;
+            return WaysIn.NOT_READ;
         }
         List<OnTheWay> inside = without(assumed, made.get());
+        boolean alone = uses.applications().size() == 1 && !uses.usedElsewhere();
         boolean every = !uses.usedElsewhere();
-        List<WayInto> each = new ArrayList<>();
+        List<AWayIn> each = new ArrayList<>();
         for (ClosureUses.Application applied : uses.applications()) {
             Core call = Core.withoutStanding(applied.call());
-            Optional<WayInto> by = in.constructions().handingOn(call).flatMap(way ->
-                    byACall(new WayIn(call, way), closure.body(), comparison,
-                            union(way, inside), saidOfEach, in));
-            by.ifPresent(each::add);
-            every &= by.isPresent();
+            Optional<List<OnTheWay>> way = in.constructions().handingOn(call);
+            if (way.isEmpty()) {
+                every = false;
+                continue;
+            }
+            ReachedBy reached = alone ? BY_ANY_APPLICATION
+                    : applying -> appliedWhateverTheRow(applied)
+                            && applying.everyOneReachedWheneverTheWayIs();
+            each.add(new AWayIn(List.of(new Stretch(in.whole(), call, List.of(), List.of())),
+                    new Inner(closure.body(), way.get(), made.get(),
+                            alone && elementsWrittenOut(applied) == 1, true, reached),
+                    union(way.get(), inside)));
         }
-        return new WaysInto(each, every);
+        return new WaysIn(each, every);
+    }
+
+    /** Whether the call making {@code applied} applies the function on every run that gets to
+     *  it: to the first element of a container written with some, which an operation applying
+     *  it to each in turn applies it to before anything else. */
+    private static boolean appliedWhateverTheRow(ClosureUses.Application applied) {
+        return elementsWrittenOut(applied) > 0;
+    }
+
+    /** How many elements the container {@code applied} walks was written with, where it is
+     *  written out and walked by an operation applying the function to each in turn from the
+     *  first; nought otherwise. */
+    private static int elementsWrittenOut(ClosureUses.Application applied) {
+        return EACH_IN_TURN.contains(applied.applied())
+                && Core.withoutStanding(applied.container()) instanceof Core.ListLit written
+                ? written.elements().size() : 0;
     }
 
     /**
-     * A run going into {@code inner}, a body run on each application or step, at {@code call}, a
-     * call of the behavior's body, on the way to {@code comparison} in it, which stood under
-     * {@code toTheComparison} by that way: empty where what the body works out before the call is
-     * not read.
+     * Each way a run gets to the template {@code template}: by each build of it, and where the
+     * build stands in another template, by each way to that one, through the build. {@code on}
+     * holds the templates the ways are being read through, so a template built inside itself is a
+     * way not read.
+     *
+     * @return the ways, and whether they are every way: not where a build stands in a template no
+     *         way to which is read
      */
-    private static Optional<WayInto> byACall(WayIn call, Core inner, Core comparison,
-                                             List<OnTheWay> toTheComparison, boolean saidOfEach,
-                                             Body in) {
-        Core body = in.whole();
-        Optional<List<Core.Construct>> first =
-                WhatARunWorksOutBeforeACount.constructionsARunMayMeetBefore(body, call.at());
-        if (first.isEmpty()) {
-            return Optional.empty();
+    private static Chains chainsInto(Core template, Body in, Set<Core> on) {
+        List<Entry> builds = in.templates().builds(template);
+        if (builds.isEmpty() || !on.add(template)) {
+            return new Chains(List.of(), false);
         }
-        List<Core.Construct> mayMeet = new ArrayList<>(first.get());
-        mayMeet.addAll(WhatARunWorksOutBeforeACount.everyConstructionUnder(call.at()));
-        mayMeet.addAll(WhatARunWorksOutBeforeACount.everyConstructionIn(List.of(inner),
-                comparison));
-        boolean wayRead = !WhatARunWorksOutBeforeACount.choosesInsideAFunctionValue(body,
-                call.at(), false)
-                && !(saidOfEach && WhatARunWorksOutBeforeACount.choosesInsideAFunctionValue(inner,
-                        comparison, true));
-        Set<Core> before = identitySetOf(first.get());
-        return Optional.of(new WayInto(mayMeet, (entry, made, met) ->
-                !before.contains(made) ? Optional.empty()
-                        : Optional.of(new AConstructionOnTheWay.Reach(entry, toTheComparison,
-                                met.way(), new Pullback.Once<>(() ->
-                                        WhatARunWorksOutBeforeACount.workedOutBeforeAConstruction(
-                                                body, call.at(), made)),
-                                wayRead))));
+        boolean every = true;
+        List<Chain> out = new ArrayList<>();
+        for (Entry build : builds) {
+            if (build.tree() == in.whole()) {
+                out.add(new Chain(List.of(new Stretch(build.tree(), build.build(), List.of(),
+                        List.of())), build.assumed()));
+                continue;
+            }
+            Entry outer = in.templates().joined(build.tree());
+            if (outer == null) {
+                every = false;
+                continue;
+            }
+            Chains around = chainsInto(build.tree(), in, on);
+            every &= around.every();
+            for (Chain way : around.each()) {
+                List<Stretch> through = new ArrayList<>(way.through());
+                through.add(new Stretch(build.tree(), build.build(), way.way(),
+                        outer.assumed()));
+                out.add(new Chain(through, union(way.way(),
+                        without(build.assumed(), outer.assumed()))));
+            }
+        }
+        on.remove(template);
+        return new Chains(out, every);
     }
 
+    /** The ways to a template ({@link #chainsInto}), and whether they are every one. */
+    private record Chains(List<Chain> each, boolean every) {}
+
+    /** One way to a template: the trees a run goes through to its build, and what stood on the
+     *  way to the build. */
+    private record Chain(List<Stretch> through, List<OnTheWay> way) {}
+
     /**
-     * A run going into the template {@code in} is walking at {@code build}, on the way to
-     * {@code comparison} in it, which stood under {@code inside} in the template past what every
-     * build stood under, {@code joined}: empty where what the body works out before the build, or
-     * the template before the comparison, is not read.
+     * What a run by {@code way} may work out before {@code comparison}, which stands inside the
+     * applications {@code applying}: empty where what a tree on the way works out before the run
+     * goes on is not read.
+     *
+     * <p>In each tree it goes through, the constructions before where it goes on, and those in
+     * what it is handed there, which are worked out before it goes in
+     * ({@link WhatARunWorksOutBeforeACount#workedOutBeforeEntering}); each is got to after
+     * everything the trees before had a run work out. In the tree the comparison stands in, the
+     * constructions before the comparison where a run by this way runs it once; otherwise every
+     * one in it, none of them shown to be got to, since an application before this one may have
+     * run any of them on another value.
+     *
+     * <p>A way is read whole only where what a run meets is on the way the walk carried: where a
+     * place met on each application is got to whatever the row is ({@link Inner#reached}), and
+     * where the run goes on into the next tree outside every function value.
      */
-    private static Optional<WayInto> byABuild(WayIn build, Core comparison,
-                                              List<OnTheWay> inside, List<OnTheWay> joined,
-                                              boolean saidOfEach, Body in) {
-        Core body = in.whole();
-        Core template = in.within();
-        Optional<List<Core.Construct>> first =
-                WhatARunWorksOutBeforeACount.constructionsARunMayMeetBefore(body, build.at());
+    private static Optional<WhatAWayMeets> whatItMeets(AWayIn way, Core comparison,
+                                                       ClosureApplications applying, Body in) {
+        Inner inner = way.inner();
+        Pullback.Once<Boolean> toTheComparisonRead = new Pullback.Once<>(() ->
+                !(inner.inside() || WhatARunWorksOutBeforeACount.goesIntoAFunctionValue(
+                        inner.root(), comparison)) || inner.reached().wheneverTheWayIs(applying));
+        WhatAWayMeets out = new WhatAWayMeets();
+        // What the tree the comparison stands in holds is met there, as it is run by this way,
+        // and not as part of a function value made before the run goes in.
+        Set<Core> inTheInner = Collections.newSetFromMap(new IdentityHashMap<>());
+        if (!way.through().isEmpty()) {
+            inTheInner.addAll(WhatARunWorksOutBeforeACount.everyConstructionUnder(inner.root()));
+        }
+        WhatARunWorksOutBeforeACount.BeforeAConstruction past =
+                WhatARunWorksOutBeforeACount.BeforeAConstruction.NOTHING;
+        boolean through = true;
+        for (Stretch stretch : way.through()) {
+            Optional<List<Core.Construct>> first =
+                    in.constructions().metBeforeGoingIn(stretch.root(), stretch.at());
+            Optional<WhatARunWorksOutBeforeACount.BeforeAConstruction> going =
+                    in.constructions().workedOutGoingIn(stretch.root(), stretch.at());
+            if (first.isEmpty() || going.isEmpty()) {
+                return Optional.empty();
+            }
+            WhatARunWorksOutBeforeACount.BeforeAConstruction upTo = past;
+            boolean outside = through;
+            for (Core.Construct made : first.get()) {
+                if (inTheInner.contains(made)) {
+                    continue;
+                }
+                out.meet(made, (entry, met) -> reach(entry, way, stretch.into(),
+                        stretch.carried(), met, () -> WhatARunWorksOutBeforeACount
+                                .workedOutBeforeAConstruction(stretch.root(), stretch.at(), made)
+                                .map(upTo::then),
+                        () -> outside && toTheComparisonRead.get()
+                                && read(stretch.root(), made, false, BY_ANY_APPLICATION, met)));
+            }
+            for (Core.Construct made
+                    : WhatARunWorksOutBeforeACount.everyConstructionUnder(stretch.at())) {
+                out.meet(made, (entry, met) -> reach(entry, way, stretch.into(),
+                        stretch.carried(), met, () -> WhatARunWorksOutBeforeACount
+                                .workedOutBeforeEntering(stretch.root(), stretch.at(), made)
+                                .map(upTo::then),
+                        () -> outside && toTheComparisonRead.get()
+                                && read(stretch.root(), made, false, BY_ANY_APPLICATION, met)));
+            }
+            through &= !WhatARunWorksOutBeforeACount.goesIntoAFunctionValue(stretch.root(),
+                    stretch.at());
+            past = past.then(going.get());
+        }
+        if (!inner.once()) {
+            for (Core.Construct made : WhatARunWorksOutBeforeACount.everyConstructionIn(
+                    List.of(inner.root()), comparison)) {
+                out.meet(made, null);
+            }
+            return Optional.of(out);
+        }
         Optional<List<Core.Construct>> within =
-                WhatARunWorksOutBeforeACount.constructionsARunMayMeetBefore(template,
+                WhatARunWorksOutBeforeACount.constructionsARunMayMeetBefore(inner.root(),
                         comparison);
-        if (first.isEmpty() || within.isEmpty()) {
+        if (within.isEmpty()) {
             return Optional.empty();
         }
-        List<Core.Construct> mayMeet = new ArrayList<>(first.get());
-        mayMeet.addAll(within.get());
-        List<OnTheWay> toTheComparison = union(build.way(), inside);
-        boolean wayRead = !WhatARunWorksOutBeforeACount.choosesInsideAFunctionValue(body,
-                build.at(), false)
-                && !(saidOfEach && WhatARunWorksOutBeforeACount.choosesInsideAFunctionValue(
-                        template, comparison, false));
-        Set<Core> before = identitySetOf(first.get());
-        return Optional.of(new WayInto(mayMeet, (entry, made, met) ->
-                Optional.of(before.contains(made)
-                        ? new AConstructionOnTheWay.Reach(entry, toTheComparison, met.way(),
-                                new Pullback.Once<>(() -> WhatARunWorksOutBeforeACount
-                                        .workedOutBeforeAConstruction(body, build.at(), made)),
-                                wayRead)
-                        : new AConstructionOnTheWay.Reach(entry, toTheComparison,
-                                union(build.way(), without(met.way(), joined)),
-                                new Pullback.Once<>(() -> WhatARunWorksOutBeforeACount
-                                        .workedOutBeforeAConstructionPast(body, build.at(),
-                                                template, comparison, made)),
-                                wayRead))));
+        WhatARunWorksOutBeforeACount.BeforeAConstruction upTo = past;
+        boolean outside = through;
+        for (Core.Construct made : within.get()) {
+            out.meet(made, (entry, met) -> reach(entry, way, inner.into(), inner.carried(), met,
+                    () -> WhatARunWorksOutBeforeACount.workedOutBeforeAConstruction(inner.root(),
+                            comparison, made).map(upTo::then),
+                    () -> outside && toTheComparisonRead.get()
+                            && read(inner.root(), made, inner.inside(), inner.reached(), met)));
+        }
+        return Optional.of(out);
     }
 
-    /** {@code nodes} as a set of the nodes themselves, told apart by identity. */
-    private static Set<Core> identitySetOf(List<? extends Core> nodes) {
-        Set<Core> out = Collections.newSetFromMap(new IdentityHashMap<>());
-        out.addAll(nodes);
-        return out;
+    /** Whether the way to {@code made}, which the walk met inside {@code met}'s applications in
+     *  {@code tree}, is on the way the walk carried: outside every function value of it, or got
+     *  to whatever the row is as {@code reached} says ({@link Inner#reached}). */
+    private static boolean read(Core tree, Core made, boolean inside, ReachedBy reached,
+                                WhereConstructionsAreMet.Met met) {
+        return !(inside || WhatARunWorksOutBeforeACount.goesIntoAFunctionValue(tree, made))
+                || reached.wheneverTheWayIs(met.applying());
+    }
+
+    /** How a run by {@code way}, the {@code entry}-th way in, gets to a construction the walk
+     *  met on {@code met} in a tree it went into past {@code into}, where the walk carried
+     *  {@code carried} into it. */
+    private static AConstructionOnTheWay.Reach reach(
+            int entry, AWayIn way, List<OnTheWay> into, List<OnTheWay> carried,
+            WhereConstructionsAreMet.Met met,
+            Supplier<Optional<WhatARunWorksOutBeforeACount.BeforeAConstruction>> before,
+            Supplier<Boolean> wayRead) {
+        return new AConstructionOnTheWay.Reach(entry, way.toTheComparison(),
+                union(into, without(met.way(), carried)), new Pullback.Once<>(before),
+                new Pullback.Once<>(wayRead));
     }
 
     /** {@code way} and then every entry of {@code more} it does not hold. */
@@ -1583,7 +1770,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         // function value by a name, where a run goes into the body of the function value.
         if (in.metOnly().isEmpty() && in.context().equals(CallContext.OF_THE_BODY)) {
             if (e instanceof Core.Construct made) {
-                in.constructions().met(made, assumed, reads);
+                in.constructions().met(made, assumed, reads, applying);
             }
             if (in.root() != null && handsAFunctionValueByAName(e, reads, in)) {
                 in.constructions().handing(Core.withoutStanding(e), assumed);
@@ -1817,7 +2004,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 Core given = let.value();
                 if (Core.withoutStanding(let.value()) instanceof Core.MaterialisedValue build) {
                     given = in.templates().bodyOf(build);
-                    in.templates().entered(given, build, assumed, live && flow.reads(let));
+                    in.templates().entered(given, build, in.within(), assumed,
+                            live && flow.reads(let));
                 } else {
                     walk(let.value(), in, reads, applying, flow, assumed,
                             live && flow.reads(let), out, forks, numbering);

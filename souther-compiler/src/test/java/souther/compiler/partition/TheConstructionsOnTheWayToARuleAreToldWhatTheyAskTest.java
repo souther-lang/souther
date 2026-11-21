@@ -561,11 +561,167 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
                 RULES
                 }
                 """.replace("RULES", rules));
-        Map<String, List<String>> stopsByRule = stopsByRule(document(compilation));
+        JsonNode report = document(compilation);
+        Map<String, List<String>> stopsByRule = stopsByRule(report);
         assertEquals(List.of(), stopsAt(stopsByRule, 11, rules.indexOf(" <= 3") + 2),
                 stopsByRule::toString);
         assertEquals(List.of("Count"), stopsAt(stopsByRule, 11, rules.indexOf(" > 5") + 2),
                 stopsByRule::toString);
+        Map<String, List<String>> notShown = notShownByRule(report);
+        assertEquals(List.of("Count: a_condition_not_read"),
+                stopsAt(notShown, 11, rules.indexOf(" <= 3") + 2), notShown::toString);
+    }
+
+    /**
+     * Whether a call applies a function value at all is a condition on the way to a rule the
+     * function holds: a call over a container that may hold nothing, or that holds nothing, may
+     * make no application, and a construction before it is not shown to stop a run on the way to
+     * the rule from a value that says nothing of whether the call applies it. Over a container
+     * written with one element, the call applies it whatever the row is.
+     */
+    @Test
+    void whetherACallAppliesTheFunctionIsOnTheWayToTheRuleInIt() {
+        for (String applied : List.of("List.all(x -> x <= 3, xs)", "List.all(f, xs)",
+                "List.all(f, if q > 7 then [q] else [])")) {
+            String rules = "    Plan { a = m, within = " + applied + " }";
+            Compilation compilation = compiled("""
+                    module demo
+
+                    data Count = Int
+                        invariant value >= 0
+                    data Plan = { a: Count, within: Bool }
+
+                    behavior b : (q: Int, xs: List<Int>) -> Plan
+                        constructs Plan, Count
+                    let b (q, xs) = {
+                        let m = Count(q)
+                        let f = x -> x <= 3
+                    RULES
+                    }
+                    """.replace("RULES", rules));
+            JsonNode report = document(compilation);
+            boolean inline = applied.contains("x -> x <= 3");
+            int line = inline ? 12 : 11;
+            int column = (inline ? rules : "    let f = x -> x <= 3").indexOf(" <= 3") + 2;
+            Map<String, List<String>> stopsByRule = stopsByRule(report);
+            assertEquals(List.of(), stopsAt(stopsByRule, line, column),
+                    () -> applied + " " + stopsByRule);
+            Map<String, List<String>> notShown = notShownByRule(report);
+            assertEquals(List.of("Count: a_condition_not_read"),
+                    stopsAt(notShown, line, column), () -> applied + " " + notShown);
+        }
+    }
+
+    /**
+     * Where several calls apply one function, which of them made an application is not said, and
+     * a call is a way into the function only where it applies it on every run that gets to it: a
+     * call handed a container that holds nothing applies it on none, and a construction before
+     * that call alone is not shown to stop a run on the way to the rule the function holds.
+     */
+    @Test
+    void aCallOverNothingIsNoWayIntoAFunctionOthersApply() {
+        String rule = "    let f = x -> x <= 3";
+        Compilation compilation = compiled("""
+                module demo
+
+                data Count = Int
+                    invariant value >= 0
+                data Plan = { a: Count, ok: Bool, within: Bool }
+
+                behavior b : (q: Int) -> Plan
+                    constructs Plan, Count
+                let b (q) = {
+                RULE
+                    let none: List<Int> = []
+                    let early = List.all(f, [5])
+                    let m = Count(q)
+                    Plan { a = m, ok = early, within = List.all(f, none) }
+                }
+                """.replace("RULE", rule));
+        Map<String, Map<Integer, Set<String>>> judged = ConstructionsJudged.byRule(compilation, "b");
+        assertEquals(Map.of(13, Set.of("Unresolved")),
+                judged.get("10:" + (rule.indexOf(" <= 3") + 2)), judged::toString);
+    }
+
+    /**
+     * Over a container written with one element the call applies the function whatever the row
+     * is, so a construction before it on the way to the rule it holds stops a run where the value
+     * does not meet what it asks; the same of a call that applies it to the first element before
+     * it may stop.
+     */
+    @Test
+    void aCallOverOneElementWrittenOutAppliesTheFunctionWhateverTheRow() {
+        for (String applied : List.of("List.all(f, [q])", "List.any(f, [q, q])")) {
+            String rule = "    let f = x -> x <= 3";
+            Compilation compilation = compiled("""
+                    module demo
+
+                    data Count = Int
+                        invariant value >= 0
+                    data Plan = { a: Count, within: Bool }
+
+                    behavior b : (q: Int) -> Plan
+                        constructs Plan, Count
+                    let b (q) = {
+                        let m = Count(q)
+                    RULE
+                        Plan { a = m, within = APPLIED }
+                    }
+                    """.replace("RULE", rule).replace("APPLIED", applied));
+            Map<String, List<String>> stopsByRule = stopsByRule(document(compilation));
+            assertEquals(List.of("Count"),
+                    stopsAt(stopsByRule, 11, rule.indexOf(" <= 3") + 2),
+                    () -> applied + " " + stopsByRule);
+        }
+    }
+
+    /**
+     * A function value a call applies once runs its body once on the way to a rule in it: a
+     * construction its body works out after the rule is on the way to it on no run, and one
+     * before it is on the way as one in the behavior's body is.
+     */
+    @Test
+    void aFunctionAppliedOnceHasOnTheWayOnlyWhatItsBodyWorksOutFirst() {
+        String rule = "        let ok = x <= 3";
+        Compilation compilation = compiled("""
+                module demo
+
+                data Count = Int
+                    invariant value >= 0
+                data Plan = { within: Bool }
+
+                behavior b : (q: Int) -> Plan
+                    constructs Plan, Count
+                let b (q) = {
+                    let f = x -> {
+                RULE
+                        let later = Count(x)
+                        ok && later.value >= 0
+                    }
+                    Plan { within = List.all(f, [q]) }
+                }
+                """.replace("RULE", rule));
+        Map<String, Map<Integer, Set<String>>> judged = ConstructionsJudged.byRule(compilation, "b");
+        assertEquals(Map.of(), judged.getOrDefault("11:" + (rule.indexOf(" <= 3") + 2), Map.of()),
+                judged::toString);
+    }
+
+    /** What each rule of {@code report} says of each construction whose stop on the way to it is
+     *  not resolved, with why, by what a reader is shown of the rule. */
+    private static Map<String, List<String>> notShownByRule(JsonNode report) {
+        Map<String, List<String>> out = new TreeMap<>();
+        collectNotShown(report, out);
+        return out;
+    }
+
+    private static void collectNotShown(JsonNode node, Map<String, List<String>> out) {
+        if (node.isObject() && node.path("kind").asString().equals("rule_stop_not_shown")) {
+            List<String> made = out.computeIfAbsent(node.path("subject").toString(),
+                    _ -> new ArrayList<>());
+            node.path("asks").forEach(one -> made.add(one.path("construction").asString()
+                    + ": " + one.path("reason").asString()));
+        }
+        node.forEach(child -> collectNotShown(child, out));
     }
 
     /** What {@code stopsByRule} tells of the rule whose operator is written at {@code line} and
@@ -643,6 +799,45 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
                 let f (q) = {
                     let m = Count(q)
                     let t = small
+                    Plan { a = m, within = t }
+                }
+                """);
+        assertEquals(List.of("Span at 9: asks_not_read"), asksOf(compilation).stream()
+                .map(one -> one.path("construction").asString() + " at "
+                        + one.path("at").path("line").asInt() + ": "
+                        + one.path("reason").asString())
+                .distinct().toList());
+    }
+
+    /**
+     * A value built in the template of another is gone into by way of the other's builds: a
+     * construction in it before a rule it holds is on the way to the rule by those, as one in a
+     * template the body builds is.
+     */
+    @Test
+    void aConstructionInATemplateBuiltByAnotherIsOnTheWayToARuleItHolds() {
+        Compilation compilation = compiled("""
+                module demo
+
+                data Count = Int
+                    invariant value >= 0
+                data Span = { lo: Decimal, hi: Decimal }
+                    invariant lo <= hi
+                data Plan = { a: Count, within: Bool }
+                let small: Bool = {
+                    let s = Span { lo = 1.0m, hi = 2.0m }
+                    Decimal.compare(s.lo, s.hi) <= 0
+                }
+                let smallToo: Bool = {
+                    let t = small
+                    t
+                }
+
+                behavior f : (q: Int) -> Plan
+                    constructs Plan, Count
+                let f (q) = {
+                    let m = Count(q)
+                    let t = smallToo
                     Plan { a = m, within = t }
                 }
                 """);

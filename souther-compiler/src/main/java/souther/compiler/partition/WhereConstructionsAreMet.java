@@ -23,12 +23,15 @@ import java.util.Optional;
  * <p>Of the behavior's own body and of the templates of the values it builds: a helper's body read
  * at a call is read under ways that are not one run of this body.
  *
- * <p>Complete once the walk is, and shared by every reading of the body it is made for.
+ * <p>Complete once the walk is, and shared by every reading of the body it is made for — and so
+ * where what a run works out going in at such a call or build is kept, once for each, for every
+ * rule a run goes on there to.
  */
 final class WhereConstructionsAreMet {
 
-    /** Where the walk met a construction: the way to it and the names there. */
-    record Met(List<OnTheWay> way, InputReads reads) {
+    /** Where the walk met a construction: the way to it, the names there, and the applications
+     *  of the closures it stands inside, which say what of the way to it is met on each. */
+    record Met(List<OnTheWay> way, InputReads reads, ClosureApplications applying) {
 
         Met {
             way = List.copyOf(way);
@@ -38,10 +41,16 @@ final class WhereConstructionsAreMet {
     private final Map<Core.Construct, List<Met>> met = new IdentityHashMap<>();
     private final Map<Core.Block, List<List<OnTheWay>>> made = new IdentityHashMap<>();
     private final Map<Core, List<List<OnTheWay>>> handing = new IdentityHashMap<>();
+    private final Map<Core, Optional<List<Core.Construct>>> metBeforeGoingIn =
+            new IdentityHashMap<>();
+    private final Map<Core, Optional<WhatARunWorksOutBeforeACount.BeforeAConstruction>>
+            workedOutGoingIn = new IdentityHashMap<>();
 
-    /** That the walk met {@code made} on {@code way}, with the names as {@code reads} has them. */
-    void met(Core.Construct made, List<OnTheWay> way, InputReads reads) {
-        met.computeIfAbsent(made, _ -> new ArrayList<>(1)).add(new Met(way, reads));
+    /** That the walk met {@code made} on {@code way}, with the names as {@code reads} has them,
+     *  inside {@code applying}. */
+    void met(Core.Construct made, List<OnTheWay> way, InputReads reads,
+             ClosureApplications applying) {
+        met.computeIfAbsent(made, _ -> new ArrayList<>(1)).add(new Met(way, reads, applying));
     }
 
     /**
@@ -72,6 +81,24 @@ final class WhereConstructionsAreMet {
      *  met it once. */
     Optional<List<OnTheWay>> handingOn(Core call) {
         return once(handing.get(call));
+    }
+
+    /**
+     * Every construction a run may work out before it goes on into another body at {@code at}, a
+     * node of {@code root}'s tree ({@link WhatARunWorksOutBeforeACount#constructionsARunMayMeetBefore}):
+     * worked out once for each such node, however many rules a run goes on there to.
+     */
+    Optional<List<Core.Construct>> metBeforeGoingIn(Core root, Core at) {
+        return metBeforeGoingIn.computeIfAbsent(at, _ ->
+                WhatARunWorksOutBeforeACount.constructionsARunMayMeetBefore(root, at));
+    }
+
+    /** What a run works out going into another body at {@code at}, a node of {@code root}'s
+     *  tree ({@link WhatARunWorksOutBeforeACount#workedOutGoingIn}), once for each such node. */
+    Optional<WhatARunWorksOutBeforeACount.BeforeAConstruction> workedOutGoingIn(Core root,
+                                                                               Core at) {
+        return workedOutGoingIn.computeIfAbsent(at, _ ->
+                WhatARunWorksOutBeforeACount.workedOutGoingIn(root, at));
     }
 
     private static <T> Optional<T> once(List<T> found) {

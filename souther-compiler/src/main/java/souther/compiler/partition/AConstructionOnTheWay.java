@@ -49,18 +49,21 @@ record AConstructionOnTheWay(Core.Construct made, Asked asked, List<Reach> reach
      *                        asked: a construction the way to the comparison already holds what
      *                        it asks of is never asked it, and the walk goes down the tree from
      *                        its top
-     * @param wayRead         whether {@code toTheComparison} holds every condition on the way to
-     *                        the comparison: not where one met inside a function value is said of
-     *                        each application and not on the way the walk carries
+     * @param wayRead         whether {@code toTheComparison} and {@code toIt} hold every
+     *                        condition on the way: not where a place inside a function value is
+     *                        got to only on some applications, which is said of each application
+     *                        and not on the way the walk carries. Worked out the first time it is
+     *                        asked, as {@code before} is
      */
     record Reach(int entry, List<OnTheWay> toTheComparison, List<OnTheWay> toIt,
                  Supplier<Optional<WhatARunWorksOutBeforeACount.BeforeAConstruction>> before,
-                 boolean wayRead) {
+                 Supplier<Boolean> wayRead) {
 
         Reach {
             toTheComparison = List.copyOf(toTheComparison);
             toIt = List.copyOf(toIt);
             Objects.requireNonNull(before, "what comes before it, or that it is not shown");
+            Objects.requireNonNull(wayRead, "whether the way is read whole");
         }
     }
 

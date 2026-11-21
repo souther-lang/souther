@@ -30,6 +30,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.function.UnaryOperator;
 
 /**
@@ -583,6 +584,30 @@ sealed interface ClosureApplications {
                                             InputReading read) {
         WhatConditionsState conditions = WhatConditionsState.of(read);
         return keptWhere.stream().map(kept -> conditions.kept(kept, read)).toList();
+    }
+
+    /**
+     * Whether a run that takes the way the walk carried to a place inside a function value gets
+     * there whatever the row is, by an application {@code by} picks: one of those is made on every
+     * such run, and nothing met inside the closures on the way to the place asks more of it
+     * ({@link Application#reached}). Never where the applications are not said one by one, or
+     * none is made: whether a run makes one is then nothing these say, and {@link Outside} says
+     * nothing of an application inside a closure handed values nobody wrote out.
+     */
+    default boolean reachedWheneverTheWayIs(Predicate<Application> by) {
+        return this instanceof Each(var each) && each.stream().filter(by)
+                .anyMatch(ClosureApplications::madeWhateverTheRow);
+    }
+
+    /** Whether every one of these is made, and gets to the place, whatever the row is:
+     *  {@link #reachedWheneverTheWayIs} of each of them and not of some. */
+    default boolean everyOneReachedWheneverTheWayIs() {
+        return this instanceof Each(var each)
+                && each.stream().allMatch(ClosureApplications::madeWhateverTheRow);
+    }
+
+    private static boolean madeWhateverTheRow(Application one) {
+        return one.reached() instanceof Proposition.Always(boolean holds) && holds;
     }
 
     /**

@@ -33,6 +33,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.IntFunction;
 import java.util.function.Predicate;
 
 /**
@@ -200,22 +201,71 @@ final class ConstructionStopAssessment {
         if (unheld.isEmpty()) {
             return new Judgement.Safe(one.made());
         }
-        Judgement unresolved = null;
-        for (AConstructionOnTheWay.Reach reach : one.reaches()) {
-            Judgement judged = judgedOn(one, reach, ask, asks,
+        List<Judgement> judged = new ArrayList<>();
+        Together shown = together(one.reaches().size(), at -> {
+            AConstructionOnTheWay.Reach reach = one.reaches().get(at);
+            Judgement byIt = judgedOn(one, reach, ask, asks,
                     waysTo.getOrDefault(reach.entry(), Map.of()), toTheComparison, read);
-            if (judged instanceof Judgement.Stops) {
-                return judged;
-            }
-            if (unresolved == null && judged instanceof Judgement.Unresolved) {
-                unresolved = judged;
+            judged.add(byIt);
+            return switch (byIt) {
+                case Judgement.Safe _ -> ByAWay.SAFE;
+                case Judgement.Stops _ -> ByAWay.STOPS;
+                case Judgement.Unresolved _ -> ByAWay.NOT_RESOLVED;
+            };
+        }, one.everyWay());
+        return switch (shown) {
+            case Together.ByOne(int at) -> judged.get(at);
+            case Together.Safe _ -> new Judgement.Safe(one.made());
+            case Together.ByAWayNotRead _ ->
+                    unresolved(one, ask, unheld, WhyAConstructionStopIsNotShown.REACH_NOT_SHOWN);
+        };
+    }
+
+    /** What one way a run gets to a construction on shows of it. */
+    enum ByAWay { SAFE, STOPS, NOT_RESOLVED }
+
+    /** What is shown of a construction, put together from each way a run gets to it on
+     *  ({@link #together}). */
+    sealed interface Together {
+
+        /** What the {@code at}-th way shows. */
+        record ByOne(int at) implements Together {}
+
+        /** That no run on the way stops there: every way is read, and each shows it. */
+        record Safe() implements Together {}
+
+        /** Not resolved, since each way read shows no run stops there and some way is not
+         *  read. */
+        record ByAWayNotRead() implements Together {}
+    }
+
+    /**
+     * What is shown of a construction, from what each of {@code ways} ways a run gets to it on
+     * shows ({@code shownBy}, asked of each in turn, and of none past a stop): the first stop,
+     * whatever the others come to, since one run that stops is a run that stops; otherwise the
+     * first not resolved; otherwise, where they are every way there is ({@code everyWay}), that
+     * none stops; and otherwise not resolved, for want of the way not read. Safe asks of every run,
+     * and a stop of one.
+     */
+    static Together together(int ways, IntFunction<ByAWay> shownBy, boolean everyWay) {
+        int unresolved = -1;
+        for (int at = 0; at < ways; at++) {
+            switch (shownBy.apply(at)) {
+                case STOPS -> {
+                    return new Together.ByOne(at);
+                }
+                case NOT_RESOLVED -> {
+                    if (unresolved < 0) {
+                        unresolved = at;
+                    }
+                }
+                case SAFE -> { }
             }
         }
-        if (unresolved != null) {
-            return unresolved;
+        if (unresolved >= 0) {
+            return new Together.ByOne(unresolved);
         }
-        return one.everyWay() ? new Judgement.Safe(one.made())
-                : unresolved(one, ask, unheld, WhyAConstructionStopIsNotShown.REACH_NOT_SHOWN);
+        return everyWay ? new Together.Safe() : new Together.ByAWayNotRead();
     }
 
     /** What is shown of {@code one} by {@code reach}, one way a run on the way gets to it on
@@ -259,8 +309,8 @@ final class ConstructionStopAssessment {
         if (told.isEmpty()) {
             return new Judgement.Safe(one.made());
         }
-        Found found = aStopAt(ask, told.get(), before.get(), both, reach.wayRead(), asks, waysTo,
-                read);
+        Found found = aStopAt(ask, told.get(), before.get(), both, reach.wayRead().get(), asks,
+                waysTo, read);
         return switch (found) {
             case Found.AStop(Shown shown) -> new Judgement.Stops(one.made(), shown);
             case Found.None(WhyAConstructionStopIsNotShown why) -> unresolved(one, ask, told, why);

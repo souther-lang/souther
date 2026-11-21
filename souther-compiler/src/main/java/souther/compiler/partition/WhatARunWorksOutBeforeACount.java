@@ -410,66 +410,89 @@ final class WhatARunWorksOutBeforeACount {
     record NotHanded(Core.Block closure, Core above) {}
 
     /**
-     * Whether the way down from {@code from} to {@code node} takes an arm, or the right of an
-     * operator that stops at an answer, inside a function value — every step of it where
-     * {@code inside}, as from the body of one. What the walk meets there is said of each
-     * application where the applications are said, and not on the way the walk carries
-     * ({@link ClosureApplications#saysWhatStandsInIt}), so a way that takes one is not read whole
-     * from what the walk carried. True where {@code node} is not under {@code from}.
+     * Whether the way down from {@code from} to {@code node} goes into the body of a function
+     * value, where what a run meets is met on each application and is not on the way the walk
+     * carries alone: true as well where {@code node} is not under {@code from}.
      */
-    static boolean choosesInsideAFunctionValue(Core from, Core node, boolean inside) {
+    static boolean goesIntoAFunctionValue(Core from, Core node) {
         List<Core> way = wayDownTo(from, node);
         if (way == null) {
             return true;
         }
-        boolean in = inside;
-        for (int i = 0; i + 1 < way.size(); i++) {
-            Core child = way.get(i + 1);
-            boolean chosen = switch (way.get(i)) {
+        for (Core each : way.subList(0, way.size() - 1)) {
+            switch (each) {
                 case Core.Block _ -> {
-                    in = true;
-                    yield false;
+                    return true;
                 }
-                case Core.If iff -> child != iff.cond();
-                case Core.Match match -> child != match.scrutinee();
-                case Core.IfConstructed attempt -> child != attempt.construct();
-                case Core.Binary both -> both.op().stopsWhenItsAnswerIsSettled()
-                        && child == both.right();
-                // Standing as a wider type chooses nothing; what it holds is the next step.
-                case Core.Widen _ -> false;
-                default -> false;
-            };
-            if (in && chosen) {
-                return true;
+                // A value standing as a wider type is a step of the way of its own, and the
+                // function value it holds is met one step down.
+                case Core.Widen _ -> { }
+                default -> { }
             }
         }
         return false;
     }
 
     /**
-     * What a run works out before {@code made}, a construction in {@code inner}, a tree a run
-     * goes into once where it gets to {@code at}, a node of {@code root}'s tree — as a value's
-     * template is gone into where it is built — where a run that gets to {@code at} and takes the
-     * way to {@code comparison} in {@code inner} and the way to {@code made} works {@code made}
-     * out before the comparison unless something before it ends the run: everything it works out
-     * before {@code at}, and then what it works out in {@code inner}
-     * ({@link #workedOutBeforeAConstruction}). Empty where either is not shown.
+     * What a run works out going into another body at {@code at}, a node of {@code root}'s tree:
+     * everything it works out before {@code at} ({@link #workedOutUpTo}), and everything
+     * {@code at} is handed but a function value, which a call works out before it applies the
+     * function it is handed ({@link Evaluated#inOrder}); the body of such a function runs where it
+     * is applied and is none of it. Empty where the way to {@code at} is not read.
      */
-    static Optional<BeforeAConstruction> workedOutBeforeAConstructionPast(Core root, Core at,
-                                                                         Core inner,
-                                                                         Core comparison,
-                                                                         Core.Construct made) {
+    static Optional<BeforeAConstruction> workedOutGoingIn(Core root, Core at) {
         List<Core> some = root == null ? null : workedOutUpTo(root, at, false);
         List<Core> every = root == null ? null : workedOutUpTo(root, at, true);
-        Optional<BeforeAConstruction> within =
-                workedOutBeforeAConstruction(inner, comparison, made);
-        if (some == null || every == null || within.isEmpty()) {
+        if (some == null || every == null) {
             return Optional.empty();
         }
         List<Core> onSomeRun = new ArrayList<>(some.subList(0, some.size() - 1));
-        onSomeRun.addAll(within.get().onSomeRun());
         List<Core> onEveryRun = new ArrayList<>(every.subList(0, every.size() - 1));
-        onEveryRun.addAll(within.get().onEveryRun());
+        for (Evaluated.Step step : Evaluated.inOrder(at)) {
+            workedOut(onSomeRun, step.expression());
+            if (step instanceof Evaluated.Step.Always) {
+                workedOut(onEveryRun, step.expression());
+            }
+        }
+        return Optional.of(new BeforeAConstruction(onSomeRun, onEveryRun));
+    }
+
+    /**
+     * What a run works out before {@code made}, a construction in what {@code at}, a node of
+     * {@code root}'s tree where a run goes into another body, is handed: what the run works out
+     * before {@code at}, and then, down from {@code at}, as {@link #workedOutBeforeAConstruction}
+     * reads it — every run that works {@code at} out works what it is handed out before going in,
+     * and a run gets to {@code made} on the runs the conditions on the way to it say. Empty where
+     * a function value stands above {@code made}, whose body runs where it is applied, or the way
+     * is not read.
+     */
+    static Optional<BeforeAConstruction> workedOutBeforeEntering(Core root, Core at,
+                                                                Core.Construct made) {
+        List<Core> toIt = wayDownTo(at, made);
+        if (root == null || toIt == null || toIt.size() < 2) {
+            return Optional.empty();
+        }
+        for (int i = 0; i + 1 < toIt.size(); i++) {
+            if (Evaluated.makesAFunction(toIt.get(i))
+                    || !entersOnSomeRun(toIt.get(i), toIt.get(i + 1), made)) {
+                return Optional.empty();
+            }
+        }
+        List<Core> someUpTo = workedOutUpTo(root, at, false);
+        List<Core> everyUpTo = workedOutUpTo(root, at, true);
+        List<Core> someIn = workedOutUpTo(at, made, false);
+        List<Core> everyIn = workedOutUpTo(at, made, true);
+        if (someUpTo == null || everyUpTo == null || someIn == null || everyIn == null) {
+            return Optional.empty();
+        }
+        List<Core> ofIt = Evaluated.inOrder(made).stream().map(Evaluated.Step::expression)
+                .toList();
+        List<Core> onSomeRun = new ArrayList<>(someUpTo.subList(0, someUpTo.size() - 1));
+        onSomeRun.addAll(someIn.subList(0, someIn.size() - 1));
+        onSomeRun.addAll(ofIt);
+        List<Core> onEveryRun = new ArrayList<>(everyUpTo.subList(0, everyUpTo.size() - 1));
+        onEveryRun.addAll(everyIn.subList(0, everyIn.size() - 1));
+        onEveryRun.addAll(ofIt);
         return Optional.of(new BeforeAConstruction(onSomeRun, onEveryRun));
     }
 
@@ -585,6 +608,18 @@ final class WhatARunWorksOutBeforeACount {
         BeforeAConstruction {
             onSomeRun = List.copyOf(onSomeRun);
             onEveryRun = List.copyOf(onEveryRun);
+        }
+
+        /** Nothing worked out first: a run starting here. */
+        static final BeforeAConstruction NOTHING = new BeforeAConstruction(List.of(), List.of());
+
+        /** What this says is worked out first, and then what {@code after} says. */
+        BeforeAConstruction then(BeforeAConstruction after) {
+            List<Core> some = new ArrayList<>(onSomeRun);
+            some.addAll(after.onSomeRun());
+            List<Core> every = new ArrayList<>(onEveryRun);
+            every.addAll(after.onEveryRun());
+            return new BeforeAConstruction(some, every);
         }
     }
 

@@ -96,18 +96,27 @@ class AConstructionIsToldOfAStopWhereARunStopsThereTest {
         FORMS.put("anArmBesideEveryRun", new Form("TwoC", "Count",
                 "{ let m = if Decimal.compare(d, 0.0m) < 0 then Count(q) else Count(0) \n "
                         + "TwoC { a = m, b = Count(q), w = q <= 3 } }"));
-        // one in a function bound by a name, before the rule the function holds
+        // one in a function bound by a name, before the rule the function holds, which the one
+        // call applying it applies once
         FORMS.put("inANamedFunction", new Form("OneC", "Count",
                 "{ let f = x -> { let n = Count(x) \n n.value <= 3 } \n "
                         + "OneC { a = Count(0), w = List.all(f, [q]) } }"));
-        // which applications of the function a run makes before the rule is not read, so no run
-        // is shown to get to it
-        NOT_SHOWN.put("inANamedFunction", WhyAConstructionStopIsNotShown.REACH_NOT_SHOWN);
+        // the same applied to two elements, the second application coming after the first ran
+        // the body whole, so no run is shown to get to it first
+        FORMS.put("inANamedFunctionAppliedTwice", new Form("OneC", "Count",
+                "{ let f = x -> { let n = Count(x) \n n.value <= 3 } \n "
+                        + "OneC { a = Count(0), w = List.all(f, [q, q]) } }"));
+        NOT_SHOWN.put("inANamedFunctionAppliedTwice",
+                WhyAConstructionStopIsNotShown.REACH_NOT_SHOWN);
         // one before a function bound by a name, on the way to the rule the function holds where
         // the call applying it is
         FORMS.put("beforeANamedFunction", new Form("OneC", "Count",
                 "{ let m = Count(q) \n let f = x -> x <= 3 \n "
                         + "OneC { a = m, w = List.all(f, [q]) } }"));
+        // one in what a call applying a function bound by a name is handed, worked out before
+        // the call applies it
+        FORMS.put("inWhatTheCallIsHanded", new Form("OneC", "Count",
+                "{ let f = x -> x <= 3 \n OneC { a = Count(0), w = List.all(f, [Count(q).value]) } }"));
         // the same function applied by two calls, and a construction between them, which only a
         // run on the way to the rule by the second call gets to first
         FORMS.put("beforeTwoCallsOfANamedFunction", new Form("OneC", "Count",
