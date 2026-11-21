@@ -57,12 +57,14 @@ class AnElementAWrittenIndexPicksIsTheValueAnArmNamesTest {
 
     /** The issue's own report: neither the comparison nor the fork it stands under is left unread,
      *  where both were. A run at the least {@code x} stops in {@code c - zero} on the arm every
-     *  run takes, which is said as a stop not told, and is all that is said of x. */
+     *  run takes, which is said as a stop a run may come to. */
     @Test
     void neitherTheComparisonNorItsForkIsLeftUnread() {
-        assertEquals(List.of(STOPS_NOT_ALL_TOLD),
-                reasonsAt(reportOf(guarded("List.get(0, String.codePoints(\"0\"))")), "x"),
+        JsonNode report = reportOf(guarded("List.get(0, String.codePoints(\"0\"))"));
+        assertEquals(List.of(), reasonsAt(report, "x"),
                 "what the guard states about x is read, through the arm the match takes");
+        assertTrue(findingKinds(report).contains(MAY_STOP),
+                "the run that stops in the arm every run takes is told");
     }
 
     /** An arm no run takes works nothing out: what it would stop in is said nowhere. An index
@@ -76,6 +78,15 @@ class AnElementAWrittenIndexPicksIsTheValueAnArmNamesTest {
     }
 
     private static final String STOPS_NOT_ALL_TOLD = "evaluation_stops_not_fully_read";
+    private static final String MAY_STOP = "rule_may_stop_a_run";
+
+    /** The kind of each finding the report makes. */
+    private static List<String> findingKinds(JsonNode report) {
+        List<String> out = new ArrayList<>();
+        report.findValues("findings").forEach(findings ->
+                findings.forEach(each -> out.add(each.path("kind").asString())));
+        return out;
+    }
 
     /** The reasons {@link #unreadAt} gives, without the rule each is given for. */
     private static List<String> reasonsAt(JsonNode report, String position) {

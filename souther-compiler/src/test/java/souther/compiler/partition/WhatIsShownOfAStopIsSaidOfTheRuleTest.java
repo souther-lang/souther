@@ -64,13 +64,14 @@ class WhatIsShownOfAStopIsSaidOfTheRuleTest {
         assertFalse(holdsABorderOpen(compilation));
     }
 
-    /** An operation over what a walk comes to, which the way does not keep within its type, is
-     *  not resolved, of the rule, and holds the border of the place it is filed at as well:
-     *  which rows get past it is not read. */
+    /** An operation over what a walk comes to, which the way does not keep within its type and
+     *  states a condition of some element for, is not resolved, of the rule, and holds the border
+     *  of the place it is filed at as well: which rows get past it is not read. */
     @Test
     void anUnresolvedStopOverAValueWorkedOutIsSaidOfTheRuleAndOfThePlace() {
-        Compilation compilation = compiled("ds: List<Int>, q: Int", "if List.fold((w, l) -> "
-                + "if l > w then l else w, 0, ds) + 1 <= q then 1 else 2");
+        Compilation compilation = compiled("ds: List<Int>, q: Int",
+                "if List.any(x -> x < 9223372036854775807, ds) && List.fold((w, l) -> "
+                        + "if l > w then l else w, 0, ds) + 1 <= q then 1 else 2");
         assertEquals(List.of(RuleWhereAStopIsNotShown.class), kinds(compilation));
         assertTrue(holdsABorderOpen(compilation));
     }

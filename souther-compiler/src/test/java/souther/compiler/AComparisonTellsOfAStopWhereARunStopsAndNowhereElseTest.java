@@ -61,6 +61,13 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
             List.of(MAX - 1), List.of(MIN), List.of(MAX, 1L), List.of(3_037_000_500L),
             List.of(4_611_686_018_427_387_904L, 4_611_686_018_427_387_904L));
 
+    /** Why a stop over a walk on an arm is not shown: the operation is told, and the working of the
+     *  arm leaves a stop untold beside it (NOT_EVERY_OPERATION_TOLD), which the comparison read
+     *  whole does not for the same walk. */
+    private static final String ARM_OF_A_WALK =
+            "the operation over the walk is told on an arm whose working leaves a stop untold "
+                    + "beside it (NOT_EVERY_OPERATION_TOLD): said as not resolved";
+
     /** Each condition on {@code ds} and {@code q}, by the name it is told under. */
     private static final Map<String, String> FORMS = new LinkedHashMap<>();
 
@@ -167,12 +174,7 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
                 + "container holds is no term (FormRange.aTotal asks of a sum)");
         FORMS.put("productOfTheElements", "List.product(ds) >= 10");
         FORMS.put("maxOfAStep", "Option.withDefault(0, List.max(List.map(x -> x + 1, ds))) >= 3");
-        NOT_TOLD.put("maxPlusOne", "the operation over what the option holds is told on the arm "
-                + "of the match that opens it, the list holding an element, and a stop on an arm "
-                + "is not shown (StopAssessment): said as not resolved");
         FORMS.put("maxPlusOne", "Option.withDefault(0, List.max(ds)) + 1 <= 10");
-        NOT_TOLD.put("maxOfAWrittenListPlusOne", "the same, on an arm every run takes");
-        NOT_TOLD.put("defaultPastTheTypePlusOne", "the same, where the default is past the type");
         // what an option holds, from the elements of the list or the default: a stop where one of
         // them is past where the operation keeps within the type, and none where none is
         FORMS.put("maxOfAWrittenListPlusOne", "Option.withDefault(0, List.max([q, 3])) + 1 >= 3");
@@ -237,14 +239,11 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
         // an operation over what a walk comes to: what that may be shows where no run stops, and
         // never that one does
         String walk = "List.fold((w, l) -> if l > w then l else w, 0, ds)";
-        NOT_TOLD.put("walkPlusOne", "what the walk comes to, its seed or an element, may take the "
-                + "operation past its type, which shows no run that does: said as not read");
         FORMS.put("walkPlusOne", walk + " + 1 <= 10");
-        // the same walk from a seed past where the operation keeps within the type, one that
-        // keeps only what is below nought, which no run takes past it, one a test of every element
-        // keeps within it, and one over a list written out whose every element and seed keep it
-        // within
-        NOT_TOLD.put("walkFromTheGreatestSeedPlusOne", "the same, from the seed");
+        // the same walk from a seed past where the operation keeps within the type, which a walk
+        // over none comes to; one that keeps only what is below nought, which no run takes past
+        // it, one a test of every element keeps within it, and one over a list written out whose
+        // every element and seed keep it within
         FORMS.put("walkFromTheGreatestSeedPlusOne",
                 "List.fold((w, l) -> if l > w then l else w, 9223372036854775807, ds) + 1 >= 3");
         UNTOLD_THOUGH_NONE_STOPS.put("walkKeepingWhatIsBelowNoughtPlusOne", "what the walk "
@@ -255,37 +254,30 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
         FORMS.put("walkPlusOneGuarded",
                 "List.all(x -> x < 9223372036854775807, ds) && " + walk + " + 1 <= 10");
         // the same test of every element, deciding the arm the walk is worked out on
-        UNTOLD_THOUGH_NONE_STOPS.put("walkPlusOneOnAnArmEveryElementDecides", "the operation "
-                + "over the walk on the arm is read as armOfAWalkPlusOne is, by no reading that "
-                + "tells it over where the walk's numbers come from, so nothing asks the arm's "
-                + "test of every element of it");
         FORMS.put("walkPlusOneOnAnArmEveryElementDecides",
                 "(if List.all(x -> x < 9223372036854775807, ds) then " + walk + " + 1 else 0)"
                         + " <= 10");
         // a test some element meets, which leaves the others anything, and one over a number the
         // walk does not read
-        NOT_TOLD.put("walkPlusOneSomeElementGuarded", "the same as walkPlusOne: what some element "
-                + "meets narrows none of the others");
+        NOT_TOLD.put("walkPlusOneSomeElementGuarded", "what some element meets is a condition no "
+                + "reading puts on the way (A_CONDITION_NOT_READ): said as not resolved");
         FORMS.put("walkPlusOneSomeElementGuarded",
                 "List.any(x -> x < 9223372036854775807, ds) && " + walk + " + 1 <= 10");
-        NOT_TOLD.put("walkPlusOneGuardedByQ", "the same as walkPlusOne: what the way states of q "
-                + "says nothing of the elements");
         FORMS.put("walkPlusOneGuardedByQ", "q > 0 && " + walk + " + 1 <= 10");
         FORMS.put("walkOverAWrittenListPlusOneWithinTheType",
                 "List.fold((w, l) -> if l > w then l else w, 0, [1, 2]) + 1 >= 3");
-        NOT_TOLD.put("walkAgainstAnOption", "the operation over what the option holds, against "
-                + "a walk, is told on no arm or application the report asks of: said as not "
-                + "read");
+        NOT_TOLD.put("walkAgainstAnOption", "no operation is told: a walk compared with what an "
+                + "option holds is two values held aside, and the operation beside the walk is "
+                + "read by no owner (NO_OPERATION_TOLD): said as not read");
         FORMS.put("walkAgainstAnOption", walk + " <= Option.withDefault(0, List.max(ds)) + 1");
-        NOT_TOLD.put("armOfAWalkPlusOne", "the same, the operation over the walk in an arm");
+        NOT_TOLD.put("armOfAWalkPlusOne", ARM_OF_A_WALK);
         FORMS.put("armOfAWalkPlusOne", "(if q > 3 then " + walk + " + 1 else 0) >= 2");
-        NOT_TOLD.put("remainderOfAWalkPlusOne", "what the remainder divides is a part of an "
-                + "expression held aside, told beside it only where it is read as a number of the "
-                + "input (tellWhatIsWorkedOutIn); an operation over a walk is no such number and "
-                + "is passed over, though what the walk comes to is known");
+        NOT_TOLD.put("remainderOfAWalkPlusOne", "no operation is told: the operation over the "
+                + "walk is a part of an expression held aside, read as a number only where it "
+                + "holds no choice (worksOutAsANumber), so it is passed over "
+                + "(NO_OPERATION_TOLD): said as not read");
         FORMS.put("remainderOfAWalkPlusOne", "Int.floorMod(" + walk + " + 1, 7) >= 3");
-        NOT_TOLD.put("armOfAWalkPlusOneInAClosure", "the same, in an arm of what a closure "
-                + "works out on each element");
+        NOT_TOLD.put("armOfAWalkPlusOneInAClosure", ARM_OF_A_WALK + ", on each element");
         FORMS.put("armOfAWalkPlusOneInAClosure",
                 "List.all(x -> (if x > 3 then " + walk + " + 1 else 0) >= 2, ds)");
         FORMS.put("remainderOfAWalk", "Int.floorMod(" + walk + ", 7) + 1 >= 3");
@@ -350,9 +342,9 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
         notShown("an operation worked out on each application of a closure", "lengthOfAStep",
                 "lengthOfACancelledStep", "lengthOfAConditionStep", "lengthOfAFlatStep",
                 "lengthOfAShiftedStep", "lengthOfASortedStep", "lengthOfAStepAtAnIndex",
-                "lengthOfAStepInAWrittenList", "lengthOfATakenStep", "lengthOfATupleStep",
+                "lengthOfAStepInAWrittenList", "lengthOfATupleStep",
                 "lengthOfAnUnusedBinding", "lengthOfACancelledConstantStep", "emptyOfAStep",
-                "everyOfAStep", "everyOfAShiftedStep", "maxOfAStep", "maxOfAStepByQ",
+                "everyOfAStep", "everyOfAShiftedStep",
                 "totalOfAStep", "totalOfAStepOverAStep", "totalOfTakenSteps", "foldOfAStep",
                 "totalOfThePositionsTimesTheElements", "totalOfTheSameChoice");
         notShown("a total of the elements, worked out exactly: no value of the elements is put "

@@ -1415,8 +1415,7 @@ public final class GuardThresholds {
      * Whether what a run getting to the comparison works out, anywhere {@code each} says it does,
      * is not read far enough to say which rows get past it, where some row may arrive at the place
      * it is worked out: a stop no operation tells
-     * ({@link UndividedByARelation.Working#aStopUntold}), a stop told where no row is asked to
-     * stop in it ({@link #aStopToldThereIsAskedOfNoRow}), or one over a value a run works out
+     * ({@link UndividedByARelation.Working#aStopUntold}), or one over a value a run works out
      * that the way there does not keep within its type ({@link #aValueWorkedOutIsNotKeptWithin}).
      * Apart from whether a run is shown to stop ({@link StopAssessment}): an operation that is
      * read and not shown either way still says which rows get past it.
@@ -1425,30 +1424,12 @@ public final class GuardThresholds {
             ComparisonReadings.Reading each, AskedOver over, InputReading read) {
         for (ComparisonReadings.Reading.WorkedOutAt worked : each.whatARunWorksOut()) {
             if ((worked.stops().operations().aStopUntold()
-                    || aStopToldThereIsAskedOfNoRow(each, worked)
                     || aValueWorkedOutIsNotKeptWithin(each, worked, over.toACase(), read))
-                    && aRowArrivesWhereItIsWorkedOut(each, worked, over)) {
+                    && aRowArrivesWhereItIsWorkedOut(worked, over)) {
                 return true;
             }
         }
         return false;
-    }
-
-    /**
-     * Whether an operation told in what {@code worked} works out is one no row is asked to stop
-     * in: one on an arm, or in an application not made on every run, where the comparison is
-     * stated as no condition, so that the rows that take the arm or make the application are put
-     * on the way by nothing. One over a value a run works out is asked of the way instead
-     * ({@link #aValueWorkedOutIsNotKeptWithin}).
-     */
-    private static boolean aStopToldThereIsAskedOfNoRow(
-            ComparisonReadings.Reading each, ComparisonReadings.Reading.WorkedOutAt worked) {
-        if (each.statedAsACondition().isPresent() || worked.stops().operations().operations()
-                .stream().allMatch(UndividedByARelation.IntOperation::overAValueWorkedOut)) {
-            return false;
-        }
-        return worked.takenWhere() != null || (worked.madeWhere() != null
-                && !(worked.madeWhere() instanceof Proposition.Always(boolean holds) && holds));
     }
 
     /**
@@ -1467,7 +1448,7 @@ public final class GuardThresholds {
             return false;
         }
         Proposition reached = reachedWhere(worked);
-        List<OnTheWay> way = (reached == null || each.statedAsACondition().isEmpty())
+        List<OnTheWay> way = reached == null
                 ? each.assumed() : each.wayToACase(wayToACase.putOn(reached));
         WhatAWayLeavesOfAValue left = WhatAWayLeavesOfAValue.along(read, way);
         return left != null
@@ -1511,9 +1492,7 @@ public final class GuardThresholds {
      * Each place what a run getting to the comparison works out is worked out, anywhere
      * {@code each} says it is ({@link ComparisonReadings.Reading#whatARunWorksOut}), with whether a
      * row may arrive there ({@link #aRowArrivesWhereItIsWorkedOut}) and the way to it: the way to
-     * the comparison, with what the arm or application states put on it where the comparison is
-     * stated as a condition that puts it there. Where it is stated as none, nothing says which
-     * rows take an arm, and the way to the comparison holds every row that does.
+     * the comparison, with what the arm or application states put on it.
      *
      * <p>Where {@code each} says nothing of what a run works out, neither once nor on each
      * application, what each relation {@code arrived} was read as works out is what a run getting
@@ -1543,8 +1522,8 @@ public final class GuardThresholds {
                 continue;
             }
             Proposition reached = reachedWhere(worked);
-            boolean arrives = aRowArrivesWhereItIsWorkedOut(each, worked, over);
-            List<OnTheWay> way = (reached == null || each.statedAsACondition().isEmpty())
+            boolean arrives = aRowArrivesWhereItIsWorkedOut(worked, over);
+            List<OnTheWay> way = reached == null
                     ? each.assumed()
                     : arrives ? each.wayToACase(over.toACase().putOn(reached)) : List.of();
             out.add(new StopAssessment.Place(worked, arrives, way));
@@ -1583,10 +1562,9 @@ public final class GuardThresholds {
     /** Whether a row may arrive where {@code worked} is worked out: at the comparison itself, or
      *  past what its arm or application states ({@link #aRowMayArrivePast}). */
     private static boolean aRowArrivesWhereItIsWorkedOut(
-            ComparisonReadings.Reading each, ComparisonReadings.Reading.WorkedOutAt worked,
-            AskedOver over) {
+            ComparisonReadings.Reading.WorkedOutAt worked, AskedOver over) {
         Proposition reached = reachedWhere(worked);
-        return reached == null || aRowMayArrivePast(each, reached, over);
+        return reached == null || aRowMayArrivePast(reached, over);
     }
 
     /** What a run states to get past the arm or make the application {@code worked} is worked
@@ -1599,19 +1577,15 @@ public final class GuardThresholds {
     }
 
     /**
-     * Whether a row arriving at the comparison {@code each} may get past {@code reached}, what a
-     * run states to take an arm or make an application on the way there. A statement every run
-     * holds is passed by every row that arrives, and one none holds by none, whether or not the
-     * comparison is stated as a condition. Any other is put on the way through that condition, and
-     * where the comparison is stated as none, nothing says which rows get past it, and one may.
+     * Whether a row arriving at the comparison may get past {@code reached}, what a run states to
+     * take an arm or make an application on the way there. A statement every run holds is passed
+     * by every row that arrives, and one none holds by none. Any other is put on the way.
      */
-    private static boolean aRowMayArrivePast(
-            ComparisonReadings.Reading each, Proposition reached, AskedOver over) {
+    private static boolean aRowMayArrivePast(Proposition reached, AskedOver over) {
         if (reached instanceof Proposition.Always(boolean holds)) {
             return holds && over.aRowArrives();
         }
-        return each.statedAsACondition().isEmpty()
-                || over.aRowArrives(over.toACase().apply(reached));
+        return over.aRowArrives(over.toACase().apply(reached));
     }
 
     /** The region {@code way} leaves, or none where nothing reaches along it. */

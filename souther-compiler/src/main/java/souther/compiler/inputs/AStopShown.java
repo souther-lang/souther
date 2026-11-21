@@ -19,12 +19,21 @@ import java.util.Objects;
  * @param at        the number at each place the value is asked to hold, in the order the input
  *                  declares its places; none where the operation comes to past its ends whatever
  *                  the input holds
+ * @param structure what the proof asks of the lists of the input besides: how many one holds,
+ *                  and what its element is where it holds the one. Of a list not named the proof
+ *                  asks nothing
  */
-public record AStopShown(String operation, List<NumberAt> at) {
+public record AStopShown(String operation, List<NumberAt> at, List<InputFact> structure) {
 
     public AStopShown {
         Objects.requireNonNull(operation, "a stop is shown in some operation");
         at = List.copyOf(at);
+        structure = List.copyOf(structure);
+    }
+
+    /** A stop shown by numbers at places alone. */
+    public AStopShown(String operation, List<NumberAt> at) {
+        this(operation, at, List.of());
     }
 
     /** The whole number {@code number} at the place {@code place} of the input. */

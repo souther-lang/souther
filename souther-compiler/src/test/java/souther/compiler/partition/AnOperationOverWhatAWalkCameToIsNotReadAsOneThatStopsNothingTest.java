@@ -36,12 +36,15 @@ class AnOperationOverWhatAWalkCameToIsNotReadAsOneThatStopsNothingTest {
     private static final String STOP_NOT_RESOLVED = "stop not resolved:";
 
     /** What the walk comes to is the seed or an element, any {@code Int}, so nothing keeps one
-     *  more within the type, and nothing shows a run that takes it past. */
+     *  more within the type; and a list of the one element, the greatest {@code Int}, walks to it,
+     *  so a run is shown to take it past, which is said as the stop it is. What a walk over
+     *  several elements comes to is not said, so that what else a run may stop at is still said
+     *  as not told. */
     @Test
     void aSumOverWhatAFoldCameToIsNotReadAsOneThatStopsNothing() {
         String report = reportOf(THE_WALK + " + 1 <= 10");
+        assertTrue(report.contains(MAY_STOP), report);
         assertTrue(report.contains(NOT_ALL_TOLD), report);
-        assertFalse(report.contains(MAY_STOP), report);
     }
 
     /** Every element the way leaves is below the greatest {@code Int}, and the seed is nought, so

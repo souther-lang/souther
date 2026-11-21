@@ -368,9 +368,10 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                    Supplier<WorkedOutFirst> first,
                    Supplier<List<AConstructionOnTheWay>> constructionsOnTheWay,
                    List<Core.Binary> quotients, EvaluationPlaces places,
-                   ValueTemplates definitions) {
+                   ValueTemplates definitions, Supplier<Condition> asACondition) {
 
         Reading {
+            Objects.requireNonNull(asACondition, "the comparison as a condition, once asked");
             Objects.requireNonNull(places, "where the comparison's parts stand in its order");
             if (occurrence == null || statement == null || at == null
                     || statedAsACondition == null || stopsWhere == null || worksOutOnEach == null
@@ -488,7 +489,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
          * @param read the reading of the input this comparison was read against
          */
         ReachingCuts.Stating aCasePutOnTheWay(Proposition decides, InputReading read) {
-            return ReachingCuts.whereItDecides(statedAt(decides), decides, read);
+            return ReachingCuts.whereItDecides(statedAt(), decides, read);
         }
 
         /**
@@ -500,20 +501,23 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         ReachingCuts.Stating aCasePutOnTheWay(Proposition decides, InputReading read,
                                               Function<Proposition, ReachingCuts.Stating> eachPart,
                                               RemaindersOfAnElement.Kept followed) {
-            return ReachingCuts.whereItDecides(statedAt(decides), decides, read, eachPart,
+            return ReachingCuts.whereItDecides(statedAt(), decides, read, eachPart,
                     followed);
         }
 
         /** What {@code part}, a part of a case, asks of a row put on the way at this comparison,
          *  and nothing of what follows from it. */
         ReachingCuts.Stating aPartAsked(Proposition part, InputReading read) {
-            return ReachingCuts.asked(statedAt(part), part, read);
+            return ReachingCuts.asked(statedAt(), part, read);
         }
 
-        private Condition statedAt(Proposition decides) {
-            return statedAsACondition.orElseThrow(() -> new IllegalArgumentException(
-                    "this comparison is one line no run stops in, and nothing of where one decides"
-                            + " is put on the way at it: " + decides));
+        /**
+         * The condition what {@code decides} states is read at: the comparison's own where it is
+         * stated as one, and otherwise the comparison as a condition made where it is first asked,
+         * for what an arm or an application of it states.
+         */
+        private Condition statedAt() {
+            return statedAsACondition.orElseGet(asACondition);
         }
     }
 
@@ -2087,7 +2091,9 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                             ? QuotientsEveryRunWorksOut.in(e) : List.of(),
                     stated.statement() instanceof Stated.AComparison
                             ? EvaluationPlaces.of(e) : EvaluationPlaces.none(),
-                    in.templates().definitions()));
+                    in.templates().definitions(),
+                    new Pullback.Once<>(() -> Condition.of(e, reads, in.symbols(), in.newtypes(),
+                            numbering))));
         }
         // A fork the reading of the runs takes a way out of, under the closures the walk is in. A
         // value standing as a wider type is no fork, and a fork under it is met one step down.

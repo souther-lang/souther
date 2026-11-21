@@ -173,8 +173,13 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                     THE_POSITION),
             row(INPUTS + "TermOrdering", "namesWorn", "(" + TYPE + INNERS + ")Ljava/util/List;",
                     THE_SPINE),
+            row(PARTITION + "AValueOfTheInput", "heldList",
+                    "(L" + TYPE_VIEW + ";L" + INPUTS + "TermPath;L" + PARTITION
+                            + "AValueOfTheInput$Lists;L" + INPUTS + "InputReading;)L" + PARTITION
+                            + "AValueOfTheInput$WholeRun;", THE_POSITION),
             row(PARTITION + "AValueOfTheInput", "walk",
-                    "(L" + INPUTS + "TermPath;" + TYPE + "Ljava/util/Set;L" + INPUTS
+                    "(L" + INPUTS + "TermPath;" + TYPE + "Ljava/util/Set;L" + PARTITION
+                            + "AValueOfTheInput$Lists;L" + INPUTS
                             + "InputReading;Ljava/util/Map;Ljava/util/List;)I", THE_POSITION),
             row(PARTITION + "BehaviorInputs", "view", "(" + TYPE + ")L" + TYPE_VIEW + ";",
                     THE_POSITION),

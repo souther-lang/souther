@@ -355,6 +355,76 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
 
         /**
+         * Each way this is over numbers of the input alone, visited one at a time until
+         * {@code visit} answers that it wants no more: as it is, where it is over nothing else,
+         * and otherwise by each way a row makes every value it is over come to a number
+         * ({@link Attainment}), with what a row meets for that. None where some value it is over
+         * has no such way.
+         *
+         * <p>Put together as they are asked for and not all at once. The ways of several values
+         * are as many as the product of how many each has, and a reader that spends a figure on
+         * every one it looks at must not be handed the whole product before it has spent any.
+         *
+         * @return false where some value's ways were left unmade for want of the figure
+         *         ({@link Attainments#leftUnmade}), which no visit says: all of them that were made
+         *         may have been visited
+         */
+        boolean forEachAttained(Attainment.Visitor visit) {
+            LinearForm<NumericTerm> alone = overTheInput();
+            if (alone != null) {
+                visit.wantsMore(Attainment.always(alone));
+                return true;
+            }
+            List<Map.Entry<IntOperand, ExactRatio>> operands = List.copyOf(form.coefs().entrySet());
+            List<List<Attainment>> ways = new ArrayList<>(operands.size());
+            boolean complete = true;
+            boolean none = false;
+            for (Map.Entry<IntOperand, ExactRatio> operand : operands) {
+                Attainments some = switch (operand.getKey()) {
+                    case IntOperand.OfTheInput(NumericTerm term) ->
+                            Attainments.of(List.of(Attainment.always(LinearForm.atom(term))));
+                    case IntOperand.OfAValueWorkedOut worked -> worked.attainments();
+                    default -> Attainments.NONE;
+                };
+                complete &= !some.leftUnmade();
+                none |= some.isEmpty();
+                ways.add(some.ways());
+            }
+            if (!none) {
+                puttingTogether(operands, ways, 0,
+                        Attainment.always(LinearForm.constant(form.constant())), visit);
+            }
+            return complete;
+        }
+
+        /** Each way of the operands from {@code at} on, after {@code sofar}, visited in turn;
+         *  false where {@code visit} wants no more. A number the arithmetic cannot hold is a way
+         *  of none. */
+        private static boolean puttingTogether(List<Map.Entry<IntOperand, ExactRatio>> operands,
+                                               List<List<Attainment>> ways, int at,
+                                               Attainment sofar, Attainment.Visitor visit) {
+            if (at == operands.size()) {
+                return visit.wantsMore(sofar);
+            }
+            for (Attainment way : ways.get(at)) {
+                LinearForm<NumericTerm> scaled = way.form().times(operands.get(at).getValue())
+                        .orNull();
+                LinearForm<NumericTerm> sum = scaled == null ? null
+                        : sofar.form().plus(scaled).orNull();
+                if (sum == null) {
+                    continue;
+                }
+                List<TakenConstraint.Affine> holding = new ArrayList<>(sofar.holding());
+                holding.addAll(way.holding());
+                if (!puttingTogether(operands, ways, at + 1, new Attainment(sum, holding),
+                        visit)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        /**
          * Whether the rows a run stops at in this can be said as {@link #placedOnRows} says them.
          * Where they cannot, as for a total over a container, which stops a run where it is
          * worked out exactly past its type and not where its place is, or for a number written
@@ -503,14 +573,18 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
          * numbers it is known to come to come from. No row of the input says which of them a run
          * gets, so no row is placed at an operation over it, and that some of them take the
          * operation past its type says no run stops in it: only that a way that keeps them all
-         * within shows none does ({@link WhatAWayLeavesOfAValue}).
+         * within shows none does ({@link WhatAWayLeavesOfAValue}). A stop is shown at it only by
+         * the way a row makes the value come to a number ({@code attainments}), and where there
+         * is none it is not.
          */
-        record OfAValueWorkedOut(NumericTerm atom, WhereAValueComesFrom origin) implements IntOperand {
+        record OfAValueWorkedOut(NumericTerm atom, WhereAValueComesFrom origin,
+                                 Attainments attainments) implements IntOperand {
 
             public OfAValueWorkedOut {
                 Objects.requireNonNull(atom, "the value as the reading held it aside");
                 Objects.requireNonNull(origin, "an operation over a value is told where what it "
                         + "comes to is known");
+                Objects.requireNonNull(attainments, "the ways a row makes the value a number");
             }
 
             @Override
@@ -13723,7 +13797,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * element as a whole, is not shown to be met together with the end.
      *
      * <p>Which way a row is written in is the composer's, against what else the row asks of the
-     * same positions ({@code TermRealizations}); a place of the end never asks a case at a
+     * same positions ({@code TermAttainments}); a place of the end never asks a case at a
      * position the selection reads, since it would sit under it.
      */
     private static boolean aLoneElementMeetsTheSelectionBeside(KeptOccurrences selection,
