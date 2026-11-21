@@ -53,6 +53,12 @@
         </dependency>
         <dependency>
             <groupId>org.souther-lang</groupId>
+            <artifactId>souther-raoh</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.souther-lang</groupId>
             <artifactId>souther-syntax</artifactId>
             <version>${project.version}</version>
             <scope>test</scope>

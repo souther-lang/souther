@@ -96,7 +96,7 @@ Either Windows archive unpacks to one directory with the launcher at its root, s
 
 A JDK and not a JRE, because `souther japi` reads a library's javadoc out of its sources and reaches a compiler to do it. On a runtime without one, that command ends on a class it cannot find and every other command answers as though nothing were missing.
 
-Souther requires JDK 25, and so does an application consuming its output: generated `.class` files and `souther-runtime` are pinned to the Java 25 class-file version, and `raoh` — which every derived decoder and encoder calls — is a Java 25 artifact. The Java that runs Souther and the Java a project's build runs on are separate questions, and a bundled runtime answers only the first.
+Souther requires JDK 25, and so does an application consuming its output: generated `.class` files and `souther-runtime`, which every derived decoder and encoder calls, are pinned to the Java 25 class-file version. The Java that runs Souther and the Java a project's build runs on are separate questions, and a bundled runtime answers only the first.
 
 ## Start a project
 

@@ -45,14 +45,11 @@ class CompileBindTest {
     // Member is decode-sourced, so no case factory is needed.
     private static final String IMPL_SRC = """
             package demo;
-            import net.unit8.raoh.Ok;
-            import net.unit8.raoh.Path;
-            import net.unit8.raoh.decode.Decoder;
+            import souther.runtime.Result;
             import java.util.Map;
             public final class FindMemberImpl extends FindMember {
                 public Member apply(Id in) {
-                    Decoder d = Member.decoder();
-                    return (Member) ((Ok) d.decode(Map.of("id", "m-1"), Path.ROOT)).value();
+                    return ((Result.Ok<Member, ?>) Member.decoder().decode(Map.of("id", "m-1"))).value();
                 }
             }
             """;

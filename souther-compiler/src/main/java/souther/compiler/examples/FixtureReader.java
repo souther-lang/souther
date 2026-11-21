@@ -44,12 +44,14 @@ import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 import souther.runtime.Sets;
 
-import net.unit8.raoh.Err;
-import net.unit8.raoh.Issues;
-import net.unit8.raoh.Ok;
-import net.unit8.raoh.Result;
-import net.unit8.raoh.decode.Decoder;
-import net.unit8.raoh.decode.ObjectDecoders;
+import souther.compiler.generated.RefusalWording;
+import souther.runtime.Result;
+import souther.runtime.boundary.Decoder;
+import souther.runtime.boundary.Decoding;
+import souther.runtime.boundary.Encoder;
+import souther.runtime.boundary.Path;
+import souther.runtime.boundary.Refusal;
+import souther.runtime.boundary.Refusals;
 
 import java.math.BigDecimal;
 import java.util.ArrayDeque;
@@ -794,8 +796,7 @@ public final class FixtureReader {
         try {
             Class<?> c = loader.loadClass(className);
             Object encoder = staticCodec(c, "encoder");
-            return net.unit8.raoh.encode.Encoder.class.getMethod("encode", Object.class)
-                    .invoke(encoder, result);
+            return Encoder.class.getMethod("encode", Object.class).invoke(encoder, result);
         } catch (ReflectiveOperationException | RuntimeException e) {
             // The encoder is reached reflectively, so a stop inside it arrives wrapped.
             EvaluationContext.rethrowUnlessAboutTheValue(e);   // the evaluation ran out, not this value
@@ -1617,10 +1618,10 @@ public final class FixtureReader {
     private Object decode(FixtureShape shape, Object rawValue) {
         Type type = shape.type();
         Object raw = neutral.shaped(rawValue, Position.at(type));
-        Decoder<Object, ?> decoder = decoderFor(shape);
-        Result<?> result;
+        Decoder<?> decoder = decoderFor(shape);
+        Result<?, Refusals> result;
         try {
-            result = decoder.decode(raw, net.unit8.raoh.Path.ROOT);
+            result = decoder.decode(raw);
         } catch (RuntimeException e) {
             EvaluationContext.rethrowUnlessAboutTheValue(e);   // the evaluation ran out, not this fixture failing to fit
             // The decoder is generated for the declared type and casts on the way in, so a fixture of
@@ -1629,19 +1630,14 @@ public final class FixtureReader {
             // fixture's problem, and it reads as one (E1903) instead of aborting the compile.
             throw new FixtureException("a " + shapeOf(raw) + " does not fit " + Type.show(type));
         }
-        if (result instanceof Ok<?> ok) {
-            return ok.value();
-        }
-        // Name where each failure landed. A decoder reports at a path, and a fixture that breaks the
+        // Name where each refusal landed. A decoder refuses at a path, and a fixture that breaks the
         // same rule twice — two keys of a newtype-keyed map, two elements of a list — otherwise reads
         // as one message repeated, with nothing to say which value it is about.
-        String detail = ((Err<?>) result).issues().asList().stream()
-                .map(issue -> {
-                    String at = String.join(".", issue.path().segments());
-                    return at.isEmpty() ? issue.message() : at + ": " + issue.message();
-                })
-                .collect(java.util.stream.Collectors.joining("; "));
-        throw new FixtureException(detail);
+        return switch (result) {
+            case Result.Ok<?, Refusals>(Object value) -> value;
+            case Result.Err<?, Refusals>(Refusals refusals) ->
+                    throw new FixtureException(RefusalWording.detail(refusals));
+        };
     }
 
     /** What a fixture value looks like from the decode boundary, for the message above: the raw kinds
@@ -1659,8 +1655,7 @@ public final class FixtureReader {
         };
     }
 
-    @SuppressWarnings("unchecked")
-    private Decoder<Object, ?> decoderFor(FixtureShape shape) {
+    private Decoder<?> decoderFor(FixtureShape shape) {
         return switch (shape) {
             case FixtureShape.Scalar s -> leafDecoder(s.scalar());
             // An imported type's decoder lives in its declaring module's package, not this one's.
@@ -1673,7 +1668,7 @@ public final class FixtureReader {
             case FixtureShape.Nominal n -> {
                 try {
                     Class<?> c = loader.loadClass(SoutherJvmAbi.nameOf(new GeneratedClass.Value(n.name())).binaryName());
-                    yield (Decoder<Object, ?>) staticCodec(c, "decoder");
+                    yield (Decoder<?>) staticCodec(c, "decoder");
                 } catch (ReflectiveOperationException e) {
                     EvaluationContext.rethrowUnlessAboutTheValue(e);
                     throw new IllegalStateException("`" + SoutherJvmAbi.nameOf(new GeneratedClass.Value(n.name())).binaryName()
@@ -1684,26 +1679,26 @@ public final class FixtureReader {
             // A collection is decoded the way a data's collection field is, built from the same
             // pieces the derived decoder is (spec §decoder-derivation): a list over its element decoder, a set as a
             // list deduplicated, a map over its value decoder with the keys read by their own.
-            case FixtureShape.ListOf l -> ObjectDecoders.list(decoderFor(l.element()));
-            case FixtureShape.SetOf s -> ObjectDecoders.list(decoderFor(s.element()))
+            case FixtureShape.ListOf l -> Decoding.list(decoderFor(l.element()));
+            case FixtureShape.SetOf s -> Decoding.list(decoderFor(s.element()))
                     .map(elements -> Sets.fromList(new ArrayList<Object>(elements), EvaluationContext.checkpoint()));
             case FixtureShape.MapOf m -> mapDecoder(m.key(), m.value());
         };
     }
 
     /** The leaf decoder for a scalar. A fixture hands over the value it wrote — a temporal arrives
-     *  parsed, since that is what the checker read — so these are the neutral-source decoders and
-     *  not the ones that parse text. */
-    private static Decoder<Object, ?> leafDecoder(LeafScalar scalar) {
+     *  parsed, since that is what the checker read — and a leaf takes a value of its own kind as
+     *  itself. */
+    private static Decoder<?> leafDecoder(LeafScalar scalar) {
         return switch (scalar) {
-            case STRING -> ObjectDecoders.string();
-            case INT -> ObjectDecoders.long_();
-            case BOOL -> ObjectDecoders.bool();
-            case DECIMAL -> ObjectDecoders.decimal();
-            case DATE -> ObjectDecoders.date();
-            case TIME -> ObjectDecoders.time();
-            case DATETIME -> ObjectDecoders.dateTime();
-            case INSTANT -> ObjectDecoders.iso8601();
+            case STRING -> Decoding.string();
+            case INT -> Decoding.integer();
+            case BOOL -> Decoding.bool();
+            case DECIMAL -> Decoding.decimal();
+            case DATE -> Decoding.date();
+            case TIME -> Decoding.time();
+            case DATETIME -> Decoding.dateTime();
+            case INSTANT -> Decoding.instant();
         };
     }
 
@@ -1721,36 +1716,36 @@ public final class FixtureReader {
      * with two bad entries names both rather than stopping at the first, and two keys that are one
      * key once decoded are refused rather than collapsed.
      */
-    private Decoder<Object, ?> mapDecoder(FixtureShape key, FixtureShape value) {
-        Decoder<Object, ?> keys = decoderFor(key);
-        Decoder<Object, ?> values = decoderFor(value);
-        return (raw, path) -> {
+    private Decoder<Map<Object, Object>> mapDecoder(FixtureShape key, FixtureShape value) {
+        Decoder<?> keys = decoderFor(key);
+        Decoder<?> values = decoderFor(value);
+        return (raw, path, reader) -> {
             if (!(raw instanceof Map<?, ?> entries)) {
-                return Result.fail(path, "not_a_map",
-                        "a `Map` fixture is a list of (key, value) pairs, e.g. [ (\"apple\", 3) ]");
+                return Decoding.refuse(new Refusal.NotOfItsKind(path, "map", shapeOf(raw),
+                        "a `Map` fixture is a list of (key, value) pairs, e.g. [ (\"apple\", 3) ]"));
             }
             Map<Object, Object> out = new LinkedHashMap<>();
-            Issues issues = Issues.EMPTY;
+            Refusals refused = null;
             for (Map.Entry<?, ?> entry : entries.entrySet()) {
-                net.unit8.raoh.Path at = path.append(String.valueOf(entry.getKey()));
-                Result<?> k = keys.decode(entry.getKey(), at);
-                Result<?> v = values.decode(entry.getValue(), at);
-                if (k instanceof Err<?>(var badKey)) {
-                    issues = issues.merge(badKey);
+                Path at = path.append(String.valueOf(entry.getKey()));
+                Result<?, Refusals> k = keys.decode(entry.getKey(), at, reader);
+                Result<?, Refusals> v = values.decode(entry.getValue(), at, reader);
+                if (k instanceof Result.Err<?, Refusals>(Refusals badKey)) {
+                    refused = Decoding.and(refused, badKey);
                 }
-                if (v instanceof Err<?>(var badValue)) {
-                    issues = issues.merge(badValue);
+                if (v instanceof Result.Err<?, Refusals>(Refusals badValue)) {
+                    refused = Decoding.and(refused, badValue);
                 }
-                if (k instanceof Ok<?>(var decodedKey) && v instanceof Ok<?>(var decodedValue)) {
+                if (k instanceof Result.Ok<?, Refusals>(Object decodedKey)
+                        && v instanceof Result.Ok<?, Refusals>(Object decodedValue)) {
                     if (out.containsKey(decodedKey)) {
-                        issues = issues.merge(((Err<?>) Result.fail(at, "duplicate_key",
-                                "two keys are the same key once decoded")).issues());
+                        refused = Decoding.and(refused, Refusals.of(new Refusal.OneKeyTwice(at)));
                     } else {
                         out.put(decodedKey, decodedValue);
                     }
                 }
             }
-            return issues.isEmpty() ? Result.ok(out) : Result.err(issues);
+            return refused == null ? Result.ok(out) : Result.err(refused);
         };
     }
 

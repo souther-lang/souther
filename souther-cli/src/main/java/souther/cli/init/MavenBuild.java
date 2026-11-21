@@ -9,7 +9,7 @@ import java.util.List;
  * <p>Two declarations, not one. The plugin runs the compile, and the runtime the generated code
  * calls is declared as an ordinary dependency — the plugin checks it rather than adding it, because
  * what a plugin adds is not in the pom this project publishes and nothing depending on it would get
- * the runtime. What that runtime brings with it, Raoh among it, comes with it.
+ * the runtime. What that runtime brings with it comes with it.
  */
 final class MavenBuild {
 
@@ -101,7 +101,8 @@ final class MavenBuild {
 
 
     /**
-     * The pom with whichever of the two declarations it is missing written into it.
+     * The pom with whichever of the two declarations it is missing written into it, and the
+     * decoder binding beside a runtime it writes.
      *
      * <p>Into the elements it already has where it has them, and creating the ones it does not.
      * Nothing else in the file is touched: what comes back is the author's own text with a block
@@ -112,6 +113,13 @@ final class MavenBuild {
         if (!declaresTheRuntime(written)) {
             written = withDependency(written, BuildPlugins.GROUP, BuildPlugins.RUNTIME_ARTIFACT,
                     southerVersion);
+            // The binding comes in with the runtime, as in a pom this command lays out. A pom that
+            // already names the runtime has settled which binding it reads through, none included.
+            if (!declares(Xml.everyIn(written, DEPENDENCY), BuildPlugins.GROUP,
+                    BuildPlugins.RAOH_ARTIFACT)) {
+                written = withDependency(written, BuildPlugins.GROUP, BuildPlugins.RAOH_ARTIFACT,
+                        southerVersion);
+            }
         }
         if (!declaresThePlugin(written)) {
             written = withPlugin(written);

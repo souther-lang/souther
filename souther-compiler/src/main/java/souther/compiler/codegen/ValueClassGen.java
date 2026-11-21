@@ -11,7 +11,6 @@ import souther.compiler.check.Ordering;
 import souther.compiler.check.TypeOps;
 import souther.compiler.core.ValueShape;
 
-import souther.compiler.jvm.DecoderKind;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.LinkageProjection;
 import java.lang.classfile.Attribute;
@@ -138,44 +137,34 @@ final class ValueClassGen {
             }
             emitConstructMethod(cb, cdName, data, fields);
             emitAccessors(cb, cdName, fields);
-            boolean mapInput = codec.isMapInput(data);
-            codec.emitFactory(cb, "decoder", CD_RDecoder, data, new GeneratedClass.Decoder(valueOf(data), DecoderKind.VALUE));
-            codec.emitSourceFactory(cb, data, CodecGen.Src.JSON, mapInput);
-            if (codec.recordCompatible(data)) codec.emitSourceFactory(cb, data, CodecGen.Src.JOOQ, mapInput);
-            codec.emitFactory(cb, "encoder", CD_REncoder, data, new GeneratedClass.Encoder(valueOf(data)));
+            codec.emitDecoderFactory(cb, data);
+            codec.emitEncoderFactory(cb, data);
         }));
 
-        Hir.DecoderDef dec = symbols.derived(data).decoder();
-        out.put(new GeneratedClass.Decoder(valueOf(data), DecoderKind.VALUE),
-                codec.generateDecoderClass(cdName, data, dec, fields, CodecGen.Src.NEUTRAL));
-        out.put(new GeneratedClass.Decoder(valueOf(data), DecoderKind.JSON),
-                codec.generateDecoderClass(cdName, data, dec, fields, CodecGen.Src.JSON));
-        if (codec.recordCompatible(data)) {
-            out.put(new GeneratedClass.Decoder(valueOf(data), DecoderKind.RECORD),
-                    codec.generateDecoderClass(cdName, data, dec, fields, CodecGen.Src.JOOQ));
-        }
+        out.put(new GeneratedClass.Decoder(valueOf(data)), codec.generateDecoderClass(cdName, data,
+                symbols.derived(data).decoder(), fields));
         out.put(new GeneratedClass.Encoder(valueOf(data)),
                 codec.generateEncoderClass(cdName, data, symbols.derived(data).encoder()));
 
-        // A helper for an invariant-bearing newtype: a Raoh-free `boolean check(value)` that runs the
-        // same invariant bytecode as __construct — the checker's, which both read. Two callers: a constant construction
-        // is verified at compile time through it — 金額(-5) is a compile error, not a runtime abort
-        // (ADR-0032) — and the derived decoder passes it to Raoh's `refine` for an invariant no
-        // constraint states exactly (issue #83).
+        // A helper for an invariant-bearing newtype: a `boolean check(value)` that runs the same
+        // invariant bytecode as __construct — the checker's, which both read. Two callers: a constant
+        // construction is verified at compile time through it — 金額(-5) is a compile error, not a
+        // runtime abort (ADR-0032) — and the derived decoder checks through it a clause no
+        // constraint states exactly.
         if (data.newtype() && !shapeOf(data).invariants().isEmpty()) {
             emitCtfeCheck(data, fields, out);
         }
     }
 
     /**
-     * The Raoh-free checks of an invariant-bearing newtype: {@code check} for the whole invariant, and
+     * The checks of an invariant-bearing newtype: {@code check} for the whole invariant, and
      * {@code check$i} for the clause declared {@code i}th. Both run the same bytecode
      * {@code __construct} does: the clause the checker elaborated, read here and there.
      *
      * <p>Two callers want the whole invariant — a constant construction verified at compile time
      * (ADR-0032) — and one wants a clause on its own: the derived decoder hands each clause its own
-     * predicate, so a rule no Raoh constraint states exactly is still reported as the rule it is
-     * rather than as the whole invariant (issue #83, spec §decoder-error).
+     * predicate, so a rule no constraint states exactly is still reported as the rule it is rather
+     * than as the whole invariant (spec §decoder-error).
      */
     private void emitCtfeCheck(Hir.Data data, SequencedMap<String, Type> fields, Emissions out) {
         ClassDesc cdName = cd(data);
@@ -264,23 +253,14 @@ final class ValueClassGen {
             if (ctx.declaredType(sum.declaredKey()).order().isPresent()) {
                 emitOrderMethods(cb, cdX, alternatives.atoms());
             }
-            codec.emitCodecFactory(cb, "decoder", CD_RDecoder, cd(new GeneratedClass.Decoder(valueOf(sum), DecoderKind.VALUE)),
-                    CodecGen.decoderSig(cdX, !enumeration));
-            codec.emitSourceFactory(cb, sum, CodecGen.Src.JSON, !enumeration);
-            if (codec.recordCompatible(sum)) codec.emitSourceFactory(cb, sum, CodecGen.Src.JOOQ, true);
-            codec.emitCodecFactory(cb, "encoder", CD_REncoder, cd(new GeneratedClass.Encoder(valueOf(sum))),
+            codec.emitCodecFactory(cb, "decoder", CD_Decoder, cd(new GeneratedClass.Decoder(valueOf(sum))),
+                    CodecGen.decoderSig(cdX));
+            codec.emitCodecFactory(cb, "encoder", CD_Encoder, cd(new GeneratedClass.Encoder(valueOf(sum))),
                     CodecGen.encoderSig(cdX, enumeration ? CD_String : CD_Map));
         }));
-        out.put(new GeneratedClass.Decoder(valueOf(sum), DecoderKind.VALUE), enumeration
-                ? codec.generateEnumSumDecoder(sum, alternatives, CodecGen.Src.NEUTRAL)
-                : codec.generateSumDecoder(sum, alternatives, CodecGen.Src.NEUTRAL));
-        out.put(new GeneratedClass.Decoder(valueOf(sum), DecoderKind.JSON), enumeration
-                ? codec.generateEnumSumDecoder(sum, alternatives, CodecGen.Src.JSON)
-                : codec.generateSumDecoder(sum, alternatives, CodecGen.Src.JSON));
-        if (codec.recordCompatible(sum)) {
-            out.put(new GeneratedClass.Decoder(valueOf(sum), DecoderKind.RECORD),
-                    codec.generateSumDecoder(sum, alternatives, CodecGen.Src.JOOQ));
-        }
+        out.put(new GeneratedClass.Decoder(valueOf(sum)), enumeration
+                ? codec.generateEnumSumDecoder(sum, alternatives)
+                : codec.generateSumDecoder(sum, alternatives));
         out.put(new GeneratedClass.Encoder(valueOf(sum)), enumeration
                 ? codec.generateEnumSumEncoder(sum)
                 : codec.generateSumEncoder(sum, alternatives));
@@ -382,7 +362,7 @@ final class ValueClassGen {
 
     void generateUnit(Hir.UnitData unit, Emissions out) {
         ClassDesc cdU = cd(unit);
-        ClassDesc cdDec = cd(new GeneratedClass.Decoder(valueOf(unit), DecoderKind.VALUE));
+        ClassDesc cdDec = cd(new GeneratedClass.Decoder(valueOf(unit)));
         ClassDesc cdEnc = cd(new GeneratedClass.Encoder(valueOf(unit)));
         out.put(valueOf(unit), build(cdU, cb -> {
             cb.withFlags(pub(unit.name()) | ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
@@ -403,19 +383,12 @@ final class ValueClassGen {
             // Java too — which costs nothing a unit was protecting: it carries no invariant, and
             // construction is governed by `constructs` rather than by visibility (ADR-0059).
             emitSharedInstance(cb, cdU);
-            // a unit is a field-less data: its codec reads/writes nothing but the tag the sum adds
-            // A unit ignores its input, so it decodes from every source. Generate all three so
-            // unit cases of a JSON/record sum have a matching decoder to dispatch to.
-            codec.emitCodecFactory(cb, "decoder", CD_RDecoder, cdDec, CodecGen.decoderSig(cdU, false));
-            codec.emitCodecFactory(cb, "jsonDecoder", CD_RDecoder, cd(new GeneratedClass.Decoder(valueOf(unit), DecoderKind.JSON)),
-                    CodecGen.decoderSigFor(CodecGen.Src.JSON, cdU, false));
-            codec.emitCodecFactory(cb, "recordDecoder", CD_RDecoder, cd(new GeneratedClass.Decoder(valueOf(unit), DecoderKind.RECORD)),
-                    CodecGen.decoderSigFor(CodecGen.Src.JOOQ, cdU, false));
-            codec.emitCodecFactory(cb, "encoder", CD_REncoder, cdEnc, CodecGen.encoderSig(cdU, CD_Map));
+            // a unit is a field-less data: its codec reads/writes nothing but the tag the sum adds,
+            // and it ignores its input
+            codec.emitCodecFactory(cb, "decoder", CD_Decoder, cdDec, CodecGen.decoderSig(cdU));
+            codec.emitCodecFactory(cb, "encoder", CD_Encoder, cdEnc, CodecGen.encoderSig(cdU, CD_Map));
         }));
-        out.put(new GeneratedClass.Decoder(valueOf(unit), DecoderKind.VALUE), codec.generateUnitDecoder(cdU, cdDec));
-        out.put(new GeneratedClass.Decoder(valueOf(unit), DecoderKind.JSON), codec.generateUnitDecoder(cdU, cd(new GeneratedClass.Decoder(valueOf(unit), DecoderKind.JSON))));
-        out.put(new GeneratedClass.Decoder(valueOf(unit), DecoderKind.RECORD), codec.generateUnitDecoder(cdU, cd(new GeneratedClass.Decoder(valueOf(unit), DecoderKind.RECORD))));
+        out.put(new GeneratedClass.Decoder(valueOf(unit)), codec.generateUnitDecoder(cdU, cdDec));
         out.put(new GeneratedClass.Encoder(valueOf(unit)), codec.generateUnitEncoder(cdEnc));
     }
 

@@ -90,7 +90,7 @@ class AnEmitterWritesWhatItWasHandedTest {
     @Test
     void theSumDecoderReadsTheKeyItWasHanded() {
         String read = text(codec.generateSumDecoder(sum("Payment"),
-                oneAtom("Payment", SENTINEL_KEY), CodecGen.Src.JSON));
+                oneAtom("Payment", SENTINEL_KEY)));
         assertTrue(read.contains(SENTINEL_KEY), "the decoder did not read the key it was handed");
     }
 
@@ -109,7 +109,7 @@ class AnEmitterWritesWhatItWasHandedTest {
     @Test
     void theSumDecoderReadsTheContentsKeyItWasHanded() {
         String read = text(codec.generateSumDecoder(sum("Payment"),
-                theNewtypeCase("Payment"), CodecGen.Src.JSON));
+                theNewtypeCase("Payment")));
         assertTrue(read.contains(SENTINEL_CONTENTS_KEY),
                 "the decoder did not read the contents key it was handed");
     }
@@ -146,8 +146,7 @@ class AnEmitterWritesWhatItWasHandedTest {
     void theEnumDecoderReadsTheNamesItWasHanded() {
         String read = text(codec.generateEnumSumDecoder(sum("Stage"),
                 new Boundary.Alternatives(List.of(atom("Prospecting")),
-                        new Boundary.Representation.Enumeration()),
-                CodecGen.Src.JSON));
+                        new Boundary.Representation.Enumeration())));
         assertTrue(read.contains("Prospecting"), "the one name handed in is missing");
         assertFalse(read.contains("Negotiation"), "the decoder went back to the sum for its atoms");
         assertFalse(read.contains("Won"), "the decoder went back to the sum for its atoms");

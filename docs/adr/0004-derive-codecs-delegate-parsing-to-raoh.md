@@ -1,6 +1,8 @@
 # ADR-0004: Derive decoders/encoders from data shape; delegate external representation to Raoh
 
-Status: Accepted. Revised 2026-09-30 — see *Revision*.
+Status: Accepted. Revised 2026-09-30 — see *Revision*. Superseded in part by ADR-0131: the derived
+decoder is Souther's own and names no library, and Raoh is reached through a decoder binding. That
+decoders and encoders are derived and never written in Souther stands.
 
 ## Revision (2026-09-30, a pattern is Souther's and only its report is Raoh's)
 

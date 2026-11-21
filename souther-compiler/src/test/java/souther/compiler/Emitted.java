@@ -1,6 +1,5 @@
 package souther.compiler;
 
-import souther.compiler.jvm.DecoderKind;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.GeneratedClasses;
 import souther.compiler.jvm.SoutherJvmAbi;
@@ -72,8 +71,8 @@ public final class Emitted {
         return name(new GeneratedClass.Encoder(valueOf(module, type)));
     }
 
-    public static String decoder(String module, String type, DecoderKind kind) {
-        return name(new GeneratedClass.Decoder(valueOf(module, type), kind));
+    public static String decoder(String module, String type) {
+        return name(new GeneratedClass.Decoder(valueOf(module, type)));
     }
 
     public static String ctfe(String module, String type) {

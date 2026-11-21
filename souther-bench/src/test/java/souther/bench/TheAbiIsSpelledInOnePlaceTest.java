@@ -1,7 +1,6 @@
 package souther.bench;
 
 import org.junit.jupiter.api.Test;
-import souther.compiler.jvm.DecoderKind;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.types.TypeKey;
@@ -169,9 +168,7 @@ class TheAbiIsSpelledInOnePlaceTest {
                 new GeneratedClass.BehaviorInterface("m", "x")));
         out.add(beyond(new GeneratedClass.BridgeCase("m", TypeSymbols.declared(new TypeKey("n", "X"))), value));
         out.add(beyond(new GeneratedClass.Encoder(value), value));
-        for (DecoderKind kind : DecoderKind.values()) {
-            out.add(beyond(new GeneratedClass.Decoder(value, kind), value));
-        }
+        out.add(beyond(new GeneratedClass.Decoder(value), value));
         out.add(beyond(new GeneratedClass.Ctfe(value), value));
         GeneratedClass.BehaviorInterface behavior = new GeneratedClass.BehaviorInterface("m", "x");
         out.add(beyond(new GeneratedClass.ExampleFake(behavior), behavior));

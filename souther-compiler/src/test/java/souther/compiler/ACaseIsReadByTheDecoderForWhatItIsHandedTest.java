@@ -55,7 +55,7 @@ class ACaseIsReadByTheDecoderForWhatItIsHandedTest {
         row.set(type, "Code");
         row.set(value, "x");
 
-        Result<?> r = Codecs.decode(compile(OVER_A_COLUMN), "demo.S", "recordDecoder", row);
+        Result<?> r = Codecs.decode(compile(OVER_A_COLUMN), "demo.S", Codecs.RECORD,row);
 
         assertInstanceOf(Ok.class, r, String.valueOf(r));
         assertEquals("demo.Code", ((Ok<?>) r).value().getClass().getName());

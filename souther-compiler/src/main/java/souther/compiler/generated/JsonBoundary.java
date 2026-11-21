@@ -8,32 +8,22 @@ import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.MapKeyRepresentation;
-import souther.compiler.types.TemporalRule;
-import souther.compiler.types.TextRule;
 import souther.compiler.types.TypeSymbol;
-import souther.runtime.BoundaryScalars;
 import souther.runtime.Representations;
+import souther.runtime.Result;
 import souther.runtime.Sets;
-import souther.runtime.Strings;
-import souther.runtime.Temporals;
-import souther.runtime.TextAdmission;
-
-import net.unit8.raoh.Err;
-import net.unit8.raoh.ErrorCodes;
-import net.unit8.raoh.Issues;
-import net.unit8.raoh.Ok;
-import net.unit8.raoh.Path;
-import net.unit8.raoh.Result;
-import net.unit8.raoh.decode.Decoder;
-import net.unit8.raoh.decode.ObjectDecoders;
-import net.unit8.raoh.decode.builtin.StringDecoder;
-import net.unit8.raoh.decode.builtin.TemporalDecoder;
-import net.unit8.raoh.encode.Encoder;
-import net.unit8.raoh.encode.ObjectEncoders;
-import net.unit8.raoh.json.JsonDecoders;
+import souther.runtime.boundary.Decoder;
+import souther.runtime.boundary.Decoding;
+import souther.runtime.boundary.Encoder;
+import souther.runtime.boundary.Encoding;
+import souther.runtime.boundary.Refusals;
 import tools.jackson.databind.JsonNode;
 
 import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -43,12 +33,10 @@ import java.util.Map;
 /**
  * A value crossing between JSON and the classes this compilation generated.
  *
- * <p>A boundary shape is not always a class. A data has a generated {@code jsonDecoder()} and
+ * <p>A boundary shape is not always a class. A data has a generated {@code decoder()} and
  * {@code encoder()} that read and write it whole; a primitive, a list, a set and a map have no class
- * of their own, so the decoder for one is composed here out of the ones that do. That composition is
- * the same question the generated codecs answer for a data's fields, and it is answered in one place
- * so the two cannot spell a value differently — {@code CodecGen} emits it as bytecode, and this is
- * the same rules in Java for the shapes no class was emitted for.
+ * of their own, so the decoder for one is composed here out of {@code Decoding}'s parts — the same
+ * parts the generated decoders are composed of, so the two cannot read a value differently.
  *
  * <p>Nothing here says anything to a reader. What went wrong comes back as a {@link Read} or as the
  * failure it was, thrown as it was, and whoever asked decides how to say it: {@code souther run} makes a
@@ -64,248 +52,86 @@ public final class JsonBoundary {
         /** It read, and this is the value. */
         record Value(Object value) implements Read {}
 
-        /** The decoder refused it, and these are the issues it found, at their paths. */
-        record Refused(Issues issues) implements Read {}
+        /** The decoder refused it, and these are the refusals, at their paths. */
+        record Refused(Refusals refusals) implements Read {}
     }
 
     /**
      * {@code raw} read as {@code shape}.
      *
-     * <p>Every input a decoder refuses comes back as issues, an array where an object belongs
+     * <p>Every input a decoder refuses comes back as refusals, an array where an object belongs
      * among them. What a decoder throws is therefore not about the input: it is the platform
      * having no room for something the decoder computed — an invariant's arithmetic past what a
      * {@code BigDecimal} keeps, which is the runtime's {@code OutOfRoom} — or a defect. Neither
      * is turned into a statement about the input here; it reaches the caller as it was thrown.
      */
     public static Read read(ClassLoader loader, BoundaryInput shape, JsonNode raw) {
-        Decoder<JsonNode, ?> decoder = decoderFor(loader, shape);
-        Result<?> result = decoder.decode(raw, net.unit8.raoh.Path.ROOT);
-        return result instanceof Ok<?> ok
-                ? new Read.Value(ok.value())
-                : new Read.Refused(((Err<?>) result).issues());
+        return switch (decoderFor(loader, shape).decode(raw, JsonTreeReader.INSTANCE)) {
+            case Result.Ok<?, Refusals>(Object value) -> new Read.Value(value);
+            case Result.Err<?, Refusals>(Refusals refusals) -> new Read.Refused(refusals);
+        };
     }
 
     /**
-     * The decoder for one input type, over the JSON source. {@code --input} is JSON, so the decoders
-     * have to be the ones the boundary reads JSON with: a temporal arrives as an ISO string and is
-     * parsed, not handed over as a {@code java.time} value. Reading JSON with the neutral-source
-     * decoders is what made a {@code Date} input impossible — anywhere, as a parameter or inside a
-     * data (issue #119).
-     *
-     * <p>A data delegates to its generated {@code jsonDecoder()}, so a nested shape, an invariant and
-     * a sum's discriminator are all read exactly as they are at the boundary. What is composed here
-     * is only what has no class of its own: the primitives and the collections.
+     * The decoder for one input type. A data's is its generated {@code decoder()}, so a nested
+     * shape, an invariant and a sum's discriminator are all read exactly as they are at the
+     * boundary. What is composed here is only what has no class of its own: the primitives and the
+     * collections.
      */
-    private static Decoder<JsonNode, ?> decoderFor(ClassLoader loader, BoundaryInput shape) {
+    private static Decoder<?> decoderFor(ClassLoader loader, BoundaryInput shape) {
         return switch (shape) {
-            case BoundaryInput.Scalar s -> leafDecoder(s.scalar());
-            case BoundaryInput.Nominal n -> codecOf(loader, n.name(), "jsonDecoder");
-            case BoundaryInput.ListOf l -> JsonDecoders.list(decoderFor(loader, l.element()));
-            case BoundaryInput.SetOf s -> JsonDecoders.list(decoderFor(loader, s.element()))
-                    .map(elements -> Sets.fromList(new ArrayList<Object>(elements), EvaluationContext.checkpoint()));
-            case BoundaryInput.MapOf m -> {
-                Decoder<Object, ?> key = keyDecoder(loader, m.key());
-                yield JsonDecoders.map(decoderFor(loader, m.value()))
-                        .flatMapWithPath((entries, path) -> rekey(key, entries, path));
-            }
+            case BoundaryInput.Scalar s -> leaf(s.scalar());
+            case BoundaryInput.Nominal n -> decoderOf(loader, n.name());
+            case BoundaryInput.ListOf l -> Decoding.list(decoderFor(loader, l.element()));
+            case BoundaryInput.SetOf s -> Decoding.list(decoderFor(loader, s.element()))
+                    .map(elements -> Sets.fromList(new ArrayList<Object>(elements),
+                            EvaluationContext.checkpoint()));
+            case BoundaryInput.MapOf m -> Decoding.map(decoderFor(loader, m.value()))
+                    .then(Decoding.keys(keyDecoder(loader, m.key())));
         };
     }
 
     /**
-     * The decoder for a boundary map's key. A key reaches this already read out of the JSON object
-     * that carried it, so what it decodes from is a string rather than a {@code JsonNode} — the
-     * neutral source, whichever source the map itself came from. This is the decoder
-     * {@code CodecGen.emitKeyDecoder} builds, in Java.
-     *
-     * <p>Which key types arrive here is not decided again, and is not asked again either: the witness
-     * the map-key rule answers with travels in the shape. A named key runs its own decoder, and a
-     * lexical one is the string leaf, parsed for a temporal.
+     * The decoder for a boundary map's key: the one a generated decoder reads a key with. Which key
+     * types arrive here is not decided again: the witness the map-key rule answers with travels in
+     * the shape. A named key runs its own decoder, and a lexical one is its leaf, reading text.
      */
-    private static Decoder<Object, ?> keyDecoder(ClassLoader loader, CrossingMapKey key) {
+    private static Decoder<?> keyDecoder(ClassLoader loader, CrossingMapKey key) {
         return switch (key.representation()) {
-            case MapKeyRepresentation.NamedKey n -> codecOf(loader, n.name(), "decoder");
-            case MapKeyRepresentation.Text _ -> text();
-            // Through the same rules a field's text goes through, for the same reason.
-            case MapKeyRepresentation.Lexical l -> temporal(text(), l.leaf());
+            case MapKeyRepresentation.NamedKey n -> decoderOf(loader, n.name());
+            case MapKeyRepresentation.Lexical l -> leaf(l.leaf());
         };
     }
 
-    /** The string leaf a key is read through. */
-    private static StringDecoder<Object> text() {
-        return admitted(ObjectDecoders.string());
-    }
-
-    /**
-     * Text as it arrives, let in: what the generated string leaf does, in Java.
-     *
-     * <p>{@link Strings#admission} decides it — Unicode 18.0.0's NFC, or why the text is not a
-     * {@code String}: it holds half of a surrogate pair, or its canonical value is longer than a
-     * {@code String} holds — and {@link #textOf} reports each refusal at the path, as the generated
-     * leaf does ({@link TextRule}). Not {@code StringDecoder.normalize()}, which answers for whatever
-     * Unicode version this JDK's own {@code java.text.Normalizer} carries.
-     * {@link StringDecoder#from} keeps the result a {@link StringDecoder}, so {@link #temporal} can
-     * still chain {@code .date()} etc. on it.
-     */
-    private static <I> StringDecoder<I> admitted(StringDecoder<I> text) {
-        // The checkpoint is asked for each time a text is admitted, since the decoder may be kept.
-        return StringDecoder.from(text.map(t -> Strings.admission(t, EvaluationContext.checkpoint()))
-                .flatMapWithPath(JsonBoundary::textOf));
-    }
-
-    /** The text an admission let in, or the failure at {@code path} saying why it is not a
-     *  {@code String}. */
-    public static Result<String> textOf(TextAdmission admission, Path path) {
-        return switch (admission) {
-            case TextAdmission.Admitted a -> Result.ok(a.text());
-            case TextAdmission.NotText _ ->
-                    Result.failCustom(path, TextRule.REFUSED, TextRule.HALF_A_PAIR, Map.of());
-            case TextAdmission.NoPlace _ ->
-                    Result.failCustom(path, TextRule.REFUSED, TextRule.NO_PLACE, Map.of());
+    /** The leaf decoder of a scalar, the one a generated decoder reads it with. */
+    private static Decoder<?> leaf(LeafScalar scalar) {
+        return switch (scalar) {
+            case STRING -> Decoding.string();
+            case INT -> Decoding.integer();
+            case BOOL -> Decoding.bool();
+            case DECIMAL -> Decoding.decimal();
+            case DATE -> Decoding.date();
+            case TIME -> Decoding.time();
+            case DATETIME -> Decoding.dateTime();
+            case INSTANT -> Decoding.instant();
         };
     }
 
     /**
-     * A decoded {@code Map<String, V>} rekeyed by the key type's own decoder, which is where a key's
-     * invariant is enforced and a temporal key is parsed.
-     *
-     * <p>A bad key is reported at that key's own path, and every key is read before the result is
-     * settled, so a map with two bad keys says so about both. A {@code String} key is rekeyed like
-     * any other: the keys of a decoded object do not pass the string leaf, so leaving them alone is
-     * the one place a boundary would hand over text it had not made canonical.
-     *
-     * <p>Two keys that decode to one key are refused rather than collapsed. Making a key canonical
-     * is what lets an object arrive with the same key written twice, and a map holding one entry
-     * where the input wrote two is a value the input never described — so the second is a failure at
-     * its own key, not the winner of an overwrite.
-     */
-    private static Result<Map<Object, Object>> rekey(Decoder<Object, ?> key, Map<String, ?> entries,
-                                                     net.unit8.raoh.Path path) {
-        Map<Object, Object> out = new LinkedHashMap<>();
-        Issues issues = Issues.EMPTY;
-        for (Map.Entry<String, ?> entry : entries.entrySet()) {
-            net.unit8.raoh.Path at = path.append(entry.getKey());
-            Result<?> decoded = key.decode(entry.getKey(), at);
-            if (decoded instanceof Err<?> err) {
-                issues = issues.merge(err.issues());
-                continue;
-            }
-            Object rekeyed = ((Ok<?>) decoded).value();
-            if (out.containsKey(rekeyed)) {
-                issues = issues.merge(((Err<?>) Result.fail(at, DUPLICATE_KEY, DUPLICATE_KEY_MESSAGE))
-                        .issues());
-            } else {
-                out.put(rekeyed, entry.getValue());
-            }
-        }
-        return issues.isEmpty() ? new Ok<>(out) : new Err<>(issues);
-    }
-
-    /** What a key colliding with one already read is reported as — the code and the wording the
-     *  generated rekey helper uses, so the two paths refuse the same input the same way. */
-    private static final String DUPLICATE_KEY = "duplicate_key";
-    private static final String DUPLICATE_KEY_MESSAGE = "two keys are the same key once decoded";
-
-    /**
-     * The named static decoder factory of a generated class — {@code jsonDecoder} for a value read
-     * from JSON, {@code decoder} for a map key, which is read from the string the object carried.
-     * Either erases at the reflection boundary.
+     * The {@code decoder()} of a generated class.
      *
      * <p>The name came out of the witness, so it is one a model declared and one this compilation
-     * generated a class for, and that class carries both factories. There is nothing here to report:
-     * a reflective failure would mean the class this run emitted is not the class it emitted, which
-     * is not something a reader of the boundary can say anything useful about.
+     * generated a class for. There is nothing here to report: a reflective failure would mean the
+     * class this run emitted is not the class it emitted, which is not something a reader of the
+     * boundary can say anything useful about.
      */
-    private static <I> Decoder<I, ?> codecOf(ClassLoader loader, TypeSymbol type, String factory) {
+    private static Decoder<?> decoderOf(ClassLoader loader, TypeSymbol type) {
+        String name = SoutherJvmAbi.nameOf(new GeneratedClass.Value(type)).binaryName();
         try {
-            @SuppressWarnings("unchecked")
-            Decoder<I, ?> decoder = (Decoder<I, ?>)
-                    loader.loadClass(SoutherJvmAbi.nameOf(new GeneratedClass.Value(type)).binaryName()).getMethod(factory).invoke(null);
-            return decoder;
+            return (Decoder<?>) loader.loadClass(name).getMethod("decoder").invoke(null);
         } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException("`" + SoutherJvmAbi.nameOf(new GeneratedClass.Value(type)).binaryName()
-                    + "` has no `" + factory + "()`", e);
+            throw new IllegalStateException("`" + name + "` has no `decoder()`", e);
         }
-    }
-
-    /** A scalar over the JSON source. Text is the string leaf let in, as the generated JSON decoder
-     *  has it. {@code JsonDecoders} has no temporal factory — in JSON a temporal is a string that is
-     *  then parsed — so a date reads as that leaf and then {@code .date()}, the same two steps the
-     *  generated JSON decoder takes, and through the same rules. */
-    private static Decoder<JsonNode, ?> leafDecoder(LeafScalar scalar) {
-        return switch (scalar) {
-            case STRING -> admitted(JsonDecoders.string());
-            case INT -> JsonDecoders.long_();
-            case BOOL -> JsonDecoders.bool();
-            case DECIMAL -> exactDecimal();
-            case DATE, TIME, DATETIME, INSTANT -> temporal(admitted(JsonDecoders.string()), scalar);
-        };
-    }
-
-    /**
-     * A {@code Decimal} read from a JSON number, asking the one question every reading of a bare
-     * number asks ({@link BoundaryScalars#decimalRefusal}), as the generated decoder's
-     * {@code __decimalNode} does: a {@code double} the reader parsed a fraction into is refused,
-     * since it is already the nearest binary value and the decimal that prints may not be the
-     * number that was written. Whether a reader keeps the fraction as the decimal it was written is
-     * the reader's to be told (Jackson's {@code USE_BIG_DECIMAL_FOR_FLOATS}), and the runner's is.
-     * A node that is not a number, and what a {@code NaN} or an infinity carries, are Raoh's: this
-     * only extracts the carrier a JSON number holds and asks whether it is exact.
-     */
-    private static Decoder<JsonNode, BigDecimal> exactDecimal() {
-        Decoder<JsonNode, BigDecimal> raoh = JsonDecoders.decimal();
-        return (node, path) -> {
-            String refusal = node != null && node.isNumber()
-                    ? BoundaryScalars.decimalRefusal(node.numberValue()) : null;
-            return refusal != null
-                    ? Result.failCustom(path, ErrorCodes.TYPE_MISMATCH, refusal,
-                            Map.of("expected", "exact number",
-                                    "actual", node.numberValue().getClass().getSimpleName()))
-                    : raoh.decode(node, path);
-        };
-    }
-
-    /**
-     * A temporal read from text, under the rules the type has wherever it arrives
-     * ({@link TemporalRule}).
-     *
-     * <p>These were {@code string().time()} and its siblings, spelled out beside the generated
-     * decoder's own — so a top-level {@code Time} argument took {@code 09:00:00.5} and a top-level
-     * {@code Instant} took a leap second, both of which the same types refuse at a data's field. A
-     * rule that changes with the way in is not the type's rule, so the text is put to the same
-     * question the generated decoder puts ({@link #temporalText}), before Raoh's parse builds the
-     * value.
-     */
-    private static <I> Decoder<I, ?> temporal(StringDecoder<I> text, LeafScalar scalar) {
-        TemporalRule rule = TemporalRule.of(scalar);
-        StringDecoder<I> guarded = StringDecoder.from(
-                text.flatMapWithPath((s, path) -> temporalText(scalar, s, path)));
-        TemporalDecoder<I, ?> parsed = switch (scalar) {
-            case DATE -> guarded.date();
-            case TIME -> guarded.time();
-            case DATETIME -> guarded.dateTime();
-            case INSTANT -> guarded.iso8601();
-            case STRING, INT, BOOL, DECIMAL ->
-                    throw new IllegalStateException(scalar + " is not a temporal");
-        };
-        return rule.guardsValue()
-                ? parsed.refine(Temporals::toTheSecond, TemporalRule.REFUSED, TemporalRule.SUB_SECOND)
-                : parsed;
-    }
-
-    /** The text, or the failure at {@code path} saying why it is not the temporal: what the generated
-     *  decoder's own {@code __dateText} and its siblings say. */
-    private static Result<String> temporalText(LeafScalar scalar, String text, Path path) {
-        String refusal = switch (scalar) {
-            case DATE -> Temporals.dateRefusal(text, EvaluationContext.checkpoint());
-            case TIME -> Temporals.timeRefusal(text, EvaluationContext.checkpoint());
-            case DATETIME -> Temporals.dateTimeRefusal(text, EvaluationContext.checkpoint());
-            case INSTANT -> Temporals.instantRefusal(text, EvaluationContext.checkpoint());
-            case STRING, INT, BOOL, DECIMAL ->
-                    throw new IllegalStateException(scalar + " is not a temporal");
-        };
-        return refusal == null
-                ? Result.ok(text)
-                : Result.failCustom(path, TemporalRule.REFUSED, refusal, Map.of());
     }
 
     /**
@@ -388,16 +214,16 @@ public final class JsonBoundary {
 
     private static Object encodeLeaf(LeafScalar scalar, Object value) {
         return switch (scalar) {
-            case STRING -> ObjectEncoders.string().encode((String) value);
-            case INT -> ObjectEncoders.long_().encode((Long) value);
-            case BOOL -> ObjectEncoders.bool().encode((Boolean) value);
-            case DECIMAL -> ObjectEncoders.decimal()
-                    .encode(Representations.canonicalNumber((java.math.BigDecimal) value,
+            case STRING -> Encoding.string().encode((String) value);
+            case INT -> Encoding.integer().encode((Long) value);
+            case BOOL -> Encoding.bool().encode((Boolean) value);
+            case DECIMAL -> Encoding.decimal()
+                    .encode(Representations.canonicalNumber((BigDecimal) value,
                             EvaluationContext.checkpoint()));
-            case DATE -> ObjectEncoders.date().encode((java.time.LocalDate) value);
-            case TIME -> ObjectEncoders.time().encode((java.time.LocalTime) value);
-            case DATETIME -> ObjectEncoders.dateTime().encode((java.time.LocalDateTime) value);
-            case INSTANT -> ObjectEncoders.iso8601().encode((java.time.Instant) value);
+            case DATE -> Encoding.date().encode((LocalDate) value);
+            case TIME -> Encoding.time().encode((LocalTime) value);
+            case DATETIME -> Encoding.dateTime().encode((LocalDateTime) value);
+            case INSTANT -> Encoding.instant().encode((Instant) value);
         };
     }
 }

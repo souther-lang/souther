@@ -100,7 +100,6 @@ class CompileSharedInstanceTest {
                 "decoder() must hand out one stateless implementation");
         assertSame(tally.getMethod("encoder").invoke(null), tally.getMethod("encoder").invoke(null),
                 "encoder() must hand out one stateless implementation");
-        assertSame(tally.getMethod("jsonDecoder").invoke(null), tally.getMethod("jsonDecoder").invoke(null));
     }
 
     @Test

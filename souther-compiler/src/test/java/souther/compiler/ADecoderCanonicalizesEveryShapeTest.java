@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * that way the property is "nobody forgot", which nothing checks and which grows a new way to be
  * wrong every time a decoder shape is added.
  *
- * <p>So the backend builds a text leaf in one place ({@code CodecGen.emitStringLeaf}) and this walks
+ * <p>So every decoder reads text through one leaf ({@code Decoding.string}) and this walks
  * the shapes. It asks what a caller sees rather than how the code is written: each case feeds the
  * decomposed spelling of one kana and expects the domain to hold the composed one. A shape added
  * later that does not come through the one leaf fails here.

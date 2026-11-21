@@ -14,8 +14,8 @@ import java.util.function.Consumer;
 
 /**
  * The JVM class and method descriptors the backend emits against (spec §jvm-output, §compiler-pipeline). These name
- * the runtime classes ({@code Result}/{@code Behavior}/{@code Maps}/{@code Sets}/...), the Raoh
- * decode/encode targets (spec §codec-generation), and the boxed-primitive and collection interfaces. Shared by
+ * the runtime classes ({@code Result}/{@code Behavior}/{@code Maps}/{@code Sets}/...), the boundary
+ * a derived codec stands on (spec §codec-generation), and the boxed-primitive and collection interfaces. Shared by
  * every generator in this package; a call site references one through a static import.
  */
 final class Descriptors {
@@ -320,126 +320,80 @@ final class Descriptors {
     static final MethodTypeDesc MTD_Boolean_valueOf =
             MethodTypeDesc.of(CD_Boolean, ConstantDescs.CD_boolean);
 
-    // --- Raoh 0.6.0 decode/encode targets (generated code depends on Raoh directly; spec §codec-generation) ---
+    // --- the boundary a derived codec stands on: souther-runtime's own, naming no decoder library
+    // (spec §codec-generation, §jvm-codec) ---
     static final ClassDesc CD_Class = ClassDesc.of("java.lang.Class");
-    static final ClassDesc CD_RDecoder = ClassDesc.of("net.unit8.raoh.decode.Decoder");
-    static final ClassDesc CD_REncoder = ClassDesc.of("net.unit8.raoh.encode.Encoder");
-    static final ClassDesc CD_RResult = ClassDesc.of("net.unit8.raoh.Result");
-    static final ClassDesc CD_ROk = ClassDesc.of("net.unit8.raoh.Ok");
-    static final ClassDesc CD_RErr = ClassDesc.of("net.unit8.raoh.Err");
-    static final ClassDesc CD_RIssues = ClassDesc.of("net.unit8.raoh.Issues");
-    static final ClassDesc CD_RPath = ClassDesc.of("net.unit8.raoh.Path");
-    static final ClassDesc CD_ObjectDecoders = ClassDesc.of("net.unit8.raoh.decode.ObjectDecoders");
-    static final ClassDesc CD_MapDecoders = ClassDesc.of("net.unit8.raoh.decode.map.MapDecoders");
-    static final ClassDesc CD_JsonDecoders = ClassDesc.of("net.unit8.raoh.json.JsonDecoders");
-    /** Jackson's node, which a JSON decoder reads: the shape it holds is asked of the node itself. */
-    static final ClassDesc CD_JsonNode = ClassDesc.of("tools.jackson.databind.JsonNode");
-    static final ClassDesc CD_JsonNodeType = ClassDesc.of("tools.jackson.databind.node.JsonNodeType");
-    static final ClassDesc CD_Locale = ClassDesc.of("java.util.Locale");
-    static final MethodTypeDesc MTD_nodePredicate = MethodTypeDesc.of(ConstantDescs.CD_boolean);
-    static final MethodTypeDesc MTD_getNodeType = MethodTypeDesc.of(CD_JsonNodeType);
-    static final MethodTypeDesc MTD_enumName = MethodTypeDesc.of(CD_String);
-    static final MethodTypeDesc MTD_toLowerCase = MethodTypeDesc.of(CD_String, CD_Locale);
-    static final ClassDesc CD_JooqDecoders = ClassDesc.of("net.unit8.raoh.jooq.JooqRecordDecoders");
-    static final ClassDesc CD_RDecoders = ClassDesc.of("net.unit8.raoh.decode.Decoders");
-    static final ClassDesc CD_RVariant = CD_RDecoders.nested("Variant");
-    /** Raoh's {@code CombinePart}: what a {@code field(...)} answers. Deliberately not a
-     *  {@code Decoder} — what field a component consumes is part of a schema, and an ordinary
-     *  decoder wrapper would erase it — so it carries its own {@code decode} and an
-     *  {@code asDecoder()} for the positions that want a decoder. */
-    static final ClassDesc CD_CombinePart = ClassDesc.of("net.unit8.raoh.decode.combinator.CombinePart");
-    static final ClassDesc CD_StringDecoder = ClassDesc.of("net.unit8.raoh.decode.builtin.StringDecoder");
-    static final ClassDesc CD_LongDecoder = ClassDesc.of("net.unit8.raoh.decode.builtin.LongDecoder");
-    static final ClassDesc CD_BoolDecoder = ClassDesc.of("net.unit8.raoh.decode.builtin.BoolDecoder");
-    static final ClassDesc CD_DecimalDecoder = ClassDesc.of("net.unit8.raoh.decode.builtin.DecimalDecoder");
-    static final ClassDesc CD_TemporalDecoder = ClassDesc.of("net.unit8.raoh.decode.builtin.TemporalDecoder");
-    static final ClassDesc CD_ListDecoder = ClassDesc.of("net.unit8.raoh.decode.builtin.ListDecoder");
-    static final ClassDesc CD_RecordDecoder = ClassDesc.of("net.unit8.raoh.decode.builtin.RecordDecoder");
-    static final ClassDesc CD_ObjectEncoders = ClassDesc.of("net.unit8.raoh.encode.ObjectEncoders");
-    static final ClassDesc CD_MapEncoders = ClassDesc.of("net.unit8.raoh.encode.MapEncoders");
-    static final ClassDesc CD_MapEncVariant = CD_MapEncoders.nested("Variant");
+    static final ClassDesc CD_Decoder = ClassDesc.of("souther.runtime.boundary.Decoder");
+    /** {@code Decoder.Step}: what a decode does next with the value it read and the path. */
+    static final ClassDesc CD_DecoderStep = ClassDesc.of("souther.runtime.boundary.Decoder$Step");
+    static final ClassDesc CD_Encoder = ClassDesc.of("souther.runtime.boundary.Encoder");
+    static final ClassDesc CD_Refusals = ClassDesc.of("souther.runtime.boundary.Refusals");
+    static final ClassDesc CD_BoundaryPath = ClassDesc.of("souther.runtime.boundary.Path");
+    static final ClassDesc CD_TreeReader = ClassDesc.of("souther.runtime.boundary.TreeReader");
+    /** The parts a derived decoder is generated from. */
+    static final ClassDesc CD_Decoding = ClassDesc.of("souther.runtime.boundary.Decoding");
+    /** The parts a derived encoder is generated from. */
+    static final ClassDesc CD_Encoding = ClassDesc.of("souther.runtime.boundary.Encoding");
 
-    // Souther Result stays for the behavior/__construct side (Raoh-free)
     static final MethodTypeDesc MTD_Result_ok = MethodTypeDesc.of(CD_Result, CD_Object);
     static final MethodTypeDesc MTD_Result_err = MethodTypeDesc.of(CD_Result, CD_Object);
-    // Raoh decode/encode SAMs, factories, combinators
-    static final MethodTypeDesc MTD_Rdecode = MethodTypeDesc.of(CD_RResult, CD_Object, CD_RPath);
-    static final MethodTypeDesc MTD_Rencode = MethodTypeDesc.of(CD_Object, CD_Object);
-    static final MethodTypeDesc MTD_Rdecoder = MethodTypeDesc.of(CD_RDecoder);
-    static final MethodTypeDesc MTD_Rencoder = MethodTypeDesc.of(CD_REncoder);
-    static final MethodTypeDesc MTD_leafString = MethodTypeDesc.of(CD_StringDecoder);
     /** {@code Strings.admit(String):String}, text let into the domain, lifted into a
      *  {@code Function} at the call site that reaches for one. */
     static final MethodTypeDesc MTD_admit = MethodTypeDesc.of(CD_String, CD_String);
-    /** What asking whether text is a {@code String} answers ({@code Strings.admission}) and the
-     *  two refusals a decoder says apart. */
-    static final ClassDesc CD_TextAdmission = ClassDesc.of("souther.runtime.TextAdmission");
-    static final ClassDesc CD_TextAdmitted = ClassDesc.of("souther.runtime.TextAdmission$Admitted");
-    static final ClassDesc CD_TextNotText = ClassDesc.of("souther.runtime.TextAdmission$NotText");
-    static final MethodTypeDesc MTD_admission = MethodTypeDesc.of(CD_TextAdmission, CD_String);
-    /** A generated decoder's {@code __text(TextAdmission, Path)}: the {@code Result} an admission
-     *  is, for {@code Decoder.flatMapWithPath}. */
-    static final MethodTypeDesc MTD_textOfAdmission =
-            MethodTypeDesc.of(CD_RResult, CD_TextAdmission, CD_RPath);
-    static final MethodTypeDesc MTD_admittedText = MethodTypeDesc.of(CD_String);
-    static final MethodTypeDesc MTD_mapOfNone = MethodTypeDesc.of(CD_Map);
-    /** {@code StringDecoder.from(Decoder<I,String>)} — wraps a plain string-producing decoder back
-     *  into a {@link CD_StringDecoder} so the fluent constraint methods after it (following
-     *  {@code Strings.admission}, not {@code StringDecoder.normalize()}) still resolve. */
-    static final MethodTypeDesc MTD_stringDecoderFrom = MethodTypeDesc.of(CD_StringDecoder, CD_RDecoder);
-    /** {@code StringDecoder.oneOf(String...)}: Raoh's constraint that a string is one of these. */
-    static final MethodTypeDesc MTD_stringOneOf =
-            MethodTypeDesc.of(CD_StringDecoder, CD_String.arrayType());
-    static final MethodTypeDesc MTD_leafLong = MethodTypeDesc.of(CD_LongDecoder);
-    /** {@code new LongDecoder(Decoder)} and its siblings, over a decoder that asks the language
-     *  first. */
-    static final MethodTypeDesc MTD_wrappingInit =
-            MethodTypeDesc.of(ConstantDescs.CD_void, CD_RDecoder);
-    static final ClassDesc CD_BoundaryScalars = ClassDesc.of("souther.runtime.BoundaryScalars");
-    static final MethodTypeDesc MTD_leafBool = MethodTypeDesc.of(CD_BoolDecoder);
-    static final MethodTypeDesc MTD_leafDecimal = MethodTypeDesc.of(CD_DecimalDecoder);
-    static final MethodTypeDesc MTD_leafTemporal = MethodTypeDesc.of(CD_TemporalDecoder);
-    /** {@code Object.getClass()}, {@code Class.getSimpleName()}, {@code Map.of} of two entries and
-     *  {@code JsonNode}'s yes-or-no questions about the number it holds. */
-    static final MethodTypeDesc MTD_getClass = MethodTypeDesc.of(CD_Class);
-    static final MethodTypeDesc MTD_getSimpleName = MethodTypeDesc.of(CD_String);
-    static final MethodTypeDesc MTD_mapOf2 =
-            MethodTypeDesc.of(CD_Map, CD_Object, CD_Object, CD_Object, CD_Object);
-    static final MethodTypeDesc MTD_nodeIs = MethodTypeDesc.of(ConstantDescs.CD_boolean);
-    static final ClassDesc CD_Number = ClassDesc.of("java.lang.Number");
-    /** {@code JsonNode.numberValue():Number} — the carrier a JSON number node holds. */
-    static final MethodTypeDesc MTD_nodeNumberValue = MethodTypeDesc.of(CD_Number);
-    /** What a string decoder's {@code flatMapWithPath} calls a temporal's text question at: the text
-     *  and the path in, the result out. */
-    static final MethodTypeDesc MTD_temporalText = MethodTypeDesc.of(CD_RResult, CD_String, CD_RPath);
-    /** {@code Temporals.dateRefusal(Object):String} and its siblings. */
-    static final MethodTypeDesc MTD_temporalRefusal = MethodTypeDesc.of(CD_String, CD_Object);
-    static final MethodTypeDesc MTD_field = MethodTypeDesc.of(CD_CombinePart, CD_String, CD_RDecoder);
-    static final MethodTypeDesc MTD_nullableField = MethodTypeDesc.of(CD_CombinePart, CD_String, CD_RDecoder);
-    /** {@code CombinePart}'s own decode, and the conversion for a position that wants a decoder. */
-    static final MethodTypeDesc MTD_partDecode = MethodTypeDesc.of(CD_RResult, CD_Object, CD_RPath);
-    static final MethodTypeDesc MTD_asDecoder = MethodTypeDesc.of(CD_RDecoder);
-    static final MethodTypeDesc MTD_listDec = MethodTypeDesc.of(CD_ListDecoder, CD_RDecoder);
-    /** {@code nullable(dec)} — reads null as an absent value rather than a required one. */
-    static final MethodTypeDesc MTD_nullableDec = MethodTypeDesc.of(CD_RDecoder, CD_RDecoder);
-    static final MethodTypeDesc MTD_mapDec = MethodTypeDesc.of(CD_RecordDecoder, CD_RDecoder);
-    static final MethodTypeDesc MTD_Rvariant = MethodTypeDesc.of(CD_RVariant, CD_String, CD_RDecoder);
-    static final MethodTypeDesc MTD_Rdiscriminate =
-            MethodTypeDesc.of(CD_RDecoder, CD_String, CD_RDecoder, CD_RVariant.arrayType());
-    static final MethodTypeDesc MTD_Rok = MethodTypeDesc.of(CD_RResult, CD_Object);
-    static final MethodTypeDesc MTD_Rerr = MethodTypeDesc.of(CD_RResult, CD_RIssues);
-    static final MethodTypeDesc MTD_Rfail = MethodTypeDesc.of(CD_RResult, CD_RPath, CD_String, CD_String);
-    static final MethodTypeDesc MTD_Rencode_leaf = MethodTypeDesc.of(CD_REncoder);
-    static final MethodTypeDesc MTD_Rencode_list = MethodTypeDesc.of(CD_REncoder, CD_REncoder);
+    /** {@code Decoder.decode(Object node, Path path, TreeReader reader)}. */
+    static final MethodTypeDesc MTD_decode =
+            MethodTypeDesc.of(CD_Result, CD_Object, CD_BoundaryPath, CD_TreeReader);
+    /** {@code Decoder.Step.apply(Object value, Path path)}. */
+    static final MethodTypeDesc MTD_step = MethodTypeDesc.of(CD_Result, CD_Object, CD_BoundaryPath);
+    /** {@code Encoder.encode(Object)}. */
+    static final MethodTypeDesc MTD_encode = MethodTypeDesc.of(CD_Object, CD_Object);
+    /** A type's {@code decoder()}, and a leaf decoder of {@code Decoding}. */
+    static final MethodTypeDesc MTD_decoder = MethodTypeDesc.of(CD_Decoder);
+    /** A type's {@code encoder()}, and a leaf encoder of {@code Encoding}. */
+    static final MethodTypeDesc MTD_encoder = MethodTypeDesc.of(CD_Encoder);
+    /** {@code Decoding.field(String, Decoder)} and {@code optionalField}. */
+    static final MethodTypeDesc MTD_field = MethodTypeDesc.of(CD_Decoder, CD_String, CD_Decoder);
+    /** {@code Decoding.list(Decoder)}, {@code nullable}, {@code map}, and a sign constraint. */
+    static final MethodTypeDesc MTD_wrapDecoder = MethodTypeDesc.of(CD_Decoder, CD_Decoder);
+    /** {@code Decoding.keys(Decoder)}: the step that reads a map's keys. */
+    static final MethodTypeDesc MTD_keys = MethodTypeDesc.of(CD_DecoderStep, CD_Decoder);
+    /** {@code Decoder.then(Step)}. */
+    static final MethodTypeDesc MTD_then = MethodTypeDesc.of(CD_Decoder, CD_DecoderStep);
+    /** {@code Decoding.discriminate(String key, String[] tags, Decoder[] cases)}. */
+    static final MethodTypeDesc MTD_discriminate = MethodTypeDesc.of(CD_Decoder, CD_String,
+            CD_String.arrayType(), CD_Decoder.arrayType());
+    /** {@code Decoding.oneOf(String...)}. */
+    static final MethodTypeDesc MTD_oneOf = MethodTypeDesc.of(CD_Decoder, CD_String.arrayType());
+    /** {@code Decoding.notAnObject(Object, Path, TreeReader)}. */
+    static final MethodTypeDesc MTD_notAnObject =
+            MethodTypeDesc.of(CD_Refusals, CD_Object, CD_BoundaryPath, CD_TreeReader);
+    /** {@code Decoding.and(Refusals soFar, Refusals more)}. */
+    static final MethodTypeDesc MTD_refusalsAnd = MethodTypeDesc.of(CD_Refusals, CD_Refusals, CD_Refusals);
+    /** {@code Decoding.refusedBy(InvariantFailure, Path)}. */
+    static final MethodTypeDesc MTD_refusedBy = MethodTypeDesc.of(CD_Result, CD_InvariantFailure,
+            CD_BoundaryPath);
+    /** {@code Decoding.clause(Decoder, Predicate, InvariantFailure)}. */
+    static final MethodTypeDesc MTD_clause = MethodTypeDesc.of(CD_Decoder, CD_Decoder, CD_Predicate,
+            CD_InvariantFailure);
+    /** A constraint with an {@code int}, a {@code long} or a {@code BigDecimal} bound. */
+    static final MethodTypeDesc MTD_intBound = MethodTypeDesc.of(CD_Decoder, CD_Decoder, ConstantDescs.CD_int);
+    static final MethodTypeDesc MTD_longBound = MethodTypeDesc.of(CD_Decoder, CD_Decoder, ConstantDescs.CD_long);
+    static final MethodTypeDesc MTD_decimalBound = MethodTypeDesc.of(CD_Decoder, CD_Decoder, CD_BigDecimal);
+    /** {@code Decoding.pattern(Decoder, Predicate machine, String written)}. */
+    static final MethodTypeDesc MTD_pattern = MethodTypeDesc.of(CD_Decoder, CD_Decoder,
+            CD_Predicate, CD_String);
+    /** {@code Encoding.list(Encoder)} and {@code Encoding.map(Encoder)}. */
+    static final MethodTypeDesc MTD_wrapEncoder = MethodTypeDesc.of(CD_Encoder, CD_Encoder);
     static final ClassDesc CD_Function = ClassDesc.of("java.util.function.Function");
-    // Newtype-keyed Map codec: decode remaps String keys into the key newtype via
-    // flatMapWithPath + a generated $Dec.__rekey helper; encode renders keys bare via Maps.mapKeys.
+    /** {@code Decoding.unique(Decoder, Function form)}, and {@code Decoder.map(Function)}. */
+    static final MethodTypeDesc MTD_unique = MethodTypeDesc.of(CD_Decoder, CD_Decoder, CD_Function);
+    static final MethodTypeDesc MTD_decoderMap = MethodTypeDesc.of(CD_Decoder, CD_Function);
+    // A newtype-keyed Map's encoder renders its keys bare via Maps.mapKeys.
     static final ClassDesc CD_BiFunction = ClassDesc.of("java.util.function.BiFunction");
     static final ClassDesc CD_Iterator = ClassDesc.of("java.util.Iterator");
     static final ClassDesc CD_MapEntry = CD_Map.nested("Entry");
-    static final MethodTypeDesc MTD_flatMapWithPath = MethodTypeDesc.of(CD_RDecoder, CD_BiFunction);
-    static final MethodTypeDesc MTD_rekey = MethodTypeDesc.of(CD_RResult, CD_Map, CD_RPath);
-    static final MethodTypeDesc MTD_fromName = MethodTypeDesc.of(CD_RResult, CD_String, CD_RPath);
+    /** An enumeration decoder's {@code __fromName(String, Path)}: a {@code Decoder.Step}. */
+    static final MethodTypeDesc MTD_fromName = MethodTypeDesc.of(CD_Result, CD_String, CD_BoundaryPath);
     /** The synthetic {@code static String __tag(Object)} an enumeration's sealed interface carries:
      *  which case a value is, as the name its boundary form uses. */
     static final String TAG_METHOD = "__tag";
@@ -457,7 +411,6 @@ final class Descriptors {
     static final MethodTypeDesc MTD_iterator = MethodTypeDesc.of(CD_Iterator);
     static final MethodTypeDesc MTD_hasNext = MethodTypeDesc.of(ConstantDescs.CD_boolean);
     static final MethodTypeDesc MTD_getKeyValue = MethodTypeDesc.of(CD_Object);
-    static final MethodTypeDesc MTD_Path_append = MethodTypeDesc.of(CD_RPath, CD_String);
     static final MethodTypeDesc MTD_mapKeys = MethodTypeDesc.of(CD_Map, CD_Map, CD_Function);
     static final MethodTypeDesc MTD_mapKeysWith = MethodTypeDesc.of(CD_Map, CD_Function, CD_Map);
     /** {@code Lists.map(Function, List)} — a crossing's canonicalization recursing into a
@@ -483,85 +436,22 @@ final class Descriptors {
     static final MethodTypeDesc MTD_functionIdentity = MethodTypeDesc.of(CD_Function);
     /** {@code Encoder.contramap(Function)}: pre-processes the value an element encoder receives —
      * a nested Set is listed, a nested newtype-keyed Map has its keys rendered bare. */
-    static final MethodTypeDesc MTD_Rencoder_contramap = MethodTypeDesc.of(CD_REncoder, CD_Function);
+    static final MethodTypeDesc MTD_encoderContramap = MethodTypeDesc.of(CD_Encoder, CD_Function);
     /** {@code Encoder.andThen(Encoder)}: post-processes what an element encoder produced — a Set's
      * array and a Map's object are put in the order their own external representations give. */
-    static final MethodTypeDesc MTD_Rencoder_andThen = MethodTypeDesc.of(CD_REncoder, CD_REncoder);
+    static final MethodTypeDesc MTD_encoderAndThen = MethodTypeDesc.of(CD_Encoder, CD_Encoder);
     static final MethodTypeDesc MTD_Sets_toList = MethodTypeDesc.of(CD_List, CD_Set);
-    /** {@code Sets.repeated(List)}: the repeats {@link RaohListUnique} reports, found by the
-     *  language's equality, Raoh-free like the rest of {@code Sets} (souther.runtime.Sets). */
-    static final MethodTypeDesc MTD_Sets_repeated = MethodTypeDesc.of(CD_List, CD_List);
     /** {@code Representations.sortedArray/sortedObject}: an encoded collection, put in order. */
     static final MethodTypeDesc MTD_Representations_sorted = MethodTypeDesc.of(CD_Object, CD_Object);
     /** {@code Representations.canonicalNumber}: an amount, written the one way an amount is. */
     static final MethodTypeDesc MTD_canonicalNumber = MethodTypeDesc.of(CD_BigDecimal, CD_BigDecimal);
-    /** {@code Decoder.map(Function)}: turns a {@code Decoder<I, List<T>>} into a {@code Decoder<I, Set<T>>}. */
-    static final MethodTypeDesc MTD_Rdecoder_map = MethodTypeDesc.of(CD_RDecoder, CD_Function);
-    // A newtype's invariant as Raoh constraints on its leaf decoder (issue #83): the recognised
-    // shapes call the typed decoder's own constraint, and what is left calls `refine` with the
-    // invariant as a predicate.
-    /** {@code TemporalDecoder.refine(Predicate, code, message)}: the temporal leaf narrowed to what
-     *  the language can hold — a {@code Time} and a {@code DateTime} to the second. Returns the
-     *  temporal decoder itself, so a chain stays one. */
-    static final MethodTypeDesc MTD_refineTemporal =
-            MethodTypeDesc.of(CD_TemporalDecoder, CD_Predicate, CD_String, CD_String);
-    /** {@code StringDecoder.refine(Predicate, code, message)}: the text held to what the type can
-     *  name, before a parse that would fold what it says into something else. Returns the string
-     *  decoder itself, so the parse still chains off it. */
-    static final MethodTypeDesc MTD_refineString =
-            MethodTypeDesc.of(CD_StringDecoder, CD_Predicate, CD_String, CD_String);
-    static final MethodTypeDesc MTD_strLengthBound = MethodTypeDesc.of(CD_StringDecoder, ConstantDescs.CD_int);
-    /** {@code StringDecoder.refine(Predicate, BiFunction)}: the failure built by the caller, and the
-     *  string decoder itself back so the chain of string constraints goes on. */
-    static final MethodTypeDesc MTD_refineStringFailing =
-            MethodTypeDesc.of(CD_StringDecoder, CD_Predicate, CD_BiFunction);
-    /** {@code Map.of(key, value)}: the metadata of one entry. */
+    /** {@code Map.of(key, value)}: a map of one entry. */
     static final MethodTypeDesc MTD_mapOfOne = MethodTypeDesc.of(CD_Map, CD_Object, CD_Object);
-    static final MethodTypeDesc MTD_longBound = MethodTypeDesc.of(CD_LongDecoder, ConstantDescs.CD_long);
-    static final MethodTypeDesc MTD_longSign = MethodTypeDesc.of(CD_LongDecoder);
-    static final MethodTypeDesc MTD_decBound = MethodTypeDesc.of(CD_DecimalDecoder, CD_BigDecimal);
-    static final MethodTypeDesc MTD_decSign = MethodTypeDesc.of(CD_DecimalDecoder);
-    /** A list's element-count bound ({@code minSize}/{@code maxSize}/{@code fixedSize}) and its
-     *  argument-free constraints ({@code nonempty}/{@code unique}). */
-    static final MethodTypeDesc MTD_listSizeBound =
-            MethodTypeDesc.of(CD_ListDecoder, ConstantDescs.CD_int);
-    static final MethodTypeDesc MTD_listSign = MethodTypeDesc.of(CD_ListDecoder);
-    /** {@code Decoder.refine(Predicate, BiFunction)}: the failure is built by the caller, so it is a
-     *  {@code Result.fail} (resolvable) rather than the {@code failCustom} the message overload makes. */
-    static final MethodTypeDesc MTD_Rrefine = MethodTypeDesc.of(CD_RDecoder, CD_Predicate, CD_BiFunction);
-    /** {@code Decoder.refine(Predicate, code, message)}, on a decoder that is no longer a typed one. */
-    static final MethodTypeDesc MTD_Rrefine_message =
-            MethodTypeDesc.of(CD_RDecoder, CD_Predicate, CD_String, CD_String);
-    static final MethodTypeDesc MTD_invariantFailure = MethodTypeDesc.of(CD_RResult, CD_Object, CD_RPath);
-    /** The same helper with the failing clause's name captured ahead of the two SAM arguments. */
-    static final MethodTypeDesc MTD_invariantFailureNamed =
-            MethodTypeDesc.of(CD_RResult, CD_String, CD_Object, CD_RPath);
-    /** The invariant's helper, with which clause it is captured beside the name: the declaration's
-     *  module, the declaration, and the clause's place among its clauses. */
-    static final MethodTypeDesc MTD_invariantFailureOfAClause = MethodTypeDesc.of(CD_RResult,
-            CD_String, CD_String, CD_String, ConstantDescs.CD_int, CD_Object, CD_RPath);
-    static final MethodTypeDesc MTD_Rfail4 =
-            MethodTypeDesc.of(CD_RResult, CD_RPath, CD_String, CD_String, CD_Map);
-    static final MethodTypeDesc MTD_Rencode_variant =
-            MethodTypeDesc.of(CD_MapEncVariant, CD_Class, CD_String, CD_REncoder);
-    static final MethodTypeDesc MTD_Rencode_discriminate =
-            MethodTypeDesc.of(CD_REncoder, CD_String, CD_MapEncVariant.arrayType());
-    static final MethodTypeDesc MTD_Issues_merge = MethodTypeDesc.of(CD_RIssues, CD_RIssues);
-    static final MethodTypeDesc MTD_Issues_isEmpty = MethodTypeDesc.of(ConstantDescs.CD_boolean);
-    static final MethodTypeDesc MTD_Err_issues = MethodTypeDesc.of(CD_RIssues);
-    static final MethodTypeDesc MTD_nested = MethodTypeDesc.of(CD_RDecoder, CD_RDecoder);
     static final MethodTypeDesc MTD_ofNullable = MethodTypeDesc.of(CD_Option, CD_Object);
     /** {@code Options.encodedOrNull(inner, opt)} — an absent member is written null. */
     static final MethodTypeDesc MTD_encodedOrNull =
             MethodTypeDesc.of(CD_Object, CD_Function, CD_Option);
     static final MethodTypeDesc MTD_error = MethodTypeDesc.of(CD_Object);
-    // Per-source (JSON / jOOQ) decode targets (spec §codec-generation). Every source's `field` answers a
-    // `CombinePart`; the three differ only in the input type they read, which is erased.
-    static final ClassDesc CD_JooqRecordDecoder = ClassDesc.of("net.unit8.raoh.jooq.JooqRecordDecoder");
-    static final MethodTypeDesc MTD_fieldJooq =
-            MethodTypeDesc.of(CD_CombinePart, CD_String, CD_RDecoder);
-    static final MethodTypeDesc MTD_nullableFieldJooq =
-            MethodTypeDesc.of(CD_CombinePart, CD_String, CD_RDecoder);
 
     // Value-equality / hashCode targets, shared by the value-class equality codegen and `==`. The
     // rule is the runtime's: what a Decimal's identity ignores and what a container answers is

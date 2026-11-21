@@ -26,13 +26,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@link ATemporalIsBuiltFromThePartsAModelHoldsTest} goes through fields only, which is exactly why
  * it did not catch this.
  *
- * <p>The paths walked are the ones this compiler builds the parse for: a JSON field, a map key from
- * every source, and the runner's own decoders, which read a top-level argument and were a third
- * copy of the policy until they were made to read the one table ({@code TemporalRule}).
- *
- * <p>The bare-value decoders are walked too. Raoh's own factory parses a {@code String} inside
- * itself, so the decoder class asks the language first ({@code __date} and its siblings) and hands
- * a real temporal to Raoh as it was; which text those admit, spelling by spelling, is held in
+ * <p>The paths walked are a JSON field, a map key from every source, a bare value, and the runner's
+ * own decoders, which read a top-level argument. Each reaches the one leaf of {@code Decoding};
+ * which text it admits, spelling by spelling, is held in
  * {@link ATemporalTextIsTheLanguagesAndNotTheParsersTest}.
  */
 class ATemporalHoldsTheSameRuleAtEveryPathTest {
@@ -161,7 +157,7 @@ class ATemporalHoldsTheSameRuleAtEveryPathTest {
             throws Exception {
         BytesClassLoader loader = load(model);
         JsonNode node = MAPPER.valueToTree(fieldsWith(field, text));
-        net.unit8.raoh.Result<?> r = Codecs.decode(loader, "demo.In", "jsonDecoder", node);
+        net.unit8.raoh.Result<?> r = Codecs.decode(loader, "demo.In", Codecs.JSON,node);
         assertTrue(!r.isOk(), field + "=" + text + " must not be admitted at a JSON field");
         assertTrue(String.valueOf(r).contains(says), "at a JSON field: " + r);
     }

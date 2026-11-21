@@ -30,17 +30,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * to make up is refused at its path (spec §a-boundary-scalar-is-read-not-converted,
  * §an-object-is-a-mapping, §decoder-error).
  *
- * <p>These are the readings a Raoh release decides and the language depends on, held here because
- * the release could change them without a line of this compiler changing. Before the release these
- * were pinned to, each answered a value: {@code 1.9} was the {@code Int} 1, {@code 2^70} was the
- * {@code Int} 0, a {@code java.sql.Date} was a day that depended on the JVM's default time zone, a
- * {@code Map<String, Int>} took an {@code Integer} key, and a {@code Decimal} read from a
- * {@code double} was the number that {@code double} prints and not the one that was written. Each of those is a value nothing downstream
- * can tell from the value that was sent, which is what an {@code Int} that aborts on overflow
- * rather than wrapping exists to rule out. A Raoh that answers them again turns these red. An
- * {@code Int} from {@code 5.00}, a {@code Decimal} from a {@code Double} and a {@code Decimal} from a
- * JSON node that holds a {@code double} are the readings the pinned Raoh takes and the language does
- * not: a decoder of this compiler asks first.
+ * <p>Each of these, answered as a value — {@code 1.9} as the {@code Int} 1, {@code 2^70} as the
+ * {@code Int} 0, a {@code java.sql.Date} as a day that depends on the JVM's default time zone, a
+ * {@code Map<String, Int>} taking an {@code Integer} key, a {@code Decimal} read from a
+ * {@code double} as the number that {@code double} prints and not the one that was written — is a
+ * value nothing downstream can tell from the value that was sent, which is what an {@code Int} that
+ * aborts on overflow rather than wrapping exists to rule out. Every reader a binding brings reaches
+ * the same leaves, so each is held here at a plain value, a JSON node and a row.
  */
 class TheBoundaryRefusesWhatItCouldOnlyHaveReadWrongTest {
 
@@ -91,8 +87,8 @@ class TheBoundaryRefusesWhatItCouldOnlyHaveReadWrongTest {
         assertEquals(pointer, err.issues().asList().get(0).path().toJsonPointer(), what);
     }
 
-    /** Refused as a value of a kind the position does not read, which is Raoh's own code for it,
-     *  whether Raoh or this compiler's decoder is the one that says it. */
+    /** Refused as a value of a kind the position does not read, which the Raoh binding says in
+     *  Raoh's own code for it. */
     private static void assertMismatchAt(String pointer, Result<?> result, String what) {
         assertRefusedAt(pointer, result, what);
         Issue issue = ((Err<?>) result).issues().asList().get(0);
@@ -128,12 +124,12 @@ class TheBoundaryRefusesWhatItCouldOnlyHaveReadWrongTest {
     void anIntAtAJsonFieldIsAnIntegerLiteralInRange() throws Exception {
         for (String refused : new String[] {
                 "1.0", "1e2", "1.9", "9223372036854775808", "1180591620717411303424", "\"5\""}) {
-            Result<?> r = Codecs.decode(LOADER, "demo.In", "jsonDecoder", EXACT.readTree("""
+            Result<?> r = Codecs.decode(LOADER, "demo.In", Codecs.JSON,EXACT.readTree("""
                     {"n":%s,"d":1.5,"at":"2026-07-25T00:00:00Z","day":"2026-07-25","m":{"k":1}}
                     """.formatted(refused)));
             assertMismatchAt("/n", r, "the JSON number " + refused);
         }
-        assertTrue(Codecs.decode(LOADER, "demo.In", "jsonDecoder", EXACT.readTree("""
+        assertTrue(Codecs.decode(LOADER, "demo.In", Codecs.JSON,EXACT.readTree("""
                 {"n":9223372036854775807,"d":1.5,"at":"2026-07-25T00:00:00Z","day":"2026-07-25","m":{"k":1}}
                 """)).isOk());
     }
@@ -174,21 +170,21 @@ class TheBoundaryRefusesWhatItCouldOnlyHaveReadWrongTest {
         String written = """
                 {"n":1,"d":0.10000000000000001,"at":"2026-07-25T00:00:00Z","day":"2026-07-25","m":{"k":1}}
                 """;
-        Object exact = ((Ok<?>) Codecs.decode(LOADER, "demo.In", "jsonDecoder", EXACT.readTree(written)))
+        Object exact = ((Ok<?>) Codecs.decode(LOADER, "demo.In", Codecs.JSON,EXACT.readTree(written)))
                 .value();
         assertEquals(new BigDecimal("0.10000000000000001"), decimalOf(exact),
                 "the number written, with every digit it was written with");
-        assertMismatchAt("/d", Codecs.decode(LOADER, "demo.In", "jsonDecoder", ROUNDING.readTree(written)),
+        assertMismatchAt("/d", Codecs.decode(LOADER, "demo.In", Codecs.JSON,ROUNDING.readTree(written)),
                 "a fraction the reader parsed as a double");
-        assertTrue(Codecs.decode(LOADER, "demo.In", "jsonDecoder", ROUNDING.readTree("""
+        assertTrue(Codecs.decode(LOADER, "demo.In", Codecs.JSON,ROUNDING.readTree("""
                 {"n":1,"d":15,"at":"2026-07-25T00:00:00Z","day":"2026-07-25","m":{"k":1}}
                 """)).isOk(), "a whole number is an integer node, which is exact");
     }
 
     /**
      * A row of a relational source is read by the same rules: it reaches the same leaf decoders
-     * through {@code recordDecoder()}, and a rule that held at a field and a key and not at a column
-     * would be one more way in with a rule of its own.
+     * through a reader of rows, and a rule that held at a field and a key and not at a column would
+     * be one more way in with a rule of its own.
      */
     @Test
     void aRowOfARelationalSourceIsReadByTheSameRules() throws Exception {
@@ -216,13 +212,13 @@ class TheBoundaryRefusesWhatItCouldOnlyHaveReadWrongTest {
         row.set(fd, d);
         row.set(fat, at);
         row.set(fday, day);
-        return Codecs.decode(LOADER, "demo.Row", "recordDecoder", row);
+        return Codecs.decode(LOADER, "demo.Row", Codecs.RECORD,row);
     }
 
     /**
      * The runner reads a top-level argument through decoders of its own, and a reader that parsed a
      * fraction as a {@code double} hands one of them a node that is already rounded. It refuses it as
-     * a generated {@code jsonDecoder()} does, and refuses {@code 5.0} for an {@code Int}.
+     * a generated decoder reading JSON does, and refuses {@code 5.0} for an {@code Int}.
      */
     @Test
     void aTopLevelArgumentTheRunnerReadsIsHeldToTheSameRules() throws Exception {
@@ -239,26 +235,25 @@ class TheBoundaryRefusesWhatItCouldOnlyHaveReadWrongTest {
     /**
      * A {@code Bool} is read from a boolean and a {@code String} from text, and from nothing that
      * would have to be turned into one: a scalar of another kind is not made into the kind the
-     * position asks for, whichever source hands it over. These two need no question of their own
-     * because Raoh's decoders for them read one kind and no other; this is what holds them to that.
+     * position asks for, whichever source hands it over.
      */
     @Test
     void aBoolAndAStringAreReadFromTheirOwnKindAndNoOther() throws Exception {
         assertTrue(Codecs.decode(LOADER, "demo.Flag", Map.of("b", true)).isOk());
         assertMismatchAt("/b", Codecs.decode(LOADER, "demo.Flag", Map.of("b", "true")), "the text true");
         assertMismatchAt("/b", Codecs.decode(LOADER, "demo.Flag", Map.of("b", 1L)), "the number 1");
-        assertTrue(Codecs.decode(LOADER, "demo.Flag", "jsonDecoder", EXACT.readTree("{\"b\":true}")).isOk());
-        assertMismatchAt("/b", Codecs.decode(LOADER, "demo.Flag", "jsonDecoder",
+        assertTrue(Codecs.decode(LOADER, "demo.Flag", Codecs.JSON,EXACT.readTree("{\"b\":true}")).isOk());
+        assertMismatchAt("/b", Codecs.decode(LOADER, "demo.Flag", Codecs.JSON,
                 EXACT.readTree("{\"b\":\"true\"}")), "the JSON text true");
-        assertMismatchAt("/b", Codecs.decode(LOADER, "demo.Flag", "jsonDecoder",
+        assertMismatchAt("/b", Codecs.decode(LOADER, "demo.Flag", Codecs.JSON,
                 EXACT.readTree("{\"b\":1}")), "the JSON number 1");
 
         assertTrue(Codecs.decode(LOADER, "demo.Name", Map.of("s", "x")).isOk());
         assertMismatchAt("/s", Codecs.decode(LOADER, "demo.Name", Map.of("s", 5L)), "the number 5");
         assertMismatchAt("/s", Codecs.decode(LOADER, "demo.Name", Map.of("s", true)), "the boolean true");
-        assertMismatchAt("/s", Codecs.decode(LOADER, "demo.Name", "jsonDecoder",
+        assertMismatchAt("/s", Codecs.decode(LOADER, "demo.Name", Codecs.JSON,
                 EXACT.readTree("{\"s\":5}")), "the JSON number 5");
-        assertMismatchAt("/s", Codecs.decode(LOADER, "demo.Name", "jsonDecoder",
+        assertMismatchAt("/s", Codecs.decode(LOADER, "demo.Name", Codecs.JSON,
                 EXACT.readTree("{\"s\":true}")), "the JSON boolean true");
     }
 
@@ -270,7 +265,7 @@ class TheBoundaryRefusesWhatItCouldOnlyHaveReadWrongTest {
                     {"n":1,"at":"2026-07-25T00:00:00Z","day":"2026-07-25","m":{"k":1}}
                     """);
             node.put("d", noNumber);
-            Result<?> r = Codecs.decode(LOADER, "demo.In", "jsonDecoder", node);
+            Result<?> r = Codecs.decode(LOADER, "demo.In", Codecs.JSON,node);
             assertMismatchAt("/d", r, "the JSON node " + noNumber);
             assertFalse(messageOf(r).contains("rounded"), messageOf(r));
         }

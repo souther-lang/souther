@@ -39,16 +39,11 @@ class CompileClosureInjectedTest {
 
     private static final String IMPL_SRC = """
             package demo;
-            import net.unit8.raoh.Ok;
-            import net.unit8.raoh.Path;
-            import net.unit8.raoh.Result;
-            import net.unit8.raoh.decode.Decoder;
+            import souther.runtime.Result;
             import java.util.Map;
             public final class DepImpl extends Dep {
                 public Out apply(In in) {
-                    Decoder d = Out.decoder();
-                    Result r = d.decode(Map.of("v", "got:" + in.name()), Path.ROOT);
-                    return (Out) ((Ok) r).value();
+                    return ((Result.Ok<Out, ?>) Out.decoder().decode(Map.of("v", "got:" + in.name()))).value();
                 }
             }
             """;

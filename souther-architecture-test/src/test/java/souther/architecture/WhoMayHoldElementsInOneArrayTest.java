@@ -54,7 +54,8 @@ class WhoMayHoldElementsInOneArrayTest {
      * {@code ExactOrder.allWrittenOut}. As long as an enumeration: the switch maps
      * {@code ExactRounding} and {@code TemporalForms} are compiled with. As long as a host list the members of an external form
      * already arrived in, which may hold {@code null} that no {@code List} of the language holds:
-     * {@code Representations.sortedMembers}.
+     * {@code Representations.sortedMembers}, and the external form {@code Encoding.written} writes a
+     * list as, with an absent element {@code null} where it stands.
      *
      * <p>The text rules the run time is built on — normalization, case conversion, the machine a
      * pattern runs as — are a library's and are not walked here. What the run time asks of them is
@@ -78,6 +79,7 @@ class WhoMayHoldElementsInOneArrayTest {
                     + " java/util/List.sort(Ljava/util/Comparator;)V",
             "souther/runtime/Sorting$Slots#<init> new [Ljava/lang/Object;[]",
             "souther/runtime/Sorting$Slots#<init> new java/lang/Object[]",
+            "souther/runtime/boundary/Encoding#written java/util/ArrayList.<init>(I)V",
             "souther/temporal/TemporalForms$1#<clinit> new I[]");
 
     @Test

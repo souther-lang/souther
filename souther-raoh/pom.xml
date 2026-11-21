@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.souther-lang</groupId>
+        <artifactId>souther-parent</artifactId>
+        <version>0.4.2-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>souther-raoh</artifactId>
+    <name>Souther Raoh decoder binding</name>
+
+    <description>
+        The decoder binding for Raoh: readers of a Jackson JsonNode and of a jOOQ Record, a derived
+        decoder presented as a Raoh Decoder, and its refusals reported as Raoh issues (spec
+        §raoh-binding). It decides nothing about what a decode admits.
+    </description>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.souther-lang</groupId>
+            <artifactId>souther-runtime</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>net.unit8.raoh</groupId>
+            <artifactId>raoh</artifactId>
+        </dependency>
+        <!-- Jackson and jOOQ are the application's, as they are Raoh's: a program that reads no
+             JsonNode or no Record brings neither. -->
+        <dependency>
+            <groupId>tools.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.jooq</groupId>
+            <artifactId>jooq</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.jspecify</groupId>
+            <artifactId>jspecify</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <!-- The nullness gate, as souther-runtime runs it: this module's package declares
+         `@NullMarked`. -->
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <compilerArgs combine.children="append">
+                        <arg>-XDcompilePolicy=simple</arg>
+                        <arg>--should-stop=ifError=FLOW</arg>
+                        <arg>${errorprone.gate}</arg>
+                    </compilerArgs>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>com.google.errorprone</groupId>
+                            <artifactId>error_prone_core</artifactId>
+                            <version>${errorprone.version}</version>
+                        </path>
+                        <path>
+                            <groupId>com.uber.nullaway</groupId>
+                            <artifactId>nullaway</artifactId>
+                            <version>${nullaway.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

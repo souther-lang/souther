@@ -87,14 +87,11 @@ public sealed interface GeneratedClass {
         }
     }
 
-    /** One of the derived decoders beside the value class it builds. Only a declared type is decoded
-     *  into: a union a behavior answers with is written, never read. */
-    record Decoder(Value of, DecoderKind kind) implements GeneratedClass {
+    /** The derived decoder beside the value class it builds. Only a declared type is decoded into: a
+     *  union a behavior answers with is written, never read. */
+    record Decoder(Value of) implements GeneratedClass {
         public Decoder {
             Require.derivedFrom(of);
-            if (kind == null) {
-                throw new IllegalArgumentException("which decoder is part of what it is called");
-            }
         }
     }
 

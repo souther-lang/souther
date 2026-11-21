@@ -2,7 +2,6 @@ package souther.compiler;
 
 import souther.compiler.core.BoundaryConstraint;
 import souther.compiler.jvm.ClassFileImage;
-import souther.compiler.jvm.DecoderKind;
 import souther.runtime.ConstraintViolation;
 import net.unit8.raoh.Issue;
 import net.unit8.raoh.Path;
@@ -280,7 +279,7 @@ class CompileInvariantConstraintTest {
                     invariant String.matches("[0-9]{3}", value)
                 """);
         ClassModel dec = ClassFile.of().parse(
-                classes.get(Emitted.decoder("demo", "V", DecoderKind.VALUE)).bytes());
+                classes.get(Emitted.decoder("demo", "V")).bytes());
         int patterns = 0;
         for (PoolEntry entry : dec.constantPool()) {
             if (entry instanceof ConstantDynamicEntry constant

@@ -70,9 +70,7 @@ class SoutherJvmAbiTest {
         // A codec sits beside what it encodes, whatever that is — a declared type or a union the
         // compiler generated.
         rows.add(new Object[] {new GeneratedClass.Encoder(order), "shop.Order$Enc"});
-        rows.add(new Object[] {new GeneratedClass.Decoder(order, DecoderKind.VALUE), "shop.Order$Dec"});
-        rows.add(new Object[] {new GeneratedClass.Decoder(order, DecoderKind.JSON), "shop.Order$DecJson"});
-        rows.add(new Object[] {new GeneratedClass.Decoder(order, DecoderKind.RECORD), "shop.Order$DecRecord"});
+        rows.add(new Object[] {new GeneratedClass.Decoder(order), "shop.Order$Dec"});
         rows.add(new Object[] {new GeneratedClass.Encoder(
                 new GeneratedClass.BehaviorResult("shop", "findOrder")), "shop.FindOrderResult$Enc"});
 
@@ -157,18 +155,5 @@ class SoutherJvmAbiTest {
         assertEquals(null, SoutherJvmAbi.valueTypeCandidate("Loose"), "a name with no module names no type");
         assertEquals(null, SoutherJvmAbi.valueTypeCandidate(".Foo"));
         assertEquals(null, SoutherJvmAbi.valueTypeCandidate("demo."));
-    }
-
-    /** And every decoder does, which is the one branch that is a value rather than a kind. */
-    @Test
-    void andEveryDecoderHasARow() {
-        List<DecoderKind> stated = new ArrayList<>();
-        for (Object[] row : abi()) {
-            if (row[0] instanceof GeneratedClass.Decoder d && !stated.contains(d.kind())) {
-                stated.add(d.kind());
-            }
-        }
-        assertEquals(List.of(DecoderKind.values()).size(), stated.size(),
-                "a decoder kind with no name written down: " + stated);
     }
 }

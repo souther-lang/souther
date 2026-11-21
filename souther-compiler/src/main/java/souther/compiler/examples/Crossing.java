@@ -1,9 +1,5 @@
 package souther.compiler.examples;
 
-import net.unit8.raoh.Ok;
-import net.unit8.raoh.Path;
-import net.unit8.raoh.Result;
-import net.unit8.raoh.decode.Decoder;
 import souther.compiler.check.BoundaryInput;
 import souther.compiler.check.BoundaryOutput;
 import souther.compiler.check.CrossingMapKey;
@@ -11,7 +7,10 @@ import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.GeneratedClasses;
 import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.evaluate.EvaluationContext;
+import souther.runtime.Result;
 import souther.runtime.Sets;
+import souther.runtime.boundary.Decoder;
+import souther.runtime.boundary.Refusals;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -171,16 +170,14 @@ final class Crossing {
             throw new ImplementationNotReached("`" + type.name() + "` is not in the classes the"
                     + " implementation was built against: " + e, e);
         }
-        Result<?> read;
+        Result<?, Refusals> read;
         try {
-            @SuppressWarnings("unchecked")
-            Decoder<Object, ?> decoder = (Decoder<Object, ?>) factory.invoke(null);
-            read = decoder.decode(neutral, Path.ROOT);
+            read = ((Decoder<?>) factory.invoke(null)).decode(neutral);
         } catch (ReflectiveOperationException | ClassCastException | LinkageError e) {
             throw new ImplementationNotReached("`" + type.name() + "`'s decoder could not be run in"
                     + " the classes the implementation was built against: " + e, e);
         }
-        if (read instanceof Ok<?> ok) {
+        if (read instanceof Result.Ok<?, Refusals> ok) {
             return ok.value();
         }
         throw new FixtureException("`" + type.name() + "` as the implementation's own build declares"

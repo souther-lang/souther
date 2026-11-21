@@ -1,7 +1,6 @@
 package souther.compiler;
 
 import souther.compiler.jvm.ClassFileImage;
-import souther.compiler.jvm.DecoderKind;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -108,7 +107,7 @@ class CompileSpecChapter23Test {
     void theChapter23ModelCompiles() {
         Map<String, ClassFileImage> classes = Compiler.compile(MODULE);
         assertTrue(classes.containsKey("example.businesstrip.事前承認する"));
-        assertTrue(classes.containsKey(Emitted.decoder("example.businesstrip", "出張申請", DecoderKind.VALUE)), "the state sum derives a decoder");
+        assertTrue(classes.containsKey(Emitted.decoder("example.businesstrip", "出張申請")), "the state sum derives a decoder");
         assertTrue(classes.containsKey("example.businesstrip.現在時刻"), "the clock gets a Java base class");
     }
 

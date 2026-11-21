@@ -77,7 +77,7 @@ class OptionalFieldReadsAWrittenNullTest {
     void theJsonDecoderReadsANullValueAsNone() throws Exception {
         JsonNode node = mapper.readTree("{\"id\":\"t-1\",\"approver\":null}");
 
-        Result<?> r = Codecs.decode(loader(), "demo.Trip", "jsonDecoder", node);
+        Result<?> r = Codecs.decode(loader(), "demo.Trip", Codecs.JSON,node);
 
         assertInstanceOf(Ok.class, r, "a JSON null is None, not a failure");
         assertEquals("None", approverOf(r).getClass().getSimpleName());
@@ -91,7 +91,7 @@ class OptionalFieldReadsAWrittenNullTest {
         record.set(id, "t-1");
         record.set(approver, null);
 
-        Result<?> r = Codecs.decode(loader(), "demo.Trip", "recordDecoder", record);
+        Result<?> r = Codecs.decode(loader(), "demo.Trip", Codecs.RECORD,record);
 
         assertInstanceOf(Ok.class, r, "a NULL column is None, not a failure");
         assertEquals("None", approverOf(r).getClass().getSimpleName());
@@ -103,7 +103,7 @@ class OptionalFieldReadsAWrittenNullTest {
     void aValueOfAnotherShapeStillFailsAndSaysWhatItWanted() throws Exception {
         JsonNode node = mapper.readTree("{\"id\":\"t-1\",\"approver\":42}");
 
-        Result<?> r = Codecs.decode(loader(), "demo.Trip", "jsonDecoder", node);
+        Result<?> r = Codecs.decode(loader(), "demo.Trip", Codecs.JSON,node);
 
         Err<?> err = assertInstanceOf(Err.class, r, "a number is not a value this field can hold");
         String message = err.issues().asList().getFirst().message();
@@ -116,7 +116,7 @@ class OptionalFieldReadsAWrittenNullTest {
     void aRequiredFieldWrittenNullIsStillRequired() throws Exception {
         JsonNode node = mapper.readTree("{\"id\":null,\"approver\":\"e-9\"}");
 
-        Result<?> r = Codecs.decode(loader(), "demo.Trip", "jsonDecoder", node);
+        Result<?> r = Codecs.decode(loader(), "demo.Trip", Codecs.JSON,node);
 
         Err<?> err = assertInstanceOf(Err.class, r, "`id` has no `?`, so a null is not a value for it");
         assertTrue(err.issues().asList().getFirst().message().contains("required"),
