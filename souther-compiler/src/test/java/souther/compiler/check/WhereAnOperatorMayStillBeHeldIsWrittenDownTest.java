@@ -578,7 +578,7 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.partition.WorkedOutToReachIt.aTotalWithinAnInt",
                     "works out where a total lies: what each element comes to times the most"
                             + " elements there are"),
-            new Held("souther.compiler.partition.WorkedOutToReachIt.answersOfAStep",
+            new Held("souther.compiler.partition.WorkedOutToReachIt.answersOfAChoice",
                     "asks the enum whether the operator compares, and what relation it states,"
                             + " which is what a step of a walk that chooses by a comparison of"
                             + " the element and what it carried answers of them where that holds"),
