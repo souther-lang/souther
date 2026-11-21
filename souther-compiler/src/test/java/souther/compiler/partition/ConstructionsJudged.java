@@ -4,6 +4,8 @@ import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.diag.Citation;
+import souther.compiler.diag.PhysicalPos;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
@@ -33,6 +35,16 @@ final class ConstructionsJudged {
     /** The kinds of judgement each construction of {@code behavior} in {@code compilation}'s one
      *  module was given, by its line. */
     static Map<Integer, Set<String>> of(Compilation compilation, String behavior) {
+        Map<Integer, Set<String>> out = new TreeMap<>();
+        byRule(compilation, behavior).values().forEach(rule -> rule.forEach((line, kinds) ->
+                out.computeIfAbsent(line, _ -> new TreeSet<>()).addAll(kinds)));
+        return out;
+    }
+
+    /** The same, rule by rule: by the line and column each rule of {@code behavior} is written
+     *  at, the kinds of judgement each construction on the way to it was given, by its line. */
+    static Map<String, Map<Integer, Set<String>>> byRule(Compilation compilation,
+                                                        String behavior) {
         String module = compilation.modules().getFirst();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
@@ -41,7 +53,7 @@ final class ConstructionsJudged {
         AnalysisBody analysis = checked.analysisBodies().get(behavior);
         InputReading read = inputs.reading(rules);
         SourceRendering rendering = SourceRendering.namedByIdentity(compilation.texts());
-        Map<Integer, Set<String>> out = new TreeMap<>();
+        Map<String, Map<Integer, Set<String>>> out = new TreeMap<>();
         for (ComparisonReadings.Reading each : ComparisonReadings.of(behavior, analysis, read,
                 InputReads.ofParametersWhereCallsStand(inputs.parameterReads(),
                         inputs.declared(rules), ElementBindings.of(analysis, rules.newtypes()),
@@ -49,10 +61,16 @@ final class ConstructionsJudged {
                 ComparisonWitnesses.AtComparisons.NONE).comparisons()) {
             Reachability way = Reachability.of(new WayToTheBorder(each.assumed()),
                     read.quantities().region());
+            if (!(each.at() instanceof Citation.Written written)) {
+                continue;
+            }
+            PhysicalPos rule = rendering.layouts().resolve(written.at());
+            Map<Integer, Set<String>> ofTheRule = out.computeIfAbsent(
+                    rule.line() + ":" + rule.column(), _ -> new TreeMap<>());
             for (ConstructionStopAssessment.Judgement judged : ConstructionStopAssessment.of(each,
                     way instanceof Reachability.Reaching reaching ? List.of(reaching.region())
                             : List.of(), read)) {
-                out.computeIfAbsent(rendering.layouts().resolve(judged.made().pos()).line(),
+                ofTheRule.computeIfAbsent(rendering.layouts().resolve(judged.made().pos()).line(),
                         _ -> new TreeSet<>()).add(judged.getClass().getSimpleName());
             }
         }
