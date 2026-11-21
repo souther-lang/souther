@@ -1,7 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.numeric.Count;
-import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.DateTranslation;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.semantics.TakenAs;
@@ -130,35 +129,27 @@ public record DatePartsLeft(Map<TakenAs.DatePart, NumericDomain.Bounds> byPart,
         return true;
     }
 
-    /** How many days with the part asked of are met before a search for a date these leave, once
-     *  moved, gives up: a date with the part, and a move, that a date these leave comes to is met
-     *  within a few cycles of the calendar where there is one. */
+    /** What the rules leave of a date they say nothing of: every date the calendar has. */
+    public static final DatePartsLeft EVERY_DATE =
+            new DatePartsLeft(Map.of(TakenAs.DatePart.YEAR, NumericDomain.Bounds.OPEN));
+
+    /** How many of the days these leave are met before a search for a date with a part, once
+     *  moved, gives up: more than a leap cycle of years, and a date a day leaves that the move
+     *  brings to the part is met long before in every class the rules write today. */
     private static final int MOST_DAYS_MET = 4_096;
 
     /**
-     * Whether a date {@code left} leaves, moved by {@code movedBy} days, has {@code part} at
-     * {@code value}, shown by a day met: a day that has the part, and that the move brings a day
-     * {@code left} leaves to. {@code left} is null where nothing is left of the dates but the
-     * calendar. A search that gave up shows none and says nothing of whether there are some, so
-     * false here is that this shows no such date and never that there is none.
+     * Whether a date these leave, moved as {@code moved} moves it, has {@code part} at
+     * {@code value}, shown by a day met: one of these the move is defined at and brings to the
+     * part. The move is defined at fewer days than its days say where a step of it stops at an
+     * end of the calendar. A search
+     * that gave up shows none and says nothing of whether there are some, so false here is that
+     * this shows no such date and never that there is none.
      */
-    public static boolean someDateHas(DatePartsLeft left, TakenAs.DatePart part, int value,
-                                      long movedBy) {
-        if (left != null) {
-            for (long day : left.walk(null, null, true, MOST_DAYS_MET).days()) {
-                long moved = day + movedBy;
-                if (moved >= FIRST_DAY && moved <= LAST_DAY
-                        && part.of(LocalDate.ofEpochDay(moved)) == value) {
-                    return true;
-                }
-            }
-            return false;
-        }
-        Endpoint at = Endpoint.inclusive(Count.of(value));
-        for (long day : new DatePartsLeft(Map.of(part, new NumericDomain.Bounds(at, at)))
-                .walk(BigInteger.valueOf(Math.max(0L, movedBy)), null, true, 1).days()) {
-            long from = day - movedBy;
-            if (from >= FIRST_DAY && from <= LAST_DAY) {
+    public boolean someDateHas(TakenAs.DatePart part, int value, DateTranslation moved) {
+        for (long day : walk(null, null, true, MOST_DAYS_MET).days()) {
+            if (moved.definedAt(day)
+                    && part.of(LocalDate.ofEpochDay(day + moved.offsetDays())) == value) {
                 return true;
             }
         }

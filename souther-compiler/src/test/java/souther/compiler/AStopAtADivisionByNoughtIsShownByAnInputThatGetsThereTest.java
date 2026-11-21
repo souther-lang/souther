@@ -52,6 +52,20 @@ class AStopAtADivisionByNoughtIsShownByAnInputThatGetsThereTest {
                 .forEach(each -> assertEquals(0, each.number().signum()));
     }
 
+    /** A divisor of several numbers is one form of them, and a run stops where it is nought. */
+    @Test
+    void aDivisorThatIsASumShowsTheStopWhereTheSumIsNought() {
+        List<AStopShown> shown = shownIn("if Rational.toInt(UP, e / (p + 1)) >= 2 then 1 else 2");
+        AStopShown stop = shown.stream()
+                .filter(each -> each.operation().equals("division by p + 1")).findFirst()
+                .orElseThrow(() -> new AssertionError(shown.toString()));
+        assertEquals(-1, stop.at().stream().filter(each -> each.place().toString().equals("p"))
+                .findFirst().orElseThrow().number().intValueExact());
+        assertTrue(shownIn("if p >= 0 then (if Rational.toInt(UP, e / (p + 1)) >= 2 then 1"
+                + " else 2) else 3").stream()
+                .noneMatch(each -> each.operation().startsWith("division")));
+    }
+
     @Test
     void aWayThatKeepsTheDivisorFromNoughtShowsNone() {
         assertEquals(List.of(), shownIn("if p >= 1 then (if " + QUOTIENT + " then 1 else 2)"

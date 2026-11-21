@@ -1,7 +1,5 @@
 package souther.compiler.partition;
 
-import souther.compiler.abort.AbortKind;
-import souther.compiler.abort.AbortSites;
 import souther.compiler.abort.GetsPast;
 import souther.compiler.check.AffineForms;
 import souther.compiler.check.Choice;
@@ -336,6 +334,17 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          */
         <T> T answerOf(ValueStanding.NameQuestion question, Core value, InputReads at,
                        ElementsMet elements, Supplier<T> fresh, IntSupplier figureAsked);
+    }
+
+    /** Names kept by no one: each is read afresh, as a reading that stands alone has them. */
+    enum Unkept implements NamesKept {
+        EVERY_NAME_AFRESH;
+
+        @Override
+        public <T> T answerOf(ValueStanding.NameQuestion question, Core value, InputReads at,
+                              ElementsMet elements, Supplier<T> fresh, IntSupplier figureAsked) {
+            return fresh.get();
+        }
     }
 
     /**
@@ -1650,7 +1659,6 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     if (!(aside.theStop && stoppedAt.theStopWorksOutTheFormItIsReadAs())) {
                         tellWhatIsWorkedOutBesideWhatIsHeldAside(node, at);
                     }
-                    tellADivision(node, at);
                     if (aside.aChoice) {
                         aside.rangeIs(rangeOfTheArms(node, at));
                     } else if (aside.range == null) {
@@ -2473,20 +2481,6 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             }
 
             /**
-             * That a run works out {@code node} where it is a quotient whose divisor is a form of
-             * the input's numbers, and stops there where the divisor is nought. Told for where a
-             * run stops, whoever answers for the rows of its lines.
-             */
-            private void tellADivision(Core node, InputReads at) {
-                if (Core.withoutStanding(node) instanceof Core.Binary quotient
-                        && AbortSites.ofAnOperator(quotient).contains(AbortKind.DIVISION_BY_ZERO)
-                        && at.pathOf(quotient.right(), ruleSource.newtypes())
-                                instanceof ValuesAt.At(TermPath divisor)) {
-                    told.divides(quotient, LinearForm.atom(new NumericTerm.ValueOf(divisor)));
-                }
-            }
-
-            /**
              * What a quotient by a value works out of its own: its dividend and its divisor, each
              * read as any side is. The quotient is a number wherever its divisor is not nought,
              * which the analysis that owns it keeps its rows to; any other operation at the stop
@@ -2669,9 +2663,6 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
     static final class WhatWasTold {
 
         private final List<UndividedByARelation.IntOperation> operations = new ArrayList<>();
-        /** The quotients a run works out, which stop it where the divisor is nought, and what
-         *  each is worked out after: told for where a run stops only. */
-        private final List<UndividedByARelation.Division> divisions = new ArrayList<>();
         /** Each of {@link #operations} once, for asking whether one was told: a list written out
          *  element by element tells one operation per element, so asking the list is asked of
          *  every one told before it. Written where they are and nowhere else ({@link #add}). */
@@ -2900,17 +2891,6 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             return readByATerm.contains(name);
         }
 
-        /**
-         * That a run works out the quotient {@code division} by {@code divisor}, a form of the
-         * input's numbers, after what it works out of its operands. It stops where the divisor is
-         * nought, which no row of a line is at ({@code QuotientByAValue.Read#answers}): so it is
-         * told for where a run stops and is no operation a row gets past.
-         */
-        void divides(Core division, LinearForm<NumericTerm> divisor) {
-            toldMore();
-            divisions.add(new UndividedByARelation.Division(divisor, workedOutOf(division)));
-        }
-
         void add(Core node, UndividedByARelation.IntOperation operation) {
             toldMore();
             Core bare = Core.withoutStanding(node);
@@ -2945,7 +2925,6 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             for (int i = 0; i < apart.operations.size(); i++) {
                 add(apart.at.get(i), apart.operations.get(i).shifted(ofWholeNumbers));
             }
-            apart.divisions.forEach(each -> divisions.add(each.shifted(ofWholeNumbers)));
             apart.sumsOverTheStop.forEach(each ->
                     sumsOverTheStop.add(each.shifted(ofWholeNumbers)));
             aStopUntold |= apart.aStopUntold;
@@ -3015,17 +2994,14 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          */
         UndividedByARelation.Working everyOperation(boolean onEveryRun) {
             List<UndividedByARelation.IntOperation> every = new ArrayList<>(operations);
-            List<UndividedByARelation.Division> dividing = new ArrayList<>(divisions);
             List<WhatWasTold> groups = new ArrayList<>(leftToTheWitness);
             groups.addAll(besideTheRows);
             for (WhatWasTold group : groups) {
                 UndividedByARelation.Working worked = group.everyOperation(true);
                 int before = every.size();
                 worked.operations().forEach(each -> every.add(each.shifted(before)));
-                worked.divisions().forEach(each -> dividing.add(each.shifted(before)));
             }
-            UndividedByARelation.Working out = working(every, exact && partials.isEmpty())
-                    .dividing(dividing);
+            UndividedByARelation.Working out = working(every, exact && partials.isEmpty());
             return onEveryRun ? out : out.notOnEveryRun();
         }
 
@@ -3719,12 +3695,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             Set<Core> under = Collections.newSetFromMap(new IdentityHashMap<>());
             collectUnder(division, under);
             collectUnder(node, under);
-            WorkedOut worked = beside(new StoppedValues(division, null, true, ofTheInput,
+            return beside(new StoppedValues(division, null, true, ofTheInput,
                     answersFor.readingAgainOnly(
-                            node -> under.contains(Core.withoutStanding(node)))));
-            // The rows of its lines are kept off a divisor of nought, and a run is not: what it
-            // works out, where nothing says otherwise, is this relation's quotient as well.
-            return worked.toGetPast().dividing(worked.stops().operations().divisions());
+                            node -> under.contains(Core.withoutStanding(node))))).toGetPast();
         }
 
         private static void collectUnder(Core around, Set<Core> into) {

@@ -119,6 +119,9 @@ final class WhatAWayLeavesOfAValue {
      * the region the way leaves holds none of its values there. False where that is not shown.
      */
     boolean keepsAwayFromNought(LinearForm<NumericTerm> divisor) {
+        if (divisor.coefs().isEmpty()) {
+            return divisor.constant().signum() != 0;
+        }
         return switch (region.projectionOf(divisor)) {
             case NumericDomain.FormProjection.NothingIsLeft _ -> true;
             case NumericDomain.FormProjection.Within within ->

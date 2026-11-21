@@ -333,39 +333,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * A quotient a comparison works out, which stops a run where the divisor is nought: a stop of
-     * the domain of the operation and not of where its answer lies, so it has no ends.
-     *
-     * @param divisor what the quotient is divided by, as a form of numbers of the input's places
-     *                and of nothing else: the region the way leaves answers for those alone, and a
-     *                value a reading held aside is one it has nothing to say of
-     * @param after   the operations, by where they are among those the comparison works out, that
-     *                are worked out before it on every run, as {@link IntOperation#after}
-     */
-    record Division(LinearForm<NumericTerm> divisor, List<Integer> after) {
-
-        Division {
-            Objects.requireNonNull(divisor, "a quotient is divided by some form");
-            if (!isOverPlaces(divisor)) {
-                throw new IllegalArgumentException("a divisor told is a form of the input's"
-                        + " places: " + divisor);
-            }
-            after = List.copyOf(new TreeSet<>(after));
-        }
-
-        /** Whether every number {@code form} is of is the value at a place of the input. */
-        static boolean isOverPlaces(LinearForm<NumericTerm> form) {
-            return form != null && form.coefs().keySet().stream()
-                    .allMatch(NumericTerm.ValueOf.class::isInstance);
-        }
-
-        /** The same quotient, worked out after the operations moved {@code by} on. */
-        Division shifted(int by) {
-            return new Division(divisor, after.stream().map(at -> at + by).toList());
-        }
-    }
-
-    /**
      * A number an operation of whole numbers is over: a number of the input, the value of a
      * name read off a container, whose values are what the container holds there, or a value a
      * run works out whose numbers are known and stand at no row.
@@ -528,13 +495,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *                    reading that stands in for another does not leave it behind
      */
     record Working(List<IntOperation> operations, WhatARelationLeavesUndivided.Told told,
-                   boolean onEveryRun, List<NumericTerm> partials, boolean aStopUntold,
-                   List<Division> divisions) {
-
-        Working(List<IntOperation> operations, WhatARelationLeavesUndivided.Told told,
-                boolean onEveryRun, List<NumericTerm> partials, boolean aStopUntold) {
-            this(operations, told, onEveryRun, partials, aStopUntold, List.of());
-        }
+                   boolean onEveryRun, List<NumericTerm> partials, boolean aStopUntold) {
 
         Working(List<IntOperation> operations, WhatARelationLeavesUndivided.Told told) {
             this(operations, told, true);
@@ -596,31 +557,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         /** The same, with {@code untold} as whether a stop is left that no reading tells. */
         private Working leavingAStopUntold(boolean untold) {
             return untold == aStopUntold ? this
-                    : new Working(operations, told, onEveryRun, partials, untold, divisions);
-        }
-
-        /** The same, a run working out also the quotients {@code more}, each once the operations
-         *  it names are. */
-        Working dividing(List<Division> more) {
-            if (more.isEmpty()) {
-                return this;
-            }
-            List<Division> all = new ArrayList<>(divisions);
-            all.addAll(more);
-            return new Working(operations, told, onEveryRun, partials, aStopUntold, all);
+                    : new Working(operations, told, onEveryRun, partials, untold);
         }
 
         /** Whether this tells the operations {@code other} does, each once or more, and as much
          *  of what can stop a run. */
         private boolean tellsWhat(Working other) {
             return told == other.told && partials.equals(other.partials)
-                    && operationsWorkedOut().equals(other.operationsWorkedOut())
-                    && Set.copyOf(divisors()).equals(Set.copyOf(other.divisors()));
-        }
-
-        /** What each quotient is divided by, and not where it stands among the others. */
-        private List<LinearForm<NumericTerm>> divisors() {
-            return divisions.stream().map(Division::divisor).toList();
+                    && operationsWorkedOut().equals(other.operationsWorkedOut());
         }
 
         /** The operations, each as what it works out and the numbers it comes to between, and not
@@ -636,7 +580,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Working {
             operations = List.copyOf(operations);
             partials = List.copyOf(partials);
-            divisions = List.copyOf(divisions);
             Objects.requireNonNull(told, "what the reading told, or that there was none");
             if (!partials.isEmpty() && told != WhatARelationLeavesUndivided.Told.SOME) {
                 throw new IllegalArgumentException(
@@ -680,20 +623,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 partials.stream().filter(each -> !bothPartials.contains(each))
                         .forEach(bothPartials::add);
             }
-            List<Division> bothDivisions = new ArrayList<>(earlier.divisions);
-            for (Division each : divisions) {
-                bothDivisions.add(each.shifted(earlier.operations.size()));
-            }
             return new Working(both, earlier.exact() && exact()
                     ? WhatARelationLeavesUndivided.Told.EVERY
                     : WhatARelationLeavesUndivided.Told.SOME,
                     earlier.onEveryRun && onEveryRun, bothPartials,
-                    earlier.aStopUntold || aStopUntold, bothDivisions);
+                    earlier.aStopUntold || aStopUntold);
         }
 
         /** The same operations, for a relation not every run that gets to the comparison reaches. */
         Working notOnEveryRun() {
-            return new Working(operations, told, false, partials, aStopUntold, divisions);
+            return new Working(operations, told, false, partials, aStopUntold);
         }
 
         /** Whether every operation that can stop a run is told. */
@@ -4270,8 +4209,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 operationsOverTheSides(read, conditions, heldWhole,
                         totalsWrittenByOneElement(terms),
                         numbers -> heldApart(numbers, read, theWay));
+        boolean[] lacking = valuesLackingARow(past, read);
         for (int at = 0; at < sides.size(); at++) {
-            WhatARelationLeavesUndivided.Leaves each = overEveryNumberOfTheSide(offItsLine
+            WhatARelationLeavesUndivided.Leaves each = offItsLine
                     ? WhatARelationLeavesUndivided.leavesOffItsLine(terms, at, constant, relation,
                             overlapping, independent,
                             granularityOf(carriers.get(at)), greatestOf(carriers.get(at)),
@@ -4279,9 +4219,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     : WhatARelationLeavesUndivided.leavesOf(terms, at, constant, relation,
                             overlapping, independent,
                             granularityOf(carriers.get(at)), greatestOf(carriers.get(at)),
-                            supports, operations), at, past, read);
+                            supports, operations);
             leaves.add(each);
-            if (settledAtEveryValue(each)) {
+            if (settledAtEveryValue(each) && !lacking[at]) {
                 return comesOutOneWay(out, settled, countsRead);
             }
             if (each instanceof WhatARelationLeavesUndivided.Leaves.Undivided) {
@@ -4315,7 +4255,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 if (apart.get(at) instanceof WhatARelationLeavesUndivided.Leaves.Undivided) {
                     out.addAll(sides.get(at).madeOf());
                 } else {
-                    leaves.set(at, overEveryNumberOfTheSide(apart.get(at), at, past, read));
+                    leaves.set(at, apart.get(at));
                 }
             }
         }
@@ -4341,10 +4281,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             if (tied instanceof WhatARelationLeavesUndivided.Leaves.Undivided) {
                 out.addAll(sides.get(at).madeOf());
             } else {
-                leaves.set(at, overEveryNumberOfTheSide(tied, at, past, read));
+                leaves.set(at, tied);
             }
         }
         for (int at = 0; at < sides.size(); at++) {
+            if (lacking[at] && leaves.get(at) instanceof WhatARelationLeavesUndivided.Leaves.Settled) {
+                leaves.set(at, null);
+            }
             if (leaves.get(at) instanceof WhatARelationLeavesUndivided.Leaves.Settled
                     && !out.containsAll(sides.get(at).madeOf())) {
                 putDown(at, leaves.get(at), out, settled);
@@ -9477,25 +9420,26 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * {@code leaves} of the side at {@code at}, or none where it is said only of values the run to
-     * the relation is narrowed to. Runs that get past the operations the run works out hold the
-     * number to the values those operations come to within their types, and what is shown of a
-     * row is shown of those; the numbers beside them stop the run, and a class that held both
-     * would hold two the program tells apart. No line is drawn from what stands over fewer
-     * numbers than the class would.
+     * For each side, whether some value of its number has no row that gets past what the run
+     * works out: the number the side is lies in fewer values once the run is narrowed to what
+     * gets past ({@link DemandReading.Answered#narrowing}) than the declarations leave it.
+     *
+     * <p>What is settled of such a number is said of the values that have a row. A class that
+     * held one that has none with one that has would hold two the program tells apart, a stop
+     * and an answer, so the side is not told as settled.
      */
-    private WhatARelationLeavesUndivided.Leaves overEveryNumberOfTheSide(
-            WhatARelationLeavesUndivided.Leaves leaves, int at, DemandReading.Answered past,
-            InputReading read) {
-        if (!(leaves instanceof WhatARelationLeavesUndivided.Leaves.Settled)
-                || !(sides.get(at).number() instanceof NumericTerm number)) {
-            return leaves;
-        }
-        List<TakenConstraint> ofIt = past.narrowing().stream()
-                .filter(each -> each.terms().contains(number)).toList();
+    private boolean[] valuesLackingARow(DemandReading.Answered past, InputReading read) {
+        boolean[] out = new boolean[sides.size()];
         SearchRegion all = read.quantities().region();
-        return ofIt.isEmpty() || Objects.equals(all.projectionOf(number),
-                TakenConstraint.narrowedBy(ofIt, all).projectionOf(number)) ? leaves : null;
+        for (int at = 0; at < out.length && !past.narrowing().isEmpty(); at++) {
+            if (sides.get(at).number() instanceof NumericTerm number) {
+                List<TakenConstraint> ofIt = past.narrowing().stream()
+                        .filter(each -> each.terms().contains(number)).toList();
+                out[at] = !ofIt.isEmpty() && !Objects.equals(all.projectionOf(number),
+                        TakenConstraint.narrowedBy(ofIt, all).projectionOf(number));
+            }
+        }
+        return out;
     }
 
     /**

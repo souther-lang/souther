@@ -487,26 +487,24 @@ public final class Partitions {
             if (!(taken.takenAs() instanceof TakenAs.PartOfDate(TakenAs.DatePart part))) {
                 return true;
             }
-            HeldClass held = reading.region().classAt(new NumericTerm.ValueOf(taken.position()));
-            if (held instanceof HeldClass.OfResidues || held instanceof HeldClass.NoValue) {
-                return false;
-            }
-            DatePartsLeft left = held instanceof HeldClass.OfDays(DatePartsLeft parts)
-                    ? parts : null;
+            DatePartsLeft left = switch (reading.region().classAt(
+                    new NumericTerm.ValueOf(taken.position()))) {
+                case HeldClass.None _ -> DatePartsLeft.EVERY_DATE;
+                case HeldClass.OfDays(DatePartsLeft parts) -> parts;
+                case HeldClass.OfResidues _, HeldClass.NoValue _ -> null;
+            };
             ExactRatio at = line.cut().cut().at().asANumber();
             // What the declarations hold the number to, of every rule they write on it, is a bound
             // the number's edge lies within: a rule of two parts of the date shows in it where it
             // shows nowhere in the class.
-            boolean within = switch (reading.projectionOfTheDeclarations(taken)) {
-                case NumericDomain.FormProjection.Within(NumericDomain.Bounds bounds) ->
-                        at != null && bounds.admits(at);
-                case NumericDomain.FormProjection.NothingIsLeft _ -> false;
-            };
-            return within && at.isWhole()
+            return left != null && at != null && at.isWhole()
+                    && reading.projectionOfTheDeclarations(taken)
+                            instanceof NumericDomain.FormProjection.Within(
+                                    NumericDomain.Bounds bounds) && bounds.admits(at)
                     && at.floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger whole)
                     && whole.bitLength() < Integer.SIZE
-                    && DatePartsLeft.someDateHas(left, part, whole.intValueExact(),
-                            taken.transformation().translation().offsetDays());
+                    && left.someDateHas(part, whole.intValueExact(),
+                            taken.transformation().translation());
         }
 
         /**

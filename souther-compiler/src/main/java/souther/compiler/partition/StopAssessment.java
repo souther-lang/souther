@@ -1,8 +1,10 @@
 package souther.compiler.partition;
 
 import souther.compiler.abort.AbortKind;
+import souther.compiler.core.Core;
 import souther.compiler.inputs.AStopNotShown;
 import souther.compiler.inputs.AStopShown;
+import souther.compiler.inputs.ElementsMet;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Position;
@@ -18,6 +20,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
@@ -82,11 +85,11 @@ final class StopAssessment {
         }
 
         /** A quotient, and where its divisor is nought ({@link AbortKind#DIVISION_BY_ZERO}). */
-        record ByNought(UndividedByARelation.Division division) implements Site {
+        record ByNought(LinearForm<NumericTerm> divisor) implements Site {
 
             @Override
             public String written() {
-                return "division by " + UndividedByARelation.written(division.divisor());
+                return "division by " + UndividedByARelation.written(divisor);
             }
         }
     }
@@ -163,6 +166,8 @@ final class StopAssessment {
         if (onRowsOfTheStatement) {
             out.add(new Judgement.Unresolved(null, WhyAStopIsNotShown.ON_ROWS_OF_THE_STATEMENT));
         }
+        List<LinearForm<NumericTerm>> divisors = divisorsOf(each, read);
+        List<LinearForm<NumericTerm>> known = divisors.stream().filter(Objects::nonNull).toList();
         for (Place place : places) {
             UndividedByARelation.Working working = place.worked().stops().operations();
             WhatAWayLeavesOfAValue left = place.aRowArrives()
@@ -179,21 +184,81 @@ final class StopAssessment {
                         || left.noRowTakesItPastItsEnds(operations.get(at))) {
                     out.add(new Judgement.Safe(site, WhyNone.WITHIN_ITS_ENDS));
                 } else {
-                    out.add(aStopIn(each, place, site, read));
-                }
-            }
-            for (UndividedByARelation.Division division : working.divisions()) {
-                Site site = new Site.ByNought(division);
-                if (left == null) {
-                    out.add(new Judgement.Safe(site, WhyNone.NOT_WORKED_OUT));
-                } else if (left.keepsAwayFromNought(division.divisor())) {
-                    out.add(new Judgement.Safe(site, WhyNone.DIVISOR_AWAY_FROM_NOUGHT));
-                } else {
-                    out.add(aStopIn(each, place, site, read));
+                    out.add(aStopIn(each, place, site, known, read));
                 }
             }
         }
+        out.addAll(divisionsOf(each, places, divisors, read));
         return out;
+    }
+
+    /**
+     * What each quotient evaluating the comparison always works out is divided by, as a form of
+     * the value at a place of the input, in the order they are worked out; null for a divisor that
+     * is no such place, which the owner of what it is answers for and no stop is told of here.
+     */
+    private static List<LinearForm<NumericTerm>> divisorsOf(ComparisonReadings.Reading each,
+                                                            InputReading read) {
+        List<LinearForm<NumericTerm>> out = new ArrayList<>();
+        for (Core.Binary quotient : each.quotients()) {
+            LinearForm<NumericTerm> form = AffineReading.formOf(quotient.right(), each.reads(),
+                    read, new ElementsMet(), AffineReading.Unkept.EVERY_NAME_AFRESH);
+            out.add(form != null && form.coefs().keySet().stream()
+                    .allMatch(NumericTerm.ValueOf.class::isInstance) ? form : null);
+        }
+        return out;
+    }
+
+    /**
+     * What is shown of each quotient the comparison always works out, which a run works out
+     * wherever it evaluates the comparison and stops at where the divisor is nought. None stops
+     * where the way to the comparison, at each place it is worked out, keeps the divisor from
+     * nought. A stop is looked for where the comparison is worked out at one place, what is worked
+     * out there is all told, and the quotients before it have a divisor that is a form of the
+     * input's numbers and is not nought.
+     */
+    private static List<Judgement> divisionsOf(ComparisonReadings.Reading each,
+                                               List<Place> places,
+                                               List<LinearForm<NumericTerm>> divisors,
+                                               InputReading read) {
+        List<Judgement> out = new ArrayList<>();
+        Place beside = new Place(new ComparisonReadings.Reading.WorkedOutAt(
+                StopEvidence.ofWhatIsToldOf(UndividedByARelation.Working.NO_STOPS), null, null),
+                true, each.assumed());
+        List<Place> comparison = places.isEmpty() ? List.of(beside) : places;
+        for (int at = 0; at < divisors.size(); at++) {
+            if (divisors.get(at) == null) {
+                continue;
+            }
+            LinearForm<NumericTerm> divisor = divisors.get(at);
+            Site site = new Site.ByNought(divisor);
+            List<LinearForm<NumericTerm>> before = divisors.subList(0, at);
+            // Wherever the comparison is worked out, along the way to it there.
+            if (comparison.stream().allMatch(place -> {
+                WhatAWayLeavesOfAValue left = place.aRowArrives()
+                        ? WhatAWayLeavesOfAValue.along(read, place.way()) : null;
+                return left == null || left.keepsAwayFromNought(divisor);
+            })) {
+                out.add(new Judgement.Safe(site, WhyNone.DIVISOR_AWAY_FROM_NOUGHT));
+            } else if (places.size() > 1 || before.contains(null)) {
+                out.add(new Judgement.Unresolved(site, before.contains(null)
+                        ? WhyAStopIsNotShown.NOT_OVER_THE_INPUT
+                        : WhyAStopIsNotShown.NOT_EVERY_OPERATION_TOLD));
+            } else {
+                out.add(aStopIn(each, comparison.getFirst(), site, before, read));
+            }
+        }
+        return out;
+    }
+
+    /** Whether some quotient the comparison always works out may have its divisor at nought: a run
+     *  is shown to stop there, or is not shown not to. What the rows that get past it leave of
+     *  the numbers says nothing of the divisor at nought. */
+    static boolean mayDivideByNought(List<Judgement> judged) {
+        return judged.stream().anyMatch(each -> each instanceof Judgement.Stops(Shown shown)
+                ? shown.site() instanceof Site.ByNought
+                : each instanceof Judgement.Unresolved(var site, var _)
+                        && site instanceof Site.ByNought);
     }
 
     /**
@@ -238,7 +303,7 @@ final class StopAssessment {
      * asked first, and a value is looked for only where all of them are answered.
      */
     private static Judgement aStopIn(ComparisonReadings.Reading each, Place place, Site site,
-                                     InputReading read) {
+                                     List<LinearForm<NumericTerm>> quotients, InputReading read) {
         UndividedByARelation.Working working = place.worked().stops().operations();
         if (place.worked().madeWhere() != null) {
             return new Judgement.Unresolved(site, WhyAStopIsNotShown.ON_AN_APPLICATION);
@@ -247,9 +312,9 @@ final class StopAssessment {
             return new Judgement.Unresolved(site, WhyAStopIsNotShown.ON_AN_ARM);
         }
         // A working is not on every run where the expression the comparison was stopped at may
-        // end a run before the operations it tells. A quotient is that expression or lies in it,
-        // is worked out wherever the comparison is, and is asked of what is worked out before it
-        // below, so only an operation is asked of the rest being worked out on every run.
+        // end a run before the operations it tells. A quotient is worked out wherever the
+        // comparison is ({@link QuotientsEveryRunWorksOut}), so only an operation is asked of the
+        // rest being worked out on every run.
         if (!working.exact() || working.aStopUntold()
                 || (site instanceof Site.PastItsEnds && !working.onEveryRun())) {
             return new Judgement.Unresolved(site, WhyAStopIsNotShown.NOT_EVERY_OPERATION_TOLD);
@@ -279,21 +344,14 @@ final class StopAssessment {
                 others.add(it);
             }
         }
-        List<UndividedByARelation.Division> dividing = new ArrayList<>();
-        for (UndividedByARelation.Division it : working.divisions()) {
-            if (!(site instanceof Site.ByNought(var division) && division == it)
-                    && !it.after().contains(at)) {
-                dividing.add(it);
-            }
-        }
         Set<NumericTerm> numbers = new LinkedHashSet<>();
         List<LinearForm<NumericTerm>> forms = new ArrayList<>();
         forms.add(switch (site) {
             case Site.PastItsEnds(var operation) -> operation.overTheInput();
-            case Site.ByNought(var division) -> division.divisor();
+            case Site.ByNought(var divisor) -> divisor;
         });
         others.forEach(it -> forms.add(it.overTheInput()));
-        dividing.forEach(it -> forms.add(it.divisor()));
+        forms.addAll(quotients);
         way.forEach(it -> forms.add(it.form()));
         Set<TermPath> places = new LinkedHashSet<>();
         for (LinearForm<NumericTerm> one : forms) {
@@ -312,7 +370,7 @@ final class StopAssessment {
             return new Judgement.Unresolved(site, WhyAStopIsNotShown.NO_VALUE_SHOWN);
         }
         int[] left = {MOST_VALUES_TRIED};
-        Before before = new Before(others, dividing, way);
+        Before before = new Before(others, quotients, way);
         Shown shown = aValueItStopsAt(site, before, List.copyOf(numbers), read, left);
         if (shown != null) {
             return new Judgement.Stops(shown);
@@ -339,7 +397,7 @@ final class StopAssessment {
      * operation within its ends and every quotient with its divisor away from nought.
      */
     private record Before(List<UndividedByARelation.IntOperation> operations,
-                          List<UndividedByARelation.Division> divisions,
+                          List<LinearForm<NumericTerm>> divisors,
                           List<TakenConstraint.Affine> way) {}
 
     /**
@@ -354,7 +412,7 @@ final class StopAssessment {
                                          InputReading read, int[] left) {
         LinearForm<NumericTerm> form = switch (site) {
             case Site.PastItsEnds(var operation) -> operation.overTheInput();
-            case Site.ByNought(var division) -> division.divisor();
+            case Site.ByNought(var divisor) -> divisor;
         };
         List<TakenConstraint.Affine> way = before.way();
         Map<NumericTerm, List<ExactRatio>> tried = new LinkedHashMap<>();
@@ -466,8 +524,8 @@ final class StopAssessment {
                 return false;
             }
         }
-        for (UndividedByARelation.Division other : before.divisions()) {
-            ExactRatio divisor = WholeValuesMeeting.valueOf(other.divisor(), at);
+        for (LinearForm<NumericTerm> other : before.divisors()) {
+            ExactRatio divisor = WholeValuesMeeting.valueOf(other, at);
             if (divisor == null || divisor.signum() == 0) {
                 return false;
             }
@@ -477,9 +535,9 @@ final class StopAssessment {
                 ExactRatio comes = WholeValuesMeeting.valueOf(operation.overTheInput(), at);
                 yield comes != null && !withinItsEnds(comes, operation);
             }
-            case Site.ByNought(var division) -> {
-                ExactRatio divisor = WholeValuesMeeting.valueOf(division.divisor(), at);
-                yield divisor != null && divisor.signum() == 0;
+            case Site.ByNought(var divisor) -> {
+                ExactRatio comes = WholeValuesMeeting.valueOf(divisor, at);
+                yield comes != null && comes.signum() == 0;
             }
         };
     }

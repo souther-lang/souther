@@ -343,6 +343,9 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      *                   ({@link WhatARunWorksOutBeforeACount#workedOutBeforeAConstruction}); empty
      *                   where that is not shown, and inside a helper's body read at a call, whose
      *                   parts before it are not this body's
+     * @param quotients  the quotients evaluating the comparison always works out, in the order
+     *                   it works them out ({@link QuotientsEveryRunWorksOut}): none for an
+     *                   application, which states no comparison to evaluate
      */
     record Reading(ConstructOccurrence occurrence, Stated statement, Citation at,
                    InputReads reads,
@@ -357,7 +360,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                    Supplier<Boolean> beforeIt,
                    Function<Core.Construct,
                            Optional<WhatARunWorksOutBeforeACount.BeforeAConstruction>>
-                           beforeAConstruction) {
+                           beforeAConstruction,
+                   List<Core.Binary> quotients) {
 
         Reading {
             if (occurrence == null || statement == null || at == null
@@ -1306,7 +1310,9 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     made -> in.context().equals(CallContext.OF_THE_BODY)
                             ? WhatARunWorksOutBeforeACount.workedOutBeforeAConstruction(in.root(),
                                     e, made)
-                            : Optional.empty()));
+                            : Optional.empty(),
+                    stated.statement() instanceof Stated.AComparison
+                            ? QuotientsEveryRunWorksOut.in(e) : List.of()));
         }
         // A fork the reading of the runs takes a way out of, under the closures the walk is in. A
         // value standing as a wider type is no fork, and a fork under it is met one step down.
