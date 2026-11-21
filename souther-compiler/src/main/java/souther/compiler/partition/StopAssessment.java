@@ -7,6 +7,7 @@ import souther.compiler.core.Core;
 import souther.compiler.core.Evaluated;
 import souther.compiler.inputs.AStopNotShown;
 import souther.compiler.inputs.AStopShown;
+import souther.compiler.inputs.InputFact;
 import souther.compiler.inputs.ElementsMet;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
@@ -469,11 +470,23 @@ final class StopAssessment {
                 List<AStopShown.NumberAt> at = new ArrayList<>();
                 for (Position place : read.domain().positions()) {
                     ExactRatio held = shown.at().get(new NumericTerm.ValueOf(place.path()));
-                    if (held != null) {
+                    if (held != null && !AValueOfTheInput.ofTheOnlyElement(place.path())) {
                         at.add(new AStopShown.NumberAt(place.path(), held.floor().orNull()));
                     }
                 }
-                out.add(new AStopShown(shown.site().written(), at));
+                List<InputFact> structure = new ArrayList<>();
+                shown.at().forEach((term, held) -> {
+                    if (term instanceof NumericTerm.TakenOf count
+                            && AValueOfTheInput.howManyItHolds(count)) {
+                        structure.add(new InputFact.ListLength(count.position(),
+                                held.floor().orNull().intValueExact()));
+                    } else if (term instanceof NumericTerm.ValueOf(TermPath place)
+                            && AValueOfTheInput.ofTheOnlyElement(place)) {
+                        structure.add(new InputFact.ListElement(
+                                place.prefix(place.steps().size() - 1), 0, held.floor().orNull()));
+                    }
+                });
+                out.add(new AStopShown(shown.site().written(), at, structure));
             }
         }
         return out;
@@ -543,38 +556,75 @@ final class StopAssessment {
         List<UndividedByARelation.IntOperation> kept = others.stream()
                 .filter(left::keepsWithinItsEnds).toList();
         others.removeAll(kept);
-        Set<NumericTerm> numbers = new LinkedHashSet<>();
+        // What the site is over, as numbers of the input: where it is over a value a run works out,
+        // by each way a row makes that value come to a number, which a stop is looked for by in
+        // turn.
+        List<Attainment> attained = switch (site) {
+            case Site.PastItsEnds(var operation) -> operation.overTheInputAttained();
+            case Site.ByNought(var divisor) -> divisor == null ? List.of()
+                    : List.of(Attainment.always(divisor));
+        };
+        if (attained.isEmpty()) {
+            return new Judgement.Unresolved(site, WhyAStopIsNotShown.NOT_OVER_THE_INPUT);
+        }
+        Judgement notShown = null;
+        for (Attainment how : attained) {
+            Judgement one = aStopAttainedBy(how, site, others, quotients, kept, way, read);
+            if (one instanceof Judgement.Stops) {
+                return one;
+            }
+            notShown = notShown == null ? one : notShown;
+        }
+        return notShown;
+    }
+
+    /**
+     * That a run stops at {@code site}, which is over the numbers of the input as {@code how} says,
+     * or why that is not shown: a value of the input is looked for that meets {@code way} and what
+     * {@code how} holds, gets past {@code others} and {@code quotients}, and takes the site past
+     * its ends. {@code kept} are what that value is then held against.
+     */
+    private static Judgement aStopAttainedBy(Attainment how, Site site,
+                                             List<UndividedByARelation.IntOperation> others,
+                                             List<LinearForm<NumericTerm>> quotients,
+                                             List<UndividedByARelation.IntOperation> kept,
+                                             List<TakenConstraint.Affine> way, InputReading read) {
+        List<TakenConstraint.Affine> holding = new ArrayList<>(way);
+        holding.addAll(how.holding());
         List<LinearForm<NumericTerm>> forms = new ArrayList<>();
-        forms.add(switch (site) {
-            case Site.PastItsEnds(var operation) -> operation.overTheInput();
-            case Site.ByNought(var divisor) -> divisor;
-        });
+        forms.add(how.form());
         others.forEach(it -> forms.add(it.overTheInput()));
         forms.addAll(quotients);
-        way.forEach(it -> forms.add(it.form()));
-        Set<TermPath> places = new LinkedHashSet<>();
+        holding.forEach(it -> forms.add(it.form()));
+        Set<NumericTerm> numbers = new LinkedHashSet<>();
         for (LinearForm<NumericTerm> one : forms) {
             if (one == null) {
                 return new Judgement.Unresolved(site, WhyAStopIsNotShown.NOT_OVER_THE_INPUT);
             }
-            for (NumericTerm term : one.coefs().keySet()) {
-                if (!(term instanceof NumericTerm.ValueOf(TermPath position))) {
-                    return new Judgement.Unresolved(site, WhyAStopIsNotShown.NOT_OVER_THE_INPUT);
+            numbers.addAll(one.coefs().keySet());
+        }
+        // A list's one element is a number of a list of one: how many it holds is asked beside it.
+        for (NumericTerm term : List.copyOf(numbers)) {
+            if (term instanceof NumericTerm.ValueOf(TermPath place)
+                    && AValueOfTheInput.ofTheOnlyElement(place)) {
+                NumericTerm count = AValueOfTheInput.howMany(
+                        place.prefix(place.steps().size() - 1), read);
+                if (count == null) {
+                    return new Judgement.Unresolved(site, WhyAStopIsNotShown.NO_VALUE_SHOWN);
                 }
-                numbers.add(term);
-                places.add(position);
+                numbers.add(count);
             }
         }
         // A value of the input holding them exists where they meet what the input's declarations
-        // ask of the places, which the value looked for is asked to meet with the way.
+        // ask of them, which the value looked for is asked to meet with the way.
         Optional<AValueOfTheInput.Meets> declared =
-                AValueOfTheInput.whatAValueAtThemMeets(read, places);
+                AValueOfTheInput.whatAValueAtTheseTermsMeets(read, numbers);
         if (declared.isEmpty()) {
             return new Judgement.Unresolved(site, WhyAStopIsNotShown.NO_VALUE_SHOWN);
         }
-        way.addAll(declared.get().constraints());
+        holding.addAll(declared.get().constraints());
         int[] tries = {MOST_VALUES_TRIED};
-        Before before = new Before(others, quotients, way, declared.get());
+        Before before = new Before(how.form(), others, quotients, holding, declared.get());
         Shown shown = aValueItStopsAt(site, before, List.copyOf(numbers), read, tries);
         if (shown != null) {
             return new Judgement.Stops(againstWhatIsKept(shown, kept));
@@ -641,10 +691,13 @@ final class StopAssessment {
      * What a run that stops at a site has got past before it: the conditions of the way, every
      * operation within its ends and every quotient with its divisor away from nought.
      *
+     * @param site     what the site comes to, as numbers of the input: the form of the operation,
+     *                 or of the divisor
      * @param declared what a value of the input holding the numbers has to meet: the way holds
      *                 its constraints, and its ties are asked of each value found
      */
-    private record Before(List<UndividedByARelation.IntOperation> operations,
+    private record Before(LinearForm<NumericTerm> site,
+                          List<UndividedByARelation.IntOperation> operations,
                           List<LinearForm<NumericTerm>> divisors,
                           List<TakenConstraint.Affine> way, AValueOfTheInput.Meets declared) {}
 
@@ -658,10 +711,7 @@ final class StopAssessment {
      */
     private static Shown aValueItStopsAt(Site site, Before before, List<NumericTerm> numbers,
                                          InputReading read, int[] left) {
-        LinearForm<NumericTerm> form = switch (site) {
-            case Site.PastItsEnds(var operation) -> operation.overTheInput();
-            case Site.ByNought(var divisor) -> divisor;
-        };
+        LinearForm<NumericTerm> form = before.site();
         List<TakenConstraint.Affine> way = before.way();
         Map<NumericTerm, List<ExactRatio>> tried = new LinkedHashMap<>();
         for (NumericTerm number : numbers) {
@@ -778,15 +828,10 @@ final class StopAssessment {
                 return false;
             }
         }
-        boolean stops = switch (site) {
-            case Site.PastItsEnds(var operation) -> {
-                ExactRatio comes = WholeValuesMeeting.valueOf(operation.overTheInput(), at);
-                yield comes != null && !withinItsEnds(comes, operation);
-            }
-            case Site.ByNought(var divisor) -> {
-                ExactRatio comes = WholeValuesMeeting.valueOf(divisor, at);
-                yield comes != null && comes.signum() == 0;
-            }
+        ExactRatio comes = WholeValuesMeeting.valueOf(before.site(), at);
+        boolean stops = comes != null && switch (site) {
+            case Site.PastItsEnds(var operation) -> !withinItsEnds(comes, operation);
+            case Site.ByNought _ -> comes.signum() == 0;
         };
         return stops && before.declared().tiesHoldAt(at);
     }

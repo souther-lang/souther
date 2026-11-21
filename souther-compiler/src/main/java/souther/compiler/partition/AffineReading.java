@@ -1733,7 +1733,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     if (aside.aChoice) {
                         aside.rangeIs(rangeOfTheArms(node, at));
                     } else if (aside.range == null) {
-                        aside.originIs(reached.originOf(new Denotation(node, at)));
+                        Denotation held = new Denotation(node, at);
+                        aside.originIs(reached.originOf(held), reached.attainmentsOf(held));
                     }
                 }
                 return new AffineForms.Leaf.Form<>(LinearForm.atom(aside.atom));
@@ -2718,7 +2719,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                             .filter(each -> each.atom.equals(atom)).findFirst()
                             .<UndividedByARelation.IntOperand>map(each ->
                                     new UndividedByARelation.IntOperand.OfAValueWorkedOut(atom,
-                                            each.origin))
+                                            each.origin, each.attainments))
                             .orElseGet(() -> new UndividedByARelation.IntOperand.OfTheInput(atom)))),
                     held.least(), held.greatest(), after);
             if (!UndividedByARelation.stopsNoRow(operation, ofTheInput)) {
@@ -3650,6 +3651,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             /** Where {@link #range} comes from, which a way to the comparison may narrow; null
              *  where the range is not known. */
             private WhereAValueComesFrom origin;
+            /** How a row makes the expression come to a number, where that is known. */
+            private List<Attainment> attainments = List.of();
             /** The bound value the derivation reads the expression as, where an operation of
              *  whole numbers can be over it; null otherwise. */
             private UndividedByARelation.IntOperand.OfABinding bound;
@@ -3678,9 +3681,10 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             }
 
             /** That the expression comes to what {@code origin} says, from where it says. */
-            void originIs(WhereAValueComesFrom origin) {
+            void originIs(WhereAValueComesFrom origin, List<Attainment> attainments) {
                 this.origin = origin;
                 this.range = origin == null ? null : origin.range();
+                this.attainments = attainments;
             }
 
             void boundIs(UndividedByARelation.IntOperand.OfABinding bound) {

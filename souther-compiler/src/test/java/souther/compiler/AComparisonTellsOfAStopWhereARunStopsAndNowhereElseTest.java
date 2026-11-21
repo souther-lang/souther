@@ -167,12 +167,7 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
                 + "container holds is no term (FormRange.aTotal asks of a sum)");
         FORMS.put("productOfTheElements", "List.product(ds) >= 10");
         FORMS.put("maxOfAStep", "Option.withDefault(0, List.max(List.map(x -> x + 1, ds))) >= 3");
-        NOT_TOLD.put("maxPlusOne", "the operation over what the option holds is told on the arm "
-                + "of the match that opens it, the list holding an element, and a stop on an arm "
-                + "is not shown (StopAssessment): said as not resolved");
         FORMS.put("maxPlusOne", "Option.withDefault(0, List.max(ds)) + 1 <= 10");
-        NOT_TOLD.put("maxOfAWrittenListPlusOne", "the same, on an arm every run takes");
-        NOT_TOLD.put("defaultPastTheTypePlusOne", "the same, where the default is past the type");
         // what an option holds, from the elements of the list or the default: a stop where one of
         // them is past where the operation keeps within the type, and none where none is
         FORMS.put("maxOfAWrittenListPlusOne", "Option.withDefault(0, List.max([q, 3])) + 1 >= 3");
@@ -346,9 +341,9 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
         notShown("an operation worked out on each application of a closure", "lengthOfAStep",
                 "lengthOfACancelledStep", "lengthOfAConditionStep", "lengthOfAFlatStep",
                 "lengthOfAShiftedStep", "lengthOfASortedStep", "lengthOfAStepAtAnIndex",
-                "lengthOfAStepInAWrittenList", "lengthOfATakenStep", "lengthOfATupleStep",
+                "lengthOfAStepInAWrittenList", "lengthOfATupleStep",
                 "lengthOfAnUnusedBinding", "lengthOfACancelledConstantStep", "emptyOfAStep",
-                "everyOfAStep", "everyOfAShiftedStep", "maxOfAStep", "maxOfAStepByQ",
+                "everyOfAStep", "everyOfAShiftedStep",
                 "totalOfAStep", "totalOfAStepOverAStep", "totalOfTakenSteps", "foldOfAStep",
                 "totalOfThePositionsTimesTheElements", "totalOfTheSameChoice");
         notShown("a total of the elements, worked out exactly: no value of the elements is put "

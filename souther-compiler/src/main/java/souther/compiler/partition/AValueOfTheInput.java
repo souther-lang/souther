@@ -4,6 +4,7 @@ import souther.compiler.check.DeclarationMeaning;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.PublishedDeclarationResult;
+import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.RuleKey;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Shape;
@@ -20,6 +21,9 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
+import souther.compiler.numeric.ValueTransformation;
+import souther.compiler.semantics.TakenArguments;
+import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
@@ -28,6 +32,7 @@ import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -68,23 +73,112 @@ final class AValueOfTheInput {
      * meet the ties as well ({@link Meets#tiesHoldAt}).
      */
     static Optional<Meets> whatAValueAtThemMeets(InputReading read, Collection<TermPath> places) {
-        Optional<Found> found = runsAt(read, places);
+        return whatAValueAtTheseTermsMeets(read, places.stream()
+                .<NumericTerm>map(NumericTerm.ValueOf::new).toList());
+    }
+
+    /**
+     * {@link #whatAValueAtThemMeets} for numbers of the input that are not all a number a place
+     * holds: how many a list holds, and the one element of a list that holds one.
+     *
+     * <p>A list is a value wherever it stands that no clause is written on, and holds any number
+     * of elements, each any number its type holds. So how many it holds is a number from nought,
+     * and its element is asked only of a list of one ({@link #ofTheOnlyElement}): the one
+     * element is every element it has, which is what makes a number asked of an element the
+     * number of the element a call answered of it.
+     */
+    static Optional<Meets> whatAValueAtTheseTermsMeets(InputReading read,
+                                                       Collection<NumericTerm> terms) {
+        Set<TermPath> numbers = new LinkedHashSet<>();
+        Lists lists = new Lists();
+        for (NumericTerm term : terms) {
+            switch (term) {
+                case NumericTerm.ValueOf(TermPath place) when ofTheOnlyElement(place) ->
+                        lists.elements.add(place.prefix(place.steps().size() - 1));
+                case NumericTerm.ValueOf(TermPath place) -> numbers.add(place);
+                case NumericTerm.TakenOf count when howManyItHolds(count) ->
+                        lists.counted.add(count.position());
+                default -> {
+                    return Optional.empty();
+                }
+            }
+        }
+        Set<TermPath> places = new LinkedHashSet<>(numbers);
+        places.addAll(lists.counted);
+        places.addAll(lists.elements);
+        Optional<Found> found = runsAt(read, places, lists);
         if (found.isEmpty()) {
             return Optional.empty();
         }
         List<TakenConstraint.Affine> out = new ArrayList<>();
-        found.get().runs().forEach((place, run) -> {
-            NumericTerm number = new NumericTerm.ValueOf(place);
-            if (run.least() != null) {
-                out.add(new TakenConstraint.Affine(LinearForm.atomMinusConstant(number,
-                        ExactRatio.of(run.least())), Rel.GE));
+        for (Map.Entry<TermPath, WholeRun> each : found.get().runs().entrySet()) {
+            if (!lists.counted.contains(each.getKey()) && !lists.elements.contains(each.getKey())) {
+                within(new NumericTerm.ValueOf(each.getKey()), each.getValue(), out);
             }
-            if (run.greatest() != null) {
-                out.add(new TakenConstraint.Affine(LinearForm.atomMinusConstant(number,
-                        ExactRatio.of(run.greatest())), Rel.LE));
+        }
+        for (TermPath list : lists.each()) {
+            NumericTerm count = howMany(list, read);
+            if (count == null) {
+                return Optional.empty();
             }
-        });
+            within(count, found.get().runs().get(list), out);
+            if (lists.elements.contains(list)) {
+                out.add(new TakenConstraint.Affine(
+                        LinearForm.atomMinusConstant(count, ExactRatio.ONE), Rel.EQ));
+                within(new NumericTerm.ValueOf(list.element()), lists.elementRuns.get(list), out);
+            }
+        }
         return Optional.of(new Meets(List.copyOf(out), found.get().ties()));
+    }
+
+    /** {@code number} held to {@code run}, as constraints put on {@code out}. */
+    private static void within(NumericTerm number, WholeRun run,
+                               List<TakenConstraint.Affine> out) {
+        if (run.least() != null) {
+            out.add(new TakenConstraint.Affine(LinearForm.atomMinusConstant(number,
+                    ExactRatio.of(run.least())), Rel.GE));
+        }
+        if (run.greatest() != null) {
+            out.add(new TakenConstraint.Affine(LinearForm.atomMinusConstant(number,
+                    ExactRatio.of(run.greatest())), Rel.LE));
+        }
+    }
+
+    /** The lists a number is asked of: those whose size is, and those whose one element is. The
+     *  elements' runs are what the walk found each of the elements of such a list to hold. */
+    private static final class Lists {
+
+        final Set<TermPath> counted = new LinkedHashSet<>();
+        final Set<TermPath> elements = new LinkedHashSet<>();
+        final Map<TermPath, WholeRun> elementRuns = new LinkedHashMap<>();
+
+        /** Every list asked, once. */
+        Set<TermPath> each() {
+            Set<TermPath> all = new LinkedHashSet<>(counted);
+            all.addAll(elements);
+            return all;
+        }
+    }
+
+    /** Whether {@code place} is the place every element of a list stands at. */
+    static boolean ofTheOnlyElement(TermPath place) {
+        return !place.steps().isEmpty() && place.steps().getLast() instanceof TermPath.Step.Element;
+    }
+
+    /** Whether {@code term} is how many a list holds, as it stands. */
+    static boolean howManyItHolds(NumericTerm.TakenOf term) {
+        return term.takenAs() instanceof TakenAs.HowManyItHolds
+                && term.transformation() instanceof ValueTransformation.Identity
+                && TakenArguments.NONE.equals(term.arguments());
+    }
+
+    /** How many the list at {@code list} holds, as the number a rule counts, or null where the
+     *  place is no list. */
+    static NumericTerm howMany(TermPath list, InputReading read) {
+        Type type = read.domain().typeAt(list, read.rules());
+        var counting = type == null ? null : NumericMeasures.takenOf(type, read.rules().inners());
+        return counting == null ? null : NumericTerm.TakenOf.howManyHeldAt(counting, list, type,
+                read.rules().inners(), read.rules().symbols());
     }
 
     /**
@@ -133,7 +227,8 @@ final class AValueOfTheInput {
      */
     static Optional<Map<TermPath, WholeRun>> wholeNumbersAt(InputReading read,
                                                             Collection<TermPath> places) {
-        return runsAt(read, places).filter(found -> found.ties().isEmpty()).map(Found::runs);
+        return runsAt(read, places, new Lists()).filter(found -> found.ties().isEmpty())
+                .map(Found::runs);
     }
 
     /** What {@code places} each hold, and the ties among them. */
@@ -164,12 +259,13 @@ final class AValueOfTheInput {
 
     /** What {@code places} each hold, as the walk of the input finds it, or nothing where a value
      *  holding any whole number within that at each is not shown. */
-    private static Optional<Found> runsAt(InputReading read, Collection<TermPath> places) {
+    private static Optional<Found> runsAt(InputReading read, Collection<TermPath> places,
+                                          Lists lists) {
         Map<TermPath, WholeRun> out = new LinkedHashMap<>();
         List<Tie> ties = new ArrayList<>();
         Set<TermPath> asked = Set.copyOf(places);
         for (InputDomain.Parameter each : read.domain().parameters()) {
-            if (walk(TermPath.of(each.name()), each.type(), asked, read, out, ties) < 0) {
+            if (walk(TermPath.of(each.name()), each.type(), asked, lists, read, out, ties) < 0) {
                 return Optional.empty();
             }
         }
@@ -179,6 +275,9 @@ final class AValueOfTheInput {
         // Within what the place's own order holds as well: an Int stops at its ends and a date
         // at the calendar's, whatever the rules leave it, and a run past them holds nothing.
         for (Map.Entry<TermPath, WholeRun> each : out.entrySet()) {
+            if (lists.counted.contains(each.getKey()) || lists.elements.contains(each.getKey())) {
+                continue;
+            }
             WholeRun run = withinTheEnds(each.getValue(),
                     FormRange.endsOf(new NumericTerm.ValueOf(each.getKey()), read));
             if (run == null) {
@@ -211,11 +310,19 @@ final class AValueOfTheInput {
      * there, what each holds put on {@code out} and the ties among them on {@code ties}, or -1
      * where no value is shown.
      */
-    private static int walk(TermPath at, Type type, Set<TermPath> places, InputReading read,
-                            Map<TermPath, WholeRun> out, List<Tie> ties) {
+    private static int walk(TermPath at, Type type, Set<TermPath> places, Lists lists,
+                            InputReading read, Map<TermPath, WholeRun> out, List<Tie> ties) {
         RuleReadingSource rules = read.rules();
         TypeView view = TypeView.of(type, rules.inners(), rules.symbols(), rules.kinds(),
                 rules.sums());
+        if (lists.counted.contains(at) || lists.elements.contains(at)) {
+            WholeRun count = heldList(view, at, lists, read);
+            if (count == null) {
+                return -1;
+            }
+            out.put(at, count);
+            return 1;
+        }
         if (places.contains(at)) {
             WholeRun run = held(view, read);
             if (run == null) {
@@ -238,13 +345,44 @@ final class AValueOfTheInput {
         }
         int found = 0;
         for (Map.Entry<String, Type> field : product.fields().entrySet()) {
-            int here = walk(at.then(field.getKey()), field.getValue(), places, read, out, ties);
+            int here = walk(at.then(field.getKey()), field.getValue(), places, lists, read, out,
+                    ties);
             if (here < 0) {
                 return -1;
             }
             found += here;
         }
         return found;
+    }
+
+    /**
+     * What a list at {@code at} holds of how many it has: any whole number from nought, and a run
+     * of the numbers its element holds where its one element is asked, put on
+     * {@code lists}. A list is a value wherever no clause is written on the name it is held
+     * under; and a set is one with a number of elements of its own, which is no list's. Null where
+     * that is not shown.
+     */
+    private static WholeRun heldList(TypeView view, TermPath at, Lists lists, InputReading read) {
+        if (!(view.shape() instanceof Shape.Sequence(Shape.Sequence.Kind kind, Type element))
+                || kind != Shape.Sequence.Kind.LIST
+                || !view.wrappers().stream().allMatch(name -> writesNoClause(name, read.rules()))) {
+            return null;
+        }
+        if (lists.elements.contains(at)) {
+            RuleReadingSource rules = read.rules();
+            WholeRun held = held(TypeView.of(element, rules.inners(), rules.symbols(),
+                    rules.kinds(), rules.sums()), read);
+            if (held == null) {
+                return null;
+            }
+            WholeRun run = withinTheEnds(held,
+                    FormRange.endsOf(new NumericTerm.ValueOf(at.element()), read));
+            if (run == null) {
+                return null;
+            }
+            lists.elementRuns.put(at, run);
+        }
+        return new WholeRun(BigInteger.ZERO, null);
     }
 
     /**

@@ -348,6 +348,49 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
 
         /**
+         * Each way this is over numbers of the input alone: as it is, where it is over nothing
+         * else, and otherwise by each way a row makes every value it is over come to a number
+         * ({@link Attainment}), with what a row meets for that. None where some value it is over
+         * has no such way.
+         */
+        List<Attainment> overTheInputAttained() {
+            LinearForm<NumericTerm> alone = overTheInput();
+            if (alone != null) {
+                return List.of(Attainment.always(alone));
+            }
+            List<Attainment> out = List.of(Attainment.always(LinearForm.constant(
+                    form.constant())));
+            for (Map.Entry<IntOperand, ExactRatio> operand : form.coefs().entrySet()) {
+                List<Attainment> ways = switch (operand.getKey()) {
+                    case IntOperand.OfTheInput(NumericTerm term) ->
+                            List.of(Attainment.always(LinearForm.atom(term)));
+                    case IntOperand.OfAValueWorkedOut worked -> worked.attainments();
+                    default -> List.of();
+                };
+                if (ways.isEmpty()) {
+                    return List.of();
+                }
+                List<Attainment> next = new ArrayList<>();
+                for (Attainment sofar : out) {
+                    for (Attainment way : ways) {
+                        LinearForm<NumericTerm> scaled = way.form().times(operand.getValue())
+                                .orNull();
+                        LinearForm<NumericTerm> sum = scaled == null ? null
+                                : sofar.form().plus(scaled).orNull();
+                        if (sum == null) {
+                            return List.of();
+                        }
+                        List<TakenConstraint.Affine> holding = new ArrayList<>(sofar.holding());
+                        holding.addAll(way.holding());
+                        next.add(new Attainment(sum, holding));
+                    }
+                }
+                out = next;
+            }
+            return out;
+        }
+
+        /**
          * Whether the rows a run stops at in this can be said as {@link #placedOnRows} says them.
          * Where they cannot, as for a total over a container, which stops a run where it is
          * worked out exactly past its type and not where its place is, or for a number written
@@ -496,14 +539,18 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
          * numbers it is known to come to come from. No row of the input says which of them a run
          * gets, so no row is placed at an operation over it, and that some of them take the
          * operation past its type says no run stops in it: only that a way that keeps them all
-         * within shows none does ({@link WhatAWayLeavesOfAValue}).
+         * within shows none does ({@link WhatAWayLeavesOfAValue}). A stop is shown at it only by
+         * the way a row makes the value come to a number ({@code attainments}), and where there
+         * is none it is not.
          */
-        record OfAValueWorkedOut(NumericTerm atom, WhereAValueComesFrom origin) implements IntOperand {
+        record OfAValueWorkedOut(NumericTerm atom, WhereAValueComesFrom origin,
+                                 List<Attainment> attainments) implements IntOperand {
 
             public OfAValueWorkedOut {
                 Objects.requireNonNull(atom, "the value as the reading held it aside");
                 Objects.requireNonNull(origin, "an operation over a value is told where what it "
                         + "comes to is known");
+                attainments = List.copyOf(attainments);
             }
 
             @Override
@@ -13693,7 +13740,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * element as a whole, is not shown to be met together with the end.
      *
      * <p>Which way a row is written in is the composer's, against what else the row asks of the
-     * same positions ({@code TermRealizations}); a place of the end never asks a case at a
+     * same positions ({@code TermAttainments}); a place of the end never asks a case at a
      * position the selection reads, since it would sit under it.
      */
     private static boolean aLoneElementMeetsTheSelectionBeside(KeptOccurrences selection,

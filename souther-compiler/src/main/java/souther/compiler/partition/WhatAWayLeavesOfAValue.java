@@ -84,7 +84,7 @@ final class WhatAWayLeavesOfAValue {
         for (UndividedByARelation.IntOperand each : operation.form().coefs().keySet()) {
             Optional<FormRange> left;
             if (each instanceof UndividedByARelation.IntOperand.OfAValueWorkedOut(var _,
-                    WhereAValueComesFrom origin)) {
+                    WhereAValueComesFrom origin, var _)) {
                 left = leftOf(origin);
             } else if (each instanceof UndividedByARelation.IntOperand.OfTheInput(
                     NumericTerm.FromOnePosition total) && FormRange.aTotal(total)

@@ -1329,6 +1329,118 @@ final class WorkedOutToReachIt {
         return originOf(value, onTheWay);
     }
 
+    /**
+     * Each way a row can make {@code value} come to a number of the input, as far as it is known
+     * ({@link Attainment}): a number written, what a place holds, what a name was given, and the
+     * element a call answers where that is one a row makes the only one, or the greatest or least
+     * of a list written out. Nothing where the value is anything else: the numbers it may come to
+     * ({@link #originOf}) say none of them is one a row gets.
+     */
+    List<Attainment> attainmentsOf(Denotation value) {
+        return attainmentsOf(value, onTheWay);
+    }
+
+    private List<Attainment> attainmentsOf(Denotation value, ArmsTaken arms) {
+        Core written = Core.withoutStanding(value.value());
+        Symbols symbols = read.rules().symbols();
+        DeclarationNewtypes newtypes = read.rules().newtypes();
+        if (value.at().folded(written, symbols, newtypes).orElse(null) instanceof Long number) {
+            return List.of(Attainment.always(LinearForm.constant(ExactRatio.of(number))));
+        }
+        if (written instanceof Core.FieldAccess || written instanceof Core.FieldProjection) {
+            return value.at().pathOf(written, newtypes) instanceof ValuesAt.At(var at)
+                    ? attainmentsAtAPlace(at, arms) : List.of();
+        }
+        if (!(written instanceof Core.Read name)) {
+            return List.of();
+        }
+        List<Denotation> given = boundTo(value);
+        if (given.isEmpty()) {
+            return value.at().pathOf(written, newtypes) instanceof ValuesAt.At(var at)
+                    ? attainmentsAtAPlace(at, arms)
+                    : attainmentsOfAnOpenedElement(name, value.at(), arms);
+        }
+        return given.size() == 1 ? attainmentsOf(given.getFirst(), arms) : List.of();
+    }
+
+    /** What {@code place} holds, where that is known ({@link #atAPlace}). */
+    private List<Attainment> attainmentsAtAPlace(TermPath place, ArmsTaken arms) {
+        return atAPlace(place, arms) == null ? List.of()
+                : List.of(Attainment.always(LinearForm.atom(new NumericTerm.ValueOf(place))));
+    }
+
+    /** The element an arm opened over the answer of a call, as {@link #originOfAnOpenedElement}
+     *  reads it. */
+    private List<Attainment> attainmentsOfAnOpenedElement(Core.Read name, InputReads at,
+                                                            ArmsTaken arms) {
+        InputReads.ElementOpened opened = at.elementOpenedBy(name.binding());
+        if (opened == null || !(AnOperationApplied.of(Core.withoutStanding(opened.call().value()))
+                instanceof AnOperationApplied answered)) {
+            return List.of();
+        }
+        var facts = DefaultBoundOperationFacts.get();
+        var container = facts.answersAnElementOf(answered.operation());
+        Core of = container == null ? null : answered.argument(container);
+        if (of == null) {
+            return List.of();
+        }
+        BoundOperationFacts.Extremity extremity = facts.answersAnExtremeElementOf(
+                answered.operation());
+        return attainmentsOfAnElementOf(new Denotation(of, opened.call().at()), arms,
+                extremity == null ? null : extremity.end());
+    }
+
+    /**
+     * How a row makes the element a call answered of {@code container} come to a number, where
+     * {@code end} says which end of the elements it is, and null where it is none.
+     *
+     * <p>Of a list written out: the end is element {@code i} where no other is past it, that
+     * comparison being what makes the run answer it; with no end, only a list of one element has
+     * one to answer. Of the elements at a place, the number a row's only element holds, which
+     * {@link AValueOfTheInput} asks of a list of one element and no other.
+     */
+    private List<Attainment> attainmentsOfAnElementOf(Denotation container, ArmsTaken arms,
+                                                        BoundOperationFacts.End end) {
+        List<Denotation> written = elementsWrittenOut(container);
+        if (written == null) {
+            return switch (container.at().everyElementOf(container.value(),
+                    read.rules().newtypes())) {
+                case ValuesHeld.At(TermPath at) -> attainmentsAtAPlace(at, arms);
+                case ValuesHeld.MayStandAt _, ValuesHeld.NotAPosition _ -> List.of();
+            };
+        }
+        List<Attainment> each = new ArrayList<>(written.size());
+        for (Denotation element : written) {
+            List<Attainment> one = attainmentsOf(element, arms);
+            if (one.size() != 1) {
+                return List.of();
+            }
+            each.add(one.getFirst());
+        }
+        if (end == null) {
+            return each.size() == 1 ? each : List.of();
+        }
+        List<Attainment> out = new ArrayList<>(each.size());
+        for (int chosen = 0; chosen < each.size(); chosen++) {
+            List<TakenConstraint.Affine> holding = new ArrayList<>(each.get(chosen).holding());
+            for (int other = 0; other < each.size(); other++) {
+                if (other == chosen) {
+                    continue;
+                }
+                holding.addAll(each.get(other).holding());
+                LinearForm<NumericTerm> past = end == BoundOperationFacts.End.GREATEST
+                        ? each.get(chosen).form().minus(each.get(other).form()).orNull()
+                        : each.get(other).form().minus(each.get(chosen).form()).orNull();
+                if (past == null) {
+                    return List.of();
+                }
+                holding.add(new TakenConstraint.Affine(past, Rel.GE));
+            }
+            out.add(new Attainment(each.get(chosen).form(), holding));
+        }
+        return List.copyOf(out);
+    }
+
     /** What {@link #originOf} answered of each expression, wherever it was read, for as long as
      *  this is asked: a chain of names is followed once however many expressions read it. The
      *  expression is the node written, and where it was read is told apart by what each name in
