@@ -186,6 +186,15 @@ class WhatStillHoldsAPlaceUnderAFindingIsReadOnTwoAxesTest {
                                 + " module, line and column the report says, made where the"
                                 + " construction is told what it asks, or show that nothing"
                                 + " carrying a rule a run may stop in crosses a module boundary")));
+        // A construction on the way to a rule of which neither a stop nor none is shown, held with
+        // why. The same place as above, said by the same words and document, and seen by nothing
+        // a compile of the models answers.
+        out.put("souther.compiler.inputs.AConstructionStopNotShown.at",
+                new Standing(new Because.NothingReachesOne(),
+                        new AcrossTheCut.BlocksIt("say where the construction is written as the"
+                                + " module, line and column the report says, made where the"
+                                + " construction is judged, or show that nothing carrying a rule"
+                                + " whose stop is not resolved crosses a module boundary")));
         return out;
     }
 

@@ -4,21 +4,29 @@ import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.WhatARunMayEndFor;
 import souther.compiler.core.Core;
 import souther.compiler.core.Evaluated;
+import souther.compiler.inputs.AConstructionStopNotShown;
 import souther.compiler.inputs.AConstructionStopShown;
 import souther.compiler.inputs.AStopShown;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Position;
+import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.WhatAConstructionAsks;
+import souther.compiler.inputs.WhyAConstructionStopIsNotShown;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.NumberSpace;
+import souther.compiler.numeric.NumericDomain;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -28,34 +36,37 @@ import java.util.Set;
 import java.util.function.Predicate;
 
 /**
- * Whether a run on the way to a comparison stops at each construction on the way that asks
- * something of it: shown not to, shown to, or neither — what {@link StopAssessment} answers of an
- * operation, answered of what a construction asks.
+ * Whether a run on the way to a comparison stops at each construction it may work out before it:
+ * shown not to, shown to, or neither — what {@link StopAssessment} answers of an operation,
+ * answered of a construction.
  *
  * <p>{@link Judgement.Safe} is a proof that every run taking the way to the comparison and getting
- * to the construction meets what it asks: the way holds it, or a construction every such run has
- * got past by then asks as much. {@link Judgement.Stops} is a proof that some run does not, and
- * rests on one value of the input that exists ({@link AValueOfTheInput}), meets every condition on
- * the way to the comparison, gets to the construction with nothing before it ending the run, and
- * does not meet what it asks. {@link Judgement.Unresolved} is everything else.
+ * to the construction meets what it asks: it asks nothing, the way to the comparison and to the
+ * construction holds it, no row takes both, or a construction every such run has got past by then
+ * asks as much. {@link Judgement.Stops} is a proof that some run does not, and rests on one value
+ * of the input that exists ({@link AValueOfTheInput}), meets every condition on the way to the
+ * comparison and on the way to the construction, gets to the construction with nothing before it
+ * ending the run, and does not meet what it asks. {@link Judgement.Unresolved} is everything else,
+ * with the first of those the proof could not rest on
+ * ({@link WhyAConstructionStopIsNotShown}).
  *
- * <p>Getting to it is shown where every run that takes the arms the way to the comparison takes
- * works the construction out unless something before it ends the run
- * ({@link WhatARunWorksOutBeforeACount#workedOutBeforeAConstruction}), every condition on that way
- * is a relation of numbers of the input or settled, and everything a run may work out before it
- * ends no run whatever the input ({@link WhatARunMayEndFor}) or is a construction whose condition
- * is read over numbers of the input, which the value is then asked to meet. What a construction
- * asks is where making its type succeeds, and nothing narrower or wider
- * ({@link DeclaredBounds#whereMakingSucceeds}), so a value meeting it gets
- * past the construction and one that does not stops there.
+ * <p>Getting to it is shown where a run that takes the way to the comparison and the way to the
+ * construction works the construction out before the comparison unless something before it ends
+ * the run ({@link WhatARunWorksOutBeforeACount#workedOutBeforeAConstruction}), every condition on
+ * those ways is a relation of numbers of the input or settled, and everything a run may work out
+ * before it ends no run whatever the input ({@link WhatARunMayEndFor}) or is a construction whose
+ * condition is read over numbers of the input, which the value is then asked to meet. The way to
+ * a construction on an arm is the arm's condition with what stood above it, as the walk met it
+ * ({@link WhereConstructionsAreMet}). What a construction asks is where making its type succeeds,
+ * and nothing narrower or wider ({@link DeclaredBounds#whereMakingSucceeds}), so a value meeting it
+ * gets past the construction and one that does not stops there.
  *
  * <p>Asked of the way to the comparison, as what is said of the construction is said of the rule:
  * a run that does not take that way is a run to some other rule.
  *
- * <p>Asked of the constructions whose condition the reading of the way read
- * ({@link ComparisonReadings.Reading#asks}), and of no other. A construction on an arm of a value
- * worked out before the rule is none of those, and nothing here says of it either way: that no
- * finding names a construction is not that no run stops there.
+ * <p>Asked of every construction a run on the way may work out before the comparison
+ * ({@link ComparisonReadings.Reading#onTheWay}), whatever is read of it: one whose condition is not
+ * read, or whose way is not, is unresolved for that reason, and never left out.
  */
 final class ConstructionStopAssessment {
 
@@ -69,14 +80,32 @@ final class ConstructionStopAssessment {
     /** What is shown of one construction. */
     sealed interface Judgement {
 
+        /** The construction it is of. */
+        Core.Construct made();
+
         /** Every run getting to it meets what it asks; nothing is said of it. */
-        record Safe(ConstructionAsk ask) implements Judgement {}
+        record Safe(Core.Construct made) implements Judgement {}
 
         /** Some run on the way stops at the construction {@code shown} names. */
-        record Stops(Shown shown) implements Judgement {}
+        record Stops(Core.Construct made, Shown shown) implements Judgement {}
 
-        /** Neither is shown, and {@code told} is what it asks that the way does not hold. */
-        record Unresolved(WhatAConstructionAsks told) implements Judgement {}
+        /**
+         * Neither is shown: {@code told} is what it asks that the way does not hold, where that is
+         * read, and why, and {@code bearing} which rules it is said under.
+         */
+        record Unresolved(Core.Construct made, AConstructionStopNotShown told,
+                          WhatAConstructionAsks.Bearing bearing) implements Judgement {}
+    }
+
+    /** Which rules what is said of {@code judged}, a construction a run stops at or one of which
+     *  neither is shown, is said under; null where nothing is said of it. */
+    static WhatAConstructionAsks.Bearing bearingOf(Judgement judged) {
+        return switch (judged) {
+            case Judgement.Safe _ -> null;
+            case Judgement.Stops(var _, Shown shown) -> shown.told().bearing();
+            case Judgement.Unresolved(var _, var _, WhatAConstructionAsks.Bearing bearing) ->
+                    bearing;
+        };
     }
 
     /**
@@ -110,47 +139,149 @@ final class ConstructionStopAssessment {
     }
 
     /**
-     * What is shown of each of {@code asked}, constructions on the way to the comparison
-     * {@code each} reads, where the way to it holds what {@code heldOnTheWay} says: in the order
-     * they are asked.
+     * What is shown of each construction a run on the way to the comparison {@code each} reads may
+     * work out before it ({@link ComparisonReadings.Reading#onTheWay}), where every row taking the
+     * way to it is in one of {@code ways}: in the order they are worked out.
      */
-    static List<Judgement> of(ComparisonReadings.Reading each, List<ConstructionAsk> asked,
-                              Predicate<Proposition> heldOnTheWay,
+    static List<Judgement> of(ComparisonReadings.Reading each, List<SearchRegion> ways,
                               InputReading read) {
-        List<Judgement> out = new ArrayList<>();
+        List<AConstructionOnTheWay> onTheWay = each.onTheWay();
+        List<ConstructionAsk> asks = new ArrayList<>();
+        Map<Core, List<OnTheWay>> waysTo = new IdentityHashMap<>();
+        for (AConstructionOnTheWay one : onTheWay) {
+            if (one.asked() instanceof AConstructionOnTheWay.Asked.Read(ConstructionAsk ask)) {
+                asks.add(ask);
+            }
+            one.way().ifPresent(way -> waysTo.put(one.made(), way));
+        }
         // Whether the way holds a part is asked of each part once, however many times it is read.
-        Map<Proposition, Boolean> held = new HashMap<>();
-        Predicate<Proposition> onTheWay = part -> held.computeIfAbsent(part, heldOnTheWay::test);
-        for (ConstructionAsk ask : asked) {
-            // What asks nothing, or nothing the way does not hold, is safe whatever the tree says,
-            // and the tree is walked only for what is left.
-            if (ask.toldOf(is -> onTheWay.test(is.read())).isEmpty()) {
-                out.add(new Judgement.Safe(ask));
-                continue;
-            }
-            Optional<WhatARunWorksOutBeforeACount.BeforeAConstruction> before =
-                    each.workedOutBefore(ask.made());
-            List<ConstructionAsk.Requirement.Is> gotPast = before
-                    .map(it -> gotPast(it.onEveryRun(), each.asks(), ask)).orElse(List.of());
-            Optional<WhatAConstructionAsks> told = ask.toldOf(is -> onTheWay.test(is.read())
-                    || (is.exact() != null && gotPast.stream()
-                            .anyMatch(past -> past.exact().implies(is.exact()))));
-            if (told.isEmpty()) {
-                out.add(new Judgement.Safe(ask));
-                continue;
-            }
-            Shown shown = before.map(it -> aStopAt(each, ask, told.get(), it, read)).orElse(null);
-            out.add(shown != null ? new Judgement.Stops(shown)
-                    : new Judgement.Unresolved(told.get()));
+        Predicate<Proposition> toTheComparison = heldOnEvery(ways, read);
+        List<Judgement> out = new ArrayList<>();
+        for (AConstructionOnTheWay one : onTheWay) {
+            out.add(switch (one.asked()) {
+                case AConstructionOnTheWay.Asked.Nothing _ -> new Judgement.Safe(one.made());
+                // Not read for want of the names where it is worked out, where the walk did not
+                // meet it on one way: that no run is shown to get to it is what is missing.
+                case AConstructionOnTheWay.Asked.NotRead _ -> new Judgement.Unresolved(one.made(),
+                        new AConstructionStopNotShown(one.made().typeName().name(),
+                                one.made().pos(), Optional.empty(), one.way().isPresent()
+                                        ? WhyAConstructionStopIsNotShown.ASKS_NOT_READ
+                                        : WhyAConstructionStopIsNotShown.REACH_NOT_SHOWN),
+                        new WhatAConstructionAsks.OnEveryRule());
+                case AConstructionOnTheWay.Asked.Read(ConstructionAsk ask) ->
+                        judged(each, one, ask, asks, waysTo, toTheComparison, read);
+            });
         }
         return out;
     }
 
+    /** What is shown of {@code one}, which asks {@code ask}, among constructions that ask
+     *  {@code asks} and are met on the ways {@code waysTo} holds, where the way to the comparison
+     *  holds what {@code toTheComparison} says. */
+    private static Judgement judged(ComparisonReadings.Reading each, AConstructionOnTheWay one,
+                                    ConstructionAsk ask, List<ConstructionAsk> asks,
+                                    Map<Core, List<OnTheWay>> waysTo,
+                                    Predicate<Proposition> toTheComparison, InputReading read) {
+        // What asks nothing, or nothing the way to the comparison does not hold, is safe whatever
+        // the tree says, and the tree is walked only for what is left.
+        if (ask.toldOf(is -> toTheComparison.test(is.read())).isEmpty()) {
+            return new Judgement.Safe(one.made());
+        }
+        Optional<WhatARunWorksOutBeforeACount.BeforeAConstruction> before =
+                each.workedOutBefore(one.made());
+        if (before.isEmpty() || one.way().isEmpty()) {
+            return unresolved(one, ask, ask.toldOf(is -> toTheComparison.test(is.read())),
+                    WhyAConstructionStopIsNotShown.REACH_NOT_SHOWN);
+        }
+        // The way to the comparison and the way to the construction, both of which a run that
+        // gets to it on the way to the comparison takes.
+        List<OnTheWay> both = new ArrayList<>(each.assumed());
+        for (OnTheWay entry : one.way().get()) {
+            if (!both.contains(entry)) {
+                both.add(entry);
+            }
+        }
+        Predicate<Proposition> toIt = toTheComparison;
+        if (both.size() > each.assumed().size()) {
+            Reachability taken = Reachability.of(new WayToTheBorder(both),
+                    read.quantities().region());
+            if (!taken.leavesARow()) {
+                return new Judgement.Safe(one.made());
+            }
+            toIt = heldOnEvery(taken instanceof Reachability.Reaching reaching
+                    ? List.of(reaching.region()) : List.of(), read);
+        }
+        Predicate<Proposition> held = toIt;
+        List<ConstructionAsk.Requirement.Is> gotPast = gotPast(before.get().onEveryRun(), asks,
+                ask);
+        Pullback.Once<NumericDomain<NumericTerm>> relations =
+                new Pullback.Once<>(() -> relationsOf(both));
+        Optional<WhatAConstructionAsks> told = ask.toldOf(is -> held.test(is.read())
+                || (is.exact() != null && (gotPast.stream()
+                        .anyMatch(past -> past.exact().implies(is.exact()))
+                        || entailedBy(relations.get(), is.exact()))));
+        if (told.isEmpty()) {
+            return new Judgement.Safe(one.made());
+        }
+        Found found = aStopAt(ask, told.get(), before.get(), both, asks, waysTo, read);
+        return switch (found) {
+            case Found.AStop(Shown shown) -> new Judgement.Stops(one.made(), shown);
+            case Found.None(WhyAConstructionStopIsNotShown why) -> unresolved(one, ask, told, why);
+        };
+    }
+
+    /** That neither is shown of {@code one} for {@code why}, said with what it asks that the way
+     *  does not hold, {@code told}: nothing of it where the way holds all of it. */
+    private static Judgement unresolved(AConstructionOnTheWay one, ConstructionAsk ask,
+                                        Optional<WhatAConstructionAsks> told,
+                                        WhyAConstructionStopIsNotShown why) {
+        return new Judgement.Unresolved(one.made(), new AConstructionStopNotShown(
+                ask.construction(), ask.at(), told.map(WhatAConstructionAsks::asks), why),
+                ask.bearing());
+    }
+
+    /**
+     * What the relations of numbers of the input that {@code way} states leave, each number taken
+     * as dense: a region holds what the way says of each number, and a relation of two, as the
+     * arm of {@code if a <= b} taken the other way says of both, is held here. Taken as dense, what
+     * it proves holds of every value and so of every whole one.
+     */
+    private static NumericDomain<NumericTerm> relationsOf(List<OnTheWay> way) {
+        NumericDomain<NumericTerm> out = NumericDomain.top(NumericTerm.inOneOrder());
+        for (OnTheWay entry : way) {
+            if (entry instanceof OnTheWay.TakenIn(var _,
+                    RowDemand.Relational(TakenConstraint.Affine affine), var _, var _)) {
+                Map<NumericTerm, NumberSpace> spaces = new HashMap<>();
+                affine.form().coefs().keySet()
+                        .forEach(atom -> spaces.put(atom, NumberSpace.spacedOnly(Granularity.DENSE)));
+                out = out.assume(affine.form(), affine.rel(), spaces);
+            }
+        }
+        return out;
+    }
+
+    /** Whether {@code given} proves {@code asked}. */
+    private static boolean entailedBy(NumericDomain<NumericTerm> given,
+                                      ConstructionAsk.Requirement.OverTheInput asked) {
+        return asked.form().minus(LinearForm.constant(asked.against()))
+                instanceof ExactAnswer.Held<LinearForm<NumericTerm>>(var form)
+                && given.entails(form, asked.rel());
+    }
+
+    /** Whether a part is held on every one of {@code ways}, which are none where no region holds
+     *  the way: asked of each part once, however many times it is read. */
+    private static Predicate<Proposition> heldOnEvery(List<SearchRegion> ways, InputReading read) {
+        Map<Proposition, Boolean> held = new HashMap<>();
+        return part -> held.computeIfAbsent(part, stated -> !ways.isEmpty()
+                && ways.stream().allMatch(way -> DemandReading.heldBy(stated, read, way)));
+    }
+
     /** What {@code judged} leave unresolved, as a finding says it, in the order judged. */
-    static List<WhatAConstructionAsks> notShown(List<Judgement> judged) {
-        List<WhatAConstructionAsks> out = new ArrayList<>();
+    static List<AConstructionStopNotShown> notShown(List<Judgement> judged) {
+        List<AConstructionStopNotShown> out = new ArrayList<>();
         for (Judgement each : judged) {
-            if (each instanceof Judgement.Unresolved(WhatAConstructionAsks told)) {
+            if (each instanceof Judgement.Unresolved(var _, AConstructionStopNotShown told,
+                    var _)) {
                 out.add(told);
             }
         }
@@ -165,7 +296,7 @@ final class ConstructionStopAssessment {
     static List<AConstructionStopShown> stopsShown(List<Judgement> judged, InputReading read) {
         List<AConstructionStopShown> out = new ArrayList<>();
         for (Judgement each : judged) {
-            if (each instanceof Judgement.Stops(Shown shown)) {
+            if (each instanceof Judgement.Stops(var _, Shown shown)) {
                 List<AStopShown.NumberAt> at = new ArrayList<>();
                 for (Position place : read.domain().positions()) {
                     ExactRatio held = shown.at().get(new NumericTerm.ValueOf(place.path()));
@@ -190,18 +321,22 @@ final class ConstructionStopAssessment {
      * That rests on a step being a value a run gets past or stops at, which is what
      * {@link Evaluated#inOrder} lists: the construction an attempt tests, which takes the other arm
      * where it is refused, is the attempt's deciding and no step of it.
+     *
+     * <p>What those parts work out whenever they run is gathered once, and each construction among
+     * {@code asks} is looked for in it, since asking it part by part of each would go down the tree
+     * once for every construction and every part.
      */
     private static List<ConstructionAsk.Requirement.Is> gotPast(List<Core> onEveryRun,
                                                                List<ConstructionAsk> asks,
                                                                ConstructionAsk ask) {
+        Set<Core> worked = Collections.newSetFromMap(new IdentityHashMap<>());
+        onEveryRun.forEach(part -> Evaluated.runningWhenever(part, worked));
         List<ConstructionAsk.Requirement.Is> out = new ArrayList<>();
         for (ConstructionAsk other : asks) {
             if (other.made() == ask.made()) {
                 continue;
             }
-            boolean passed = onEveryRun.stream()
-                    .anyMatch(part -> Evaluated.runsWhenever(part, other.made()));
-            if (passed) {
+            if (worked.contains(other.made())) {
                 other.requirement().heldWhereItIs().stream()
                         .filter(is -> is.exact() != null).forEach(out::add);
             }
@@ -209,41 +344,109 @@ final class ConstructionStopAssessment {
         return out;
     }
 
+    /** What the proof of a stop at a construction came to: the stop, or the first thing it could
+     *  not rest on. */
+    private sealed interface Found {
+
+        record AStop(Shown shown) implements Found {}
+
+        record None(WhyAConstructionStopIsNotShown why) implements Found {}
+    }
+
     /**
-     * That a run on the way to the comparison stops at {@code ask}'s construction, or null where
-     * that is not shown: everything a run may work out first is asked whether it may end the run,
-     * the way whether it is read, and only where all of that is answered is a value looked for.
+     * A construction a run may work out before the one judged, and the runs it is worked out on:
+     * every run that takes the way to the one judged, or, where {@code onlyWhere} holds some
+     * condition, only those of them that meet every one of those as well — the conditions of the
+     * way to it that are not on the way to the one judged, as an arm it stands on puts there.
+     *
+     * <p>A run it is not worked out on is no run it ends, so what it asks is asked of a value only
+     * where the value meets {@code onlyWhere}. Asked of every value where a condition of the way to
+     * it is not read, which asks more of a value and never less.
      */
-    private static Shown aStopAt(ComparisonReadings.Reading each, ConstructionAsk ask,
-                                 WhatAConstructionAsks told,
+    private record Before(ConstructionAsk ask, List<TakenConstraint.Affine> onlyWhere) {
+
+        Before {
+            onlyWhere = List.copyOf(onlyWhere);
+        }
+
+        /** {@code ask}'s construction, met on {@code itsWay} — none where the walk did not meet
+         *  it on one way — before one met on {@code way}. */
+        static Before of(ConstructionAsk ask, List<OnTheWay> itsWay, List<OnTheWay> way) {
+            if (itsWay == null) {
+                return new Before(ask, List.of());
+            }
+            List<TakenConstraint.Affine> only = new ArrayList<>();
+            for (OnTheWay entry : itsWay) {
+                if (way.contains(entry)) {
+                    continue;
+                }
+                if (entry instanceof OnTheWay.TakenIn(var _,
+                        RowDemand.Relational(TakenConstraint.Affine affine), var _, var _)
+                        && numbersOf(affine.form(), new LinkedHashSet<>())) {
+                    only.add(affine);
+                } else if (!(entry instanceof OnTheWay.Settled(var _, var _, boolean thisWay)
+                        && thisWay)) {
+                    return new Before(ask, List.of());
+                }
+            }
+            return new Before(ask, only);
+        }
+
+        /** Whether a run with the input's numbers at {@code at} works it out: false only where a
+         *  condition of {@code onlyWhere} is worked out exactly and does not hold there. */
+        boolean workedOutAt(Map<NumericTerm, ExactRatio> at) {
+            for (TakenConstraint.Affine condition : onlyWhere) {
+                ExactRatio comes = valueOf(condition.form(), at);
+                if (comes != null && !condition.rel().holds(comes.signum())) {
+                    return false;
+                }
+            }
+            return true;
+        }
+    }
+
+    /**
+     * Whether a run taking {@code way}, the way to the comparison and to {@code ask}'s
+     * construction, stops at the construction: everything a run may work out first is asked
+     * whether it may end the run, among constructions that ask {@code asks} and are met on the
+     * ways {@code waysTo} holds, the way whether it is read, and only where all of that is answered
+     * is a value looked for.
+     */
+    private static Found aStopAt(ConstructionAsk ask, WhatAConstructionAsks told,
                                  WhatARunWorksOutBeforeACount.BeforeAConstruction before,
-                                 InputReading read) {
-        List<ConstructionAsk> first = new ArrayList<>();
+                                 List<OnTheWay> way, List<ConstructionAsk> asks,
+                                 Map<Core, List<OnTheWay>> waysTo, InputReading read) {
+        List<ConstructionAsk> passed = new ArrayList<>();
         for (Core part : before.onSomeRun()) {
-            if (!getsPast(part, each.asks(), first)) {
-                return null;
+            if (!getsPast(part, asks, passed)) {
+                return new Found.None(WhyAConstructionStopIsNotShown.SOMETHING_BEFORE_IT_MAY_STOP);
             }
         }
-        List<TakenConstraint.Affine> way = new ArrayList<>();
-        for (OnTheWay entry : each.assumed()) {
+        List<TakenConstraint.Affine> taken = new ArrayList<>();
+        for (OnTheWay entry : way) {
             if (entry instanceof OnTheWay.TakenIn(var _,
                     RowDemand.Relational(TakenConstraint.Affine affine), var _, var _)) {
-                way.add(affine);
+                taken.add(affine);
             } else if (!(entry instanceof OnTheWay.Settled(var _, var _, boolean thisWay)
                     && thisWay)) {
-                return null;
+                return new Found.None(WhyAConstructionStopIsNotShown.A_CONDITION_NOT_READ);
             }
         }
+        List<Before> first = new ArrayList<>();
+        for (ConstructionAsk one : passed) {
+            first.add(Before.of(one, waysTo.get(one.made()), way));
+        }
         List<LinearForm<NumericTerm>> forms = new ArrayList<>();
-        way.forEach(it -> forms.add(it.form()));
-        for (ConstructionAsk one : first) {
-            formsOf(one.requirement(), forms);
+        taken.forEach(it -> forms.add(it.form()));
+        for (Before one : first) {
+            formsOf(one.ask().requirement(), forms);
+            one.onlyWhere().forEach(it -> forms.add(it.form()));
         }
         formsOf(ask.requirement(), forms);
         Set<NumericTerm> numbers = new LinkedHashSet<>();
         for (LinearForm<NumericTerm> form : forms) {
             if (!numbersOf(form, numbers)) {
-                return null;
+                return new Found.None(WhyAConstructionStopIsNotShown.NOT_OVER_THE_INPUT);
             }
         }
         Set<TermPath> places = new LinkedHashSet<>();
@@ -251,15 +454,24 @@ final class ConstructionStopAssessment {
             places.add(((NumericTerm.ValueOf) number).position());
         }
         if (!AValueOfTheInput.holdsAnyWholeNumbersAt(read, places)) {
-            return null;
+            return new Found.None(WhyAConstructionStopIsNotShown.NO_VALUE_SHOWN);
         }
         Map<NumericTerm, List<ExactRatio>> tried = new LinkedHashMap<>();
         for (NumericTerm number : numbers) {
-            tried.put(number, valuesToTry(number, way, first, ask, read));
+            tried.put(number, valuesToTry(number, taken, first, ask, read));
         }
         int[] left = {MOST_VALUES_TRIED};
-        return tryingEach(List.copyOf(numbers), 0, new LinkedHashMap<>(), tried, left,
-                values -> stopsAt(values, way, first, ask) ? new Shown(told, values) : null);
+        Shown shown = tryingEach(List.copyOf(numbers), 0, new LinkedHashMap<>(), tried, left,
+                values -> stopsAt(values, taken, first, ask) ? new Shown(told, values) : null);
+        if (shown != null) {
+            return new Found.AStop(shown);
+        }
+        // A part of what it asks over something that is no number of the input is met nowhere
+        // the arithmetic can say, so no value is refused by it.
+        return new Found.None(!ask.requirement().overTheInput()
+                ? WhyAConstructionStopIsNotShown.NOT_OVER_THE_INPUT
+                : left[0] <= 0 ? WhyAConstructionStopIsNotShown.NO_VALUE_FOUND_WITHIN_WHAT_IS_TRIED
+                : WhyAConstructionStopIsNotShown.NO_VALUE_FOUND);
     }
 
     /**
@@ -338,20 +550,20 @@ final class ConstructionStopAssessment {
 
     /**
      * Whether a run with the input's numbers at {@code at} takes {@code way}, meets what each of
-     * {@code first} asks, and does not meet what {@code ask} asks: each worked out exactly, and
-     * none of it shown where the arithmetic cannot say.
+     * {@code first} it works out asks, and does not meet what {@code ask} asks: each worked out
+     * exactly, and none of it shown where the arithmetic cannot say.
      */
     private static boolean stopsAt(Map<NumericTerm, ExactRatio> at,
                                    List<TakenConstraint.Affine> way,
-                                   List<ConstructionAsk> first, ConstructionAsk ask) {
+                                   List<Before> first, ConstructionAsk ask) {
         for (TakenConstraint.Affine condition : way) {
             ExactRatio comes = valueOf(condition.form(), at);
             if (comes == null || !condition.rel().holds(comes.signum())) {
                 return false;
             }
         }
-        for (ConstructionAsk one : first) {
-            if (met(one.requirement(), at) != Met.HOLDS) {
+        for (Before one : first) {
+            if (one.workedOutAt(at) && met(one.ask().requirement(), at) != Met.HOLDS) {
                 return false;
             }
         }
@@ -454,14 +666,15 @@ final class ConstructionStopAssessment {
     /**
      * The values {@code number} is tried at: nought and one either side, the ends of its place, and
      * on both sides of where each condition over it alone turns — of the way, of what the
-     * constructions before ask, and of what {@code ask} asks — each once, and none past the ends of
-     * its place. Those at which a part of what {@code ask} asks over it alone is not met come
-     * first, so that a value taking each number to the side the construction refuses is tried
-     * before the budget is spent on the others.
+     * constructions before ask and of the way to them, and of what {@code ask} asks — each once,
+     * and none past the ends of its place. None at which a condition of the way over it alone does not hold, which no value
+     * taking the way has, so the budget is not spent on it. Those at which a part of what
+     * {@code ask} asks over it alone is not met come first, so that a value taking each number to
+     * the side the construction refuses is tried before the budget is spent on the others.
      */
     private static List<ExactRatio> valuesToTry(NumericTerm number,
                                                 List<TakenConstraint.Affine> way,
-                                                List<ConstructionAsk> first,
+                                                List<Before> first,
                                                 ConstructionAsk ask, InputReading read) {
         Set<ExactRatio> out = new LinkedHashSet<>();
         FormRange ends = FormRange.endsOf(number, read);
@@ -475,8 +688,13 @@ final class ConstructionStopAssessment {
         for (TakenConstraint.Affine condition : way) {
             turnsAt(number, condition.form(), ExactRatio.ZERO, out);
         }
+        for (Before one : first) {
+            for (TakenConstraint.Affine condition : one.onlyWhere()) {
+                turnsAt(number, condition.form(), ExactRatio.ZERO, out);
+            }
+        }
         List<ConstructionAsk.Requirement> asked = new ArrayList<>();
-        first.forEach(one -> asked.add(one.requirement()));
+        first.forEach(one -> asked.add(one.ask().requirement()));
         asked.add(ask.requirement());
         for (ConstructionAsk.Requirement requirement : asked) {
             for (ConstructionAsk.Requirement.Is is : everyFormOf(requirement)) {
@@ -487,7 +705,9 @@ final class ConstructionStopAssessment {
         }
         List<ExactRatio> within = out.stream().filter(each -> each.isWhole()
                 && (ends == null || (each.compareTo(ends.least()) >= 0
-                        && each.compareTo(ends.greatest()) <= 0))).toList();
+                        && each.compareTo(ends.greatest()) <= 0))
+                && way.stream().noneMatch(condition -> failsAlone(condition, number, each)))
+                .toList();
         List<ExactRatio> refused = new ArrayList<>();
         List<ExactRatio> rest = new ArrayList<>();
         for (ExactRatio value : within) {
@@ -502,6 +722,17 @@ final class ConstructionStopAssessment {
         }
         refused.addAll(rest);
         return refused;
+    }
+
+    /** Whether {@code condition}, of the way, is over {@code number} alone and does not hold where
+     *  it is {@code value}. */
+    private static boolean failsAlone(TakenConstraint.Affine condition, NumericTerm number,
+                                      ExactRatio value) {
+        if (!condition.form().coefs().keySet().equals(Set.of(number))) {
+            return false;
+        }
+        ExactRatio comes = valueOf(condition.form(), Map.of(number, value));
+        return comes != null && !condition.rel().holds(comes.signum());
     }
 
     /** Every form standing to a number in {@code requirement}, under every one of several and one
