@@ -1226,7 +1226,10 @@ final class DemandReading {
             tied = List.copyOf(tied);
             owed = List.copyOf(owed);
             before = List.copyOf(before);
-            List<TakenConstraint> narrowing = new ArrayList<>(onTheWay);
+            // Asked by hash: a run's reading is put together part by part, each part handing
+            // this everything the parts before it narrowed, so going down the list for each one
+            // of these would ask every pair of them again at every part.
+            Set<TakenConstraint> narrowing = new HashSet<>(onTheWay);
             narrowing.addAll(ofTheRelation);
             atTheEnds = atTheEnds.stream().filter(narrowing::contains).distinct().toList();
         }
