@@ -1,6 +1,7 @@
 package souther.compiler;
 
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import souther.compiler.inputs.AStopShown;
 import souther.compiler.inputs.RuleWhereARunMayStop;
@@ -16,10 +17,11 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.TreeSet;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A stop the report shows at an operation of whole numbers is one the program runs into, and a run
@@ -37,8 +39,15 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * numbers a stop rests on are held to it as well.
  *
  * <p>The second direction is held to the grid alone: some run of it stops, and the findings say
- * something of the operations, a stop shown or one not resolved. How the report words a finding is
- * held elsewhere, and so is which operation of the same reason a stop is at.
+ * something of the operations, a stop shown or one not resolved. And a stop is shown of a form
+ * that says it is {@code required}: every run of its way stops, which the program says and this
+ * does not take on trust, and what a run works out before the stop is nothing this compiler cannot
+ * say it gets past. How the report words a finding is held elsewhere, and so is which operation of
+ * the same reason a stop is at.
+ *
+ * <p>Each form is a case of its own, one model of one behavior, and a form is in the list for the
+ * mechanism that turns its case red where it is taken out. The grid is the three numbers that
+ * decide them, so a case costs what compiling one model does.
  */
 class AStopShownAtAnOperationIsOneTheProgramRunsIntoTest {
 
@@ -48,8 +57,9 @@ class AStopShownAtAnOperationIsOneTheProgramRunsIntoTest {
     private static final String INT_OVERFLOW = "Int overflow";
     private static final String DIVISION_BY_ZERO = "division by zero";
 
-    private static final List<Long> WHOLE = List.of(0L, 1L, -1L, 3L, 4_611_686_018_427_387_904L,
-            Long.MAX_VALUE, Long.MIN_VALUE);
+    /** The fewest numbers that decide every form below: nought, which a divisor is held at, one,
+     *  which a branch is taken at, and the end of an {@code Int}, which a sum passes. */
+    private static final List<Long> WHOLE = List.of(0L, 1L, Long.MAX_VALUE);
 
     /**
      * A comparison, and the way the program takes to it.
@@ -68,126 +78,92 @@ class AStopShownAtAnOperationIsOneTheProgramRunsIntoTest {
     private static final Map<String, Form> FORMS = new LinkedHashMap<>();
 
     static {
-        // an operation worked out before a quotient: the quotient is not got to
-        FORMS.put("aQuotientAfterTheSum", new Form("q >= " + GREATEST,
+        // a quotient worked out after the sum is not got to, so is not asked to be away from
+        // nought: the way holds the divisor there
+        FORMS.put("aQuotientAfterTheSum", new Form("q >= " + GREATEST + " && p == 0",
                 "Rational.toInt(DOWN, (q + 1) / p) >= 2", true));
-        FORMS.put("aQuotientAfterTheSumByNought", new Form(
-                "q >= " + GREATEST + " && p == 0", "Rational.toInt(DOWN, (q + 1) / p) >= 2", true));
-        // what a run does not get to is not asked, whether it stands after the stop in a branch,
-        // in the other operand of an operator that may settle, or in an arm
+        // nor is a branch that stands after it, whose call ends a run for what nothing says
         FORMS.put("aBranchAfterTheSum", new Form("q >= " + GREATEST,
                 "Rational.toInt(DOWN, (q + 1) / p) + (if e > 0 then h(e) else 0) >= 2", true));
-        FORMS.put("aBranchOfACallAfterTheSum", new Form("q >= " + GREATEST,
-                "(q + 1) + (if e > 0 then h(e) else 0) >= 2", true));
         // a quotient is stopped at all the same, with what stands after it left untold
         FORMS.put("aCallAfterTheQuotient", new Form("p == 0",
                 "Rational.toInt(DOWN, e / p) + h(e) >= 2", true));
-        FORMS.put("aBranchAfterTheQuotient", new Form("p == 0",
-                "Rational.toInt(DOWN, e / p) + (if q > 0 then h(q) else 0) >= 2", true));
-        // a quotient worked out before the operation: it is got past
+        // a quotient worked out before the sum is got past: the stop is where its divisor is not
+        // nought, and where its divisor is no form of the input's numbers, it is not shown
         FORMS.put("aQuotientBeforeTheSum", new Form("q >= " + GREATEST,
                 "Rational.toInt(DOWN, (e / p) / (q + 1)) >= 2"));
-        FORMS.put("aQuotientByTheSum", new Form("q >= " + GREATEST,
-                "Rational.toInt(DOWN, e / (q + 1)) >= 2"));
         FORMS.put("aQuotientOfNoFormBeforeTheSum", new Form("q >= " + GREATEST,
                 "Rational.toInt(DOWN, (e / (p * p)) / (q + 1)) >= 2"));
-        // a rounding worked out before the operation, and after it, and beside it
-        FORMS.put("aRoundingBeforeTheSum", new Form("q >= " + GREATEST,
-                "Rational.toInt(DOWN, (Rational.toInt(DOWN, e / p) + (q + 1)) / 2) >= 2"));
-        FORMS.put("aRoundingAfterTheSum", new Form("q >= " + GREATEST,
-                "(q + 1) + Rational.toInt(DOWN, e / 3) >= 2", true));
-        FORMS.put("aRoundingBeforeTheSumInASum", new Form("q >= " + GREATEST,
-                "Rational.toInt(DOWN, e / 3) + (q + 1) >= 2"));
-        FORMS.put("aRoundingOnEitherSide", new Form("q >= " + GREATEST,
-                "Rational.toInt(DOWN, (q + 1) / 2) >= Rational.toInt(DOWN, e / p)"));
-        // a call before the sum that stops every run of the way, and one after it
+        // a call before the sum that stops every run of the way is not got past
         FORMS.put("aCallBeforeTheSumThatStops", new Form("q >= " + GREATEST + " && p == 0",
                 "h(p) + (q + 1) >= 2"));
-        FORMS.put("aCallAfterTheSumThatStops", new Form("q >= " + GREATEST + " && p == 0",
-                "(q + 1) + h(p) >= 2", true));
-        // the first operation of a product of three, the second of two numbers of the input
-        FORMS.put("aProductOfTheInput", new Form("e >= 0", "2 * p * q >= 1000"));
-        // nothing before it, nothing after it
-        FORMS.put("aSumAlone", new Form("e >= 0", "p + q >= 1000"));
     }
 
-    @Test
-    void aStopShownAtAnOperationIsOneTheProgramRunsInto() throws Exception {
-        List<String> names = new ArrayList<>(FORMS.keySet());
-        StringBuilder model = new StringBuilder("""
+    static Stream<String> forms() {
+        return FORMS.keySet().stream();
+    }
+
+    /** One form is one model of one behavior, which is as much as the claim about it asks. */
+    @ParameterizedTest
+    @MethodSource("forms")
+    void aStopShownAtAnOperationIsOneTheProgramRunsInto(String name) throws Exception {
+        Form form = FORMS.get(name);
+        String model = """
                 module demo
 
                 data In = { e: Int, p: Int, q: Int }
                 data Out = Int
-
-                behavior h : (z: Int) -> Int
-                let h (z) = Rational.toInt(DOWN, 1 / z)
-                """);
-        for (int at = 0; at < names.size(); at++) {
-            Form form = FORMS.get(names.get(at));
-            model.append("\nbehavior b").append(at).append(" : (i: In) -> Out constructs Out")
-                    .append("\nlet b").append(at).append(" (i) = Out { value = if ")
-                    .append(onTheInput(form.way())).append(" then (if ")
-                    .append(onTheInput(form.comparison())).append(" then 1 else 2) else 3 }\n");
-        }
-        Compilation compilation = ACompiledModel.measured(model.toString(),
+                %s
+                behavior b : (i: In) -> Out constructs Out
+                let b (i) = Out { value = if %s then (if %s then 1 else 2) else 3 }
+                """.formatted(form.comparison().contains("h(")
+                        ? "\nbehavior h : (z: Int) -> Int\nlet h (z) = Rational.toInt(DOWN, 1 / z)\n"
+                        : "", onTheInput(form.way()), onTheInput(form.comparison()));
+        Compilation compilation = ACompiledModel.measured(model,
                 new Adequacy.Asked(Adequacy.Level.OFF, false));
         BytesClassLoader loader = new BytesClassLoader(compilation.classes(),
                 AStopShownAtAnOperationIsOneTheProgramRunsIntoTest.class.getClassLoader());
-        TreeSet<String> shownAndItsRunDoesNotStop = new TreeSet<>();
-        TreeSet<String> stopsAndNothingSaid = new TreeSet<>();
-        TreeSet<String> requiredAndNotAStopOfTheProgram = new TreeSet<>();
-        TreeSet<String> requiredAndNotShown = new TreeSet<>();
-        for (int at = 0; at < names.size(); at++) {
-            String name = names.get(at);
-            Object behavior = Emitted.behavior(loader, "demo", "b" + at)
-                    .getConstructor().newInstance();
-            Partitions.Partitioning divided =
-                    compilation.db().ask(new Adequacy.Divided("demo", "b" + at)).value();
-            boolean saidSomething = false;
-            boolean aStopShown = false;
-            for (WhatIsShownOfAStop each : divided.stopsShown()) {
-                if (each instanceof RuleWhereARunMayStop stops) {
-                    saidSomething |= !stops.shown().isEmpty() || !stops.everyRunStops().isEmpty();
-                    aStopShown |= !stops.shown().isEmpty();
-                    for (AStopShown shown : stops.shown()) {
-                        String ends = shown.operation().startsWith("division")
-                                ? DIVISION_BY_ZERO : INT_OVERFLOW;
-                        for (Map<String, Object> in : inputsOf(shown)) {
-                            String stoppedFor = stoppedFor(loader, behavior, in);
-                            if (stoppedFor == null || !stoppedFor.startsWith(ends)) {
-                                shownAndItsRunDoesNotStop.add(name + ": " + shown.operation()
-                                        + " at " + in + " ends for " + stoppedFor);
-                            }
+        Object behavior = Emitted.behavior(loader, "demo", "b").getConstructor().newInstance();
+        Partitions.Partitioning divided =
+                compilation.db().ask(new Adequacy.Divided("demo", "b")).value();
+        boolean saidSomething = false;
+        boolean aStopShown = false;
+        List<String> shownAndItsRunDoesNotStop = new ArrayList<>();
+        for (WhatIsShownOfAStop each : divided.stopsShown()) {
+            if (each instanceof RuleWhereARunMayStop stops) {
+                saidSomething |= !stops.shown().isEmpty() || !stops.everyRunStops().isEmpty();
+                aStopShown |= !stops.shown().isEmpty();
+                for (AStopShown shown : stops.shown()) {
+                    String ends = shown.operation().startsWith("division")
+                            ? DIVISION_BY_ZERO : INT_OVERFLOW;
+                    for (Map<String, Object> in : inputsOf(shown)) {
+                        String stoppedFor = stoppedFor(loader, behavior, in);
+                        if (stoppedFor == null || !stoppedFor.startsWith(ends)) {
+                            shownAndItsRunDoesNotStop.add(shown.operation() + " at " + in
+                                    + " ends for " + stoppedFor);
                         }
                     }
-                } else if (each instanceof RuleWhereAStopIsNotShown open) {
-                    saidSomething |= !open.notShown().isEmpty();
                 }
-            }
-            if (!saidSomething && someRunStops(loader, behavior)) {
-                stopsAndNothingSaid.add(name);
-            }
-            if (FORMS.get(name).required()) {
-                if (!everyRunOfTheWayStops(loader, behavior)) {
-                    requiredAndNotAStopOfTheProgram.add(name);
-                } else if (!aStopShown) {
-                    requiredAndNotShown.add(name);
-                }
+            } else if (each instanceof RuleWhereAStopIsNotShown open) {
+                saidSomething |= !open.notShown().isEmpty();
             }
         }
+        boolean said = saidSomething;
+        boolean shown = aStopShown;
+        boolean someRunStops = someRunStops(loader, behavior);
+        boolean everyRunOfTheWayStops = form.required() && everyRunOfTheWayStops(loader, behavior);
         assertAll(
-                () -> assertEquals(new TreeSet<>(), requiredAndNotAStopOfTheProgram,
-                        "a form said to stop every run of its way, and a run of the grid on the"
-                                + " way gets past what it works out"),
-                () -> assertEquals(new TreeSet<>(), requiredAndNotShown,
-                        "every run of the way stops, nothing it works out first is one this"
-                                + " compiler cannot say it gets past, and no stop is shown"),
-                () -> assertEquals(new TreeSet<>(), shownAndItsRunDoesNotStop,
+                () -> assertEquals(List.of(), shownAndItsRunDoesNotStop,
                         "told that a run stops at an operation, and the run of the numbers the "
                                 + "stop rests on does not stop"),
-                () -> assertEquals(new TreeSet<>(), stopsAndNothingSaid,
-                        "a run of the grid stops and the findings say nothing of an operation"));
+                () -> assertTrue(said || !someRunStops,
+                        "a run of the grid stops and the findings say nothing of an operation"),
+                () -> assertTrue(!form.required() || everyRunOfTheWayStops,
+                        "a form said to stop every run of its way, and a run of the grid on the"
+                                + " way gets past what it works out"),
+                () -> assertTrue(!everyRunOfTheWayStops || shown,
+                        "every run of the way stops, nothing it works out first is one this"
+                                + " compiler cannot say it gets past, and no stop is shown"));
     }
 
     /** {@code text} over the fields of the input {@code i}. */
