@@ -12,6 +12,7 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -42,6 +43,11 @@ final class WhatAWayLeavesOfAValue {
     private final SearchRegion region;
     private final List<OnTheWay> onTheWay;
 
+    /** What {@link #keepsWithinItsEnds} answered for each operation asked, which is a function of
+     *  the way and the operation alone and is asked of every operation at each stop judged. */
+    private final Map<UndividedByARelation.IntOperation, Boolean> keptWithin =
+            new IdentityHashMap<>();
+
     private WhatAWayLeavesOfAValue(InputReading read, SearchRegion region,
                                    List<OnTheWay> onTheWay) {
         this.read = read;
@@ -59,6 +65,13 @@ final class WhatAWayLeavesOfAValue {
         return Reachability.of(new WayToTheBorder(onTheWay), read.quantities().region())
                 instanceof Reachability.Reaching reaching
                 ? new WhatAWayLeavesOfAValue(read, reaching.region(), onTheWay) : null;
+    }
+
+    /** Whether every value the way leaves keeps {@code operation} within its ends: no run along it
+     *  stops there, the value a stop is shown at among them. */
+    boolean keepsWithinItsEnds(UndividedByARelation.IntOperation operation) {
+        return keptWithin.computeIfAbsent(operation,
+                it -> keepsWithinItsType(it) || noRowTakesItPastItsEnds(it));
     }
 
     /**

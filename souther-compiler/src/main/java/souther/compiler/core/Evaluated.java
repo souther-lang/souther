@@ -2,6 +2,8 @@ package souther.compiler.core;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Predicate;
@@ -178,6 +180,79 @@ public final class Evaluated {
             }
         }
         return false;
+    }
+
+    /**
+     * The nodes of {@code roots}, worked out one after another, that a run takes the step of only
+     * after it has taken the step of {@code site}: what a run stopping at {@code site} has not
+     * got to. A node's own step comes after what it is made of, so every node {@code site} is in
+     * is among them, and so is what is worked out past it, whether it stands in a later operand,
+     * an arm or the right of an operator that may settle: that is worked out after what decides
+     * it, which {@code site} is in or is not.
+     *
+     * <p>What is not among them may be worked out before {@code site}: a node is left out unless
+     * every place a run may work it out at is after it. {@code site} is one node found in one
+     * place; where it is not, or is in two, nothing is known to be after it.
+     *
+     * @param roots the expressions, in the order a run works them out
+     */
+    public static Set<Core> workedOutAfter(List<Core> roots, Core site) {
+        if (site == null) {
+            return Set.of();
+        }
+        After walk = new After(Core.withoutStanding(site));
+        roots.forEach(walk::visit);
+        return walk.after();
+    }
+
+    /** One walk in the order a run works the nodes out, with whether {@code site} has been taken. */
+    private static final class After {
+
+        private final Core site;
+        private boolean taken;
+        private int times;
+        private final Set<Core> metBefore = Collections.newSetFromMap(new IdentityHashMap<>());
+        private final Set<Core> metAfter = Collections.newSetFromMap(new IdentityHashMap<>());
+        private final Set<Core> after = Collections.newSetFromMap(new IdentityHashMap<>());
+        private final Set<Core> notAfter = Collections.newSetFromMap(new IdentityHashMap<>());
+
+        After(Core site) {
+            this.site = site;
+        }
+
+        /** A node is walked once for each of the two states, so one held at many places is not
+         *  walked once for each. */
+        void visit(Core expression) {
+            Core node = Core.withoutStanding(expression);
+            if (!(taken ? metAfter : metBefore).add(node)) {
+                return;
+            }
+            List<Core> steps = new ArrayList<>();
+            for (Step each : inOrder(node)) {
+                steps.add(Core.withoutStanding(each.expression()));
+            }
+            steps.forEach(this::visit);
+            Core.forEachChild(node, child -> {
+                if (!steps.contains(Core.withoutStanding(child))) {
+                    visit(child);
+                }
+            });
+            if (node == site) {
+                times++;
+                taken = true;
+            } else {
+                (taken ? after : notAfter).add(node);
+            }
+        }
+
+        Set<Core> after() {
+            if (times != 1) {
+                return Set.of();
+            }
+            Set<Core> out = Collections.newSetFromMap(new IdentityHashMap<>());
+            after.stream().filter(node -> !notAfter.contains(node)).forEach(out::add);
+            return out;
+        }
     }
 
     /**
