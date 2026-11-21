@@ -746,6 +746,21 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return new Working(operations, told, false, partials, aStopUntold, leftUntold);
         }
 
+        /**
+         * Whether the operation at {@code index} may be worked out before what stands at
+         * {@code node}: it is not the one at {@code at}, is not worked out of it
+         * ({@link IntOperation#after}), and the whole of its node does not come after
+         * {@code node} ({@link EvaluationPlaces#comesAfter}). The one place the order of the
+         * operations against a stop is asked; a node with no place is taken to come before.
+         *
+         * @param at the index of the operation the stop is at, or -1 where it is at no operation
+         */
+        boolean mayComeBefore(int index, int at, Core node, EvaluationPlaces places) {
+            IntOperation it = operations.get(index);
+            return index != at && !it.after().contains(at)
+                    && !places.comesAfter(it.origin().node(), node);
+        }
+
         /** Whether every operation that can stop a run is told. */
         boolean exact() {
             return told == WhatARelationLeavesUndivided.Told.EVERY;
@@ -2926,8 +2941,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 IntOperation one = operations.get(other);
                 // An operation told twice is one a run works out, and is not another that has to
                 // be within the type before this one is asked.
-                if (other != at && !one.sameOperationAs(it) && !one.after().contains(at)
-                        && !places.comesAfter(one.origin().node(), it.origin().node())
+                if (!one.sameOperationAs(it)
+                        && working.mayComeBefore(other, at, it.origin().node(), places)
                         && !withinItsEnds(one, before)) {
                     before = null;
                     break;
