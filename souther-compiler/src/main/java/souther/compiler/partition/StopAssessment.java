@@ -91,9 +91,19 @@ final class StopAssessment {
          */
         boolean sameStopAs(Site other);
 
-        /** An operation of whole numbers, and where its answer stops being one. Another is the
-         *  same stop where it is written as this is and stops for the same kind of end: where its
-         *  type stops, or where a construction's clauses leave it. */
+        /**
+         * An operation of whole numbers, and where its answer stops being one. Another is the
+         * same stop where it is written as this is and stops for the same kind of end: where its
+         * type stops, or where a construction's clauses leave it.
+         *
+         * <p>Whatever ends each is held to: that is not the same telling
+         * ({@link UndividedByARelation.IntOperation#sameOperationAs}), which is a question of what
+         * was told and not of where a run stops. One with narrower ends that a value takes past
+         * them stops a run in this as written before this is got to; one with wider ends lets the
+         * value by to this. Two such are told of one place in a model: a date moved and read
+         * again by its year is told held to the calendar's days and once more held to the days
+         * of the years it counts, which end a day apart.
+         */
         record PastItsEnds(UndividedByARelation.IntOperation operation) implements Site {
 
             @Override

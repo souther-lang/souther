@@ -318,7 +318,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
 
         /** Whether {@code other} is this operation told again: the same number held to the same
-         *  ends, whatever it is worked out after. */
+         *  ends, whatever it is worked out after. A question of what was told; whether a run that
+         *  stops at it stops in this as a finding says it is the site's
+         *  ({@code StopAssessment.Site#sameStopAs}). */
         boolean sameOperationAs(IntOperation other) {
             return form.equals(other.form) && least.equals(other.least)
                     && greatest.equals(other.greatest);
