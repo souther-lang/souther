@@ -3670,17 +3670,24 @@ final class ReadQuantities implements Quantities {
     }
 
     /**
-     * The rules the declarations of the date at {@code date} hold its parts to together, read
+     * The rules the declarations of the date at {@code place} hold its parts to together, read
      * where {@link #classDeclaredAt} reads the class: under the context the date is asked in, and
      * none where no declarations reach it or the context does not hold where they were opened.
+     * Refused where no value this reading holds is around the place: "no rules" would be said of
+     * a place this reading has never been.
      */
     @Override
-    public List<RuleOfDateParts> rulesOfThePartsOfTheDate(NumericTerm.ValueOf date) {
-        UnderARoot at = rootOf(date.subjectPath());
-        OpenedRules opened = at == null ? null : byRoot.get(at.root());
+    public List<RuleOfDateParts> rulesOfThePartsOfTheDate(TermPath place) {
+        UnderARoot at = rootOf(place);
+        if (at == null) {
+            throw new IllegalArgumentException("`" + place + "` is under nothing this input takes,"
+                    + " so there is nothing here to say what its rules hold its date to");
+        }
+        OpenedRules opened = byRoot.get(at.root());
         if (opened == null) {
             return List.of();
         }
+        NumericTerm.ValueOf date = new NumericTerm.ValueOf(place);
         List<RuleOfDateParts> rules = opened.rules().bounds().rulesOfThePartsAt(at.named());
         if (rules != null && rules.isEmpty()) {
             return rules;

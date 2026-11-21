@@ -507,7 +507,7 @@ public final class Partitions {
                 case HeldClass.OfResidues _, HeldClass.NoValue _ -> null;
             };
             List<RuleOfDateParts> rules = left == null ? null
-                    : reading.rulesOfThePartsOfTheDate(date);
+                    : reading.rulesOfThePartsOfTheDate(taken.position());
             return rules != null && asked != null
                     && reading.projectionOfTheDeclarations(date)
                             instanceof NumericDomain.FormProjection.Within(
