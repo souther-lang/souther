@@ -364,7 +364,7 @@ class ATiedWayIsReadAsTheProgramRunSaysTest {
     }
 
     /** A divisor that is a product of two numbers is no form of them, and a run stops where it is
-     *  nought: the stop is left unresolved, and no class is claimed beside it. */
+     *  nought: the stop of the division is left unresolved, and no class is claimed beside it. */
     @Test
     void aDivisorThatIsAProductIsNotReadAndItsStopIsLeftUnresolved() {
         String said = reportOf("""
@@ -379,7 +379,8 @@ class ATiedWayIsReadAsTheProgramRunSaysTest {
                     if Rational.toInt(UP, e / (p.value * q.value)) >= 2 then 1 else 2 }
                 """);
         assertTrue(said.contains("· not read: comparison"), said);
-        assertTrue(said.contains("stop not resolved"), said);
+        assertTrue(said.lines().anyMatch(line -> line.contains("stop not resolved")
+                && line.contains("division by p * q")), said);
     }
 
     /** A record tying the divisor to the other number by {@code tie}, divided by it. */

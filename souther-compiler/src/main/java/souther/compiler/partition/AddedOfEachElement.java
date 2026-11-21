@@ -47,7 +47,8 @@ import java.util.function.Predicate;
  *
  * <p>Every value a name is given is worked out before what follows, whether anything reads it or
  * not, and is held here in the order the names are given ({@code bound}); a read of the name is a
- * read of that value and works out nothing again. A step or closure that works out anything but
+ * read of that value and works out nothing again. A field read off a value the step builds is what
+ * the build gave it ({@link Built}). A step or closure that works out anything but
  * these — a call of any other operation, a name it was not given here, a choice where a reader
  * did not say what decides it ends no run — is not read, and neither is a step whose answer so far
  * is multiplied, taken away from something, or given to a name.
@@ -127,6 +128,23 @@ record AddedOfEachElement(List<Bound> bound, Map<BindingId, Core> aliases, Part 
         }
     }
 
+    /**
+     * A field of a value the step builds, read off it as it was built: {@code field} is what the
+     * build was given there, as {@code totalOf(p).value} reads the amount a helper made of
+     * {@code p}.
+     *
+     * <p>What the field comes to is what it was given, on every run that gets past the build. A
+     * build is no operation of whole numbers and may refuse what it is given — a value its type's
+     * rule does not hold of — so the step is not shown to end no run past one
+     * ({@link Checked#builds}), whatever its numbers come to.
+     */
+    record Built(Part field) implements Part {
+
+        Built {
+            Objects.requireNonNull(field, "what the field was given");
+        }
+    }
+
     /** A choice between arms, whichever a run takes: read only where what decides it ends no
      *  run. In a step each arm adds to the answer so far, is it, or reads it nowhere. */
     record Chosen(List<Taken> arms) implements Part {
@@ -199,13 +217,18 @@ record AddedOfEachElement(List<Bound> bound, Map<BindingId, Core> aliases, Part 
      * What a closure applied to each element works out of it ({@code answer}), the position it is
      * handed read as a path, and a choice read arm by arm where what decides it ends no run
      * ({@code decidesWithoutAStop}), each arm taken where its condition holds of a place of the
-     * element ({@code newtypes} tell which). Null where it works out anything else.
+     * element ({@code newtypes} tell which), and a field read off a value it builds read as what
+     * the build gave it ({@link Built}). Null where it works out anything else.
+     *
+     * <p>Only this reading reads a build. What it is asked is answered with the build in view
+     * ({@link Checked#builds}); a reader that takes a step being read at all as its ending no run
+     * would take a build's refusal for none.
      */
     static AddedOfEachElement ofAnAnswer(ElementAnswer answer,
                                          Predicate<Core> decidesWithoutAStop,
                                          DeclarationNewtypes newtypes) {
         return new Reader(answer.parameter(), null, answer.position(), decidesWithoutAStop,
-                newtypes).read(answer.body());
+                newtypes, true).read(answer.body());
     }
 
     /**
@@ -283,11 +306,11 @@ record AddedOfEachElement(List<Bound> bound, Map<BindingId, Core> aliases, Part 
         for (Bound each : bound) {
             Checked value = checker.checked(each.value(), each.name().equals(theTotal));
             checker.named().put(each.name(), value);
-            notShown |= value.notShown();
+            notShown |= value.notShown() || value.builds();
             onOneElement |= value.onOneElement();
         }
         Checked whole = checker.checked(answer, true);
-        if (notShown || whole.notShown()) {
+        if (notShown || whole.notShown() || whole.builds()) {
             return Through.NOT_SHOWN;
         }
         if (!onOneElement && movesOneWay(checker)) {
@@ -305,13 +328,15 @@ record AddedOfEachElement(List<Bound> bound, Map<BindingId, Core> aliases, Part 
      */
     boolean holdsEveryOperation(Function<Core, FormRange> rangeOf, BigInteger least,
                                 BigInteger greatest) {
-        return checkedAlone(rangeOf, least, greatest) != null;
+        Checked whole = checkedAlone(rangeOf, least, greatest);
+        return whole != null && !whole.builds();
     }
 
     /**
-     * The numbers the answer for an element comes to, where every operation worked out for it is
-     * held as {@link #holdsEveryOperation} asks; null where one is not, or where what the answer
-     * comes to is not known.
+     * The numbers the answer for an element comes to, where every operation of whole numbers
+     * worked out for it is held as {@link #holdsEveryOperation} asks; null where one is not, or
+     * where what the answer comes to is not known. A value built on the way leaves this answered
+     * all the same: what its field comes to on a run that gets past the build is what it was given.
      */
     FormRange answerHeldWithin(Function<Core, FormRange> rangeOf, BigInteger least,
                                BigInteger greatest) {
@@ -336,7 +361,7 @@ record AddedOfEachElement(List<Bound> bound, Map<BindingId, Core> aliases, Part 
                               BigInteger least, BigInteger greatest) {
         FormRange none = new FormRange(ExactRatio.ZERO, ExactRatio.ZERO);
         Checked moved = checkedAlone(none, rangeOf, least, greatest, true);
-        if (moved == null || moved.range() == null) {
+        if (moved == null || moved.range() == null || moved.builds()) {
             return false;
         }
         FormRange steps = new FormRange(ExactRatio.ZERO, ExactRatio.of(most));
@@ -358,20 +383,27 @@ record AddedOfEachElement(List<Bound> bound, Map<BindingId, Core> aliases, Part 
     }
 
     /** The same with the answer so far anywhere in {@code soFar}, and, where {@code onlyItsRange},
-     *  what the answer comes to whether or not an operation on the way may stop a run. */
+     *  what the answer comes to whether or not an operation on the way may stop a run. A value
+     *  built for a name is built whether or not the name is read, so the answer builds where any
+     *  name's value does. */
     private Checked checkedAlone(FormRange soFar, Function<Core, FormRange> rangeOf,
                                  BigInteger least, BigInteger greatest, boolean onlyItsRange) {
         Checker checker = new Checker(BigInteger.ZERO, soFar, rangeOf, least, greatest,
                 new HashMap<>());
+        boolean builds = false;
         for (Bound each : bound) {
             Checked value = checker.checked(each.value(), false);
             if (value.notShown() && !onlyItsRange) {
                 return null;
             }
             checker.named().put(each.name(), value);
+            builds |= value.builds();
         }
         Checked whole = checker.checked(answer, false);
-        return (whole.notShown() && !onlyItsRange) ? null : whole;
+        if (whole.notShown() && !onlyItsRange) {
+            return null;
+        }
+        return builds ? whole.building() : whole;
     }
 
     /**
@@ -413,10 +445,23 @@ record AddedOfEachElement(List<Bound> bound, Map<BindingId, Core> aliases, Part 
      * What a part comes to on a row of one element, whether it reads the answer so far, whether
      * an operation in it may stop a run where the total does not ({@code notShown}), and whether
      * one is shown to get through only on such a row ({@code onOneElement}): one that reads the
-     * answer so far, which is the seed there alone, or one that comes to the total.
+     * answer so far, which is the seed there alone, or one that comes to the total. And whether a
+     * value is built on the way ({@code builds}, {@link Built}), past which the part is not shown
+     * to end no run, whatever its numbers come to.
      */
     private record Checked(FormRange range, boolean readsTheAnswerSoFar, boolean onOneElement,
-                           boolean notShown) {}
+                           boolean notShown, boolean builds) {
+
+        Checked(FormRange range, boolean readsTheAnswerSoFar, boolean onOneElement,
+                boolean notShown) {
+            this(range, readsTheAnswerSoFar, onOneElement, notShown, false);
+        }
+
+        /** The same, with a value built on the way. */
+        Checked building() {
+            return new Checked(range, readsTheAnswerSoFar, onOneElement, notShown, true);
+        }
+    }
 
     /** The asking of {@link #overWholeNumbers}, of each part in turn, with what each name given
      *  so far was found to come to; the answer so far is the seed, or every number of
@@ -466,6 +511,7 @@ record AddedOfEachElement(List<Bound> bound, Map<BindingId, Core> aliases, Part 
                     boolean soFar = false;
                     boolean onOneElement = false;
                     boolean notShown = false;
+                    boolean builds = false;
                     for (Taken arm : arms) {
                         Checker in = arm.where() == null ? this : taken(arm.where());
                         if (in == null) {
@@ -477,10 +523,12 @@ record AddedOfEachElement(List<Bound> bound, Map<BindingId, Core> aliases, Part 
                         soFar |= one.readsTheAnswerSoFar();
                         onOneElement |= one.onOneElement();
                         notShown |= one.notShown();
+                        builds |= one.builds();
                     }
-                    yield new Checked(hull, soFar, onOneElement, notShown);
+                    yield new Checked(hull, soFar, onOneElement, notShown, builds);
                 }
                 case SoFar _ -> new Checked(soFar, true, false, false);
+                case Built(Part field) -> checked(field, theTotal).building();
                 case Worked(BinOp op, Part left, Part right) -> {
                     boolean addedToNought = theTotal && op == BinOp.ADD
                             && BigInteger.ZERO.equals(seed);
@@ -491,7 +539,8 @@ record AddedOfEachElement(List<Bound> bound, Map<BindingId, Core> aliases, Part 
                     boolean soFar = l.readsTheAnswerSoFar || r.readsTheAnswerSoFar;
                     yield new Checked(range, soFar,
                             l.onOneElement || r.onOneElement || soFar || (!held && theTotal),
-                            l.notShown || r.notShown || (!held && !theTotal));
+                            l.notShown || r.notShown || (!held && !theTotal),
+                            l.builds || r.builds);
                 }
             };
         }
@@ -522,6 +571,7 @@ record AddedOfEachElement(List<Bound> bound, Map<BindingId, Core> aliases, Part 
                     || readsTheAnswerSoFarOnEveryRun(worked.right());
             case Chosen chosen -> chosen.arms().stream()
                     .allMatch(arm -> readsTheAnswerSoFarOnEveryRun(arm.answers()));
+            case Built built -> readsTheAnswerSoFarOnEveryRun(built.field());
         };
     }
 
@@ -533,6 +583,7 @@ record AddedOfEachElement(List<Bound> bound, Map<BindingId, Core> aliases, Part 
                     readsTheAnswerSoFar(worked.left()) || readsTheAnswerSoFar(worked.right());
             case Chosen chosen -> chosen.arms().stream()
                     .anyMatch(arm -> readsTheAnswerSoFar(arm.answers()));
+            case Built built -> readsTheAnswerSoFar(built.field());
         };
     }
 
@@ -542,7 +593,8 @@ record AddedOfEachElement(List<Bound> bound, Map<BindingId, Core> aliases, Part 
     private static boolean addsTo(Part part) {
         return switch (part) {
             case SoFar _ -> true;
-            case Path _, Written _, Named _, ReadWithTheTotal _ -> false;
+            // The answer so far handed to a build is the build's to refuse, and is not added to.
+            case Path _, Written _, Named _, ReadWithTheTotal _, Built _ -> false;
             case Chosen chosen -> chosen.arms().stream().allMatch(arm -> addsTo(arm.answers())
                     || !readsTheAnswerSoFar(arm.answers()));
             case Worked(BinOp op, Part left, Part right) -> switch (op) {
@@ -570,6 +622,8 @@ record AddedOfEachElement(List<Bound> bound, Map<BindingId, Core> aliases, Part 
         /** What tells which place of the element a path reads, for what deciding an arm states
          *  of it; null where nothing is asked of that. */
         private final DeclarationNewtypes newtypes;
+        /** Whether a field read off a value built here is read ({@link Built}). */
+        private final boolean readsABuild;
         private final List<Bound> bound = new ArrayList<>();
         /** What each name given so far stands for, where it is a path of the element. */
         private final Map<BindingId, Core> paths = new LinkedHashMap<>();
@@ -580,11 +634,18 @@ record AddedOfEachElement(List<Bound> bound, Map<BindingId, Core> aliases, Part 
 
         Reader(BindingId element, BindingId carried, BindingId position,
                Predicate<Core> decidesWithoutAStop, DeclarationNewtypes newtypes) {
+            this(element, carried, position, decidesWithoutAStop, newtypes, false);
+        }
+
+        Reader(BindingId element, BindingId carried, BindingId position,
+               Predicate<Core> decidesWithoutAStop, DeclarationNewtypes newtypes,
+               boolean readsABuild) {
             this.element = element;
             this.carried = carried;
             this.position = position;
             this.decidesWithoutAStop = decidesWithoutAStop;
             this.newtypes = newtypes;
+            this.readsABuild = readsABuild;
         }
 
         /** {@code body} as what it works out, or null where any of it is anything else, or it
@@ -617,6 +678,12 @@ record AddedOfEachElement(List<Bound> bound, Map<BindingId, Core> aliases, Part 
             }
             if (bare instanceof Core.LetIn let) {
                 return given(let) ? partOf(let.body()) : null;
+            }
+            if (readsABuild && bare instanceof Core.FieldAccess access
+                    && isBuiltHere(access.target())) {
+                Core given = fieldBuiltBy(access.target(), access.field());
+                Part field = given == null ? null : partOf(given);
+                return field == null ? null : new Built(field);
             }
             if (bare instanceof Core.If fork && decidesWithoutAStop.test(fork.cond())) {
                 Narrowed holding = narrowedBy(fork.cond());
@@ -718,6 +785,28 @@ record AddedOfEachElement(List<Bound> bound, Map<BindingId, Core> aliases, Part 
             }
             bound.add(new Bound(name, value));
             return true;
+        }
+
+        /** Whether {@code e} builds a value here, under the names given on the way to it, as what a
+         *  helper answers is written where the helper was expanded. */
+        private static boolean isBuiltHere(Core e) {
+            return switch (Core.withoutStanding(e)) {
+                case Core.Construct _ -> true;
+                case Core.LetIn let -> isBuiltHere(let.body());
+                default -> false;
+            };
+        }
+
+        /** What {@code e}, a build ({@link #isBuiltHere}), gave {@code field}, each name on the way
+         *  given its value first; null where a name is not read or the build gave it nothing. */
+        private Core fieldBuiltBy(Core e, String field) {
+            return switch (Core.withoutStanding(e)) {
+                case Core.LetIn let -> given(let) ? fieldBuiltBy(let.body(), field) : null;
+                case Core.Construct made -> made.values().stream()
+                        .filter(one -> one.field().equals(field))
+                        .map(Core.FieldValue::value).findFirst().orElse(null);
+                default -> null;
+            };
         }
 
         private boolean isGiven(BindingId name) {

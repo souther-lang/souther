@@ -126,6 +126,14 @@ public final class WrittenOutElements {
                 container.at()), new Names(symbols, newtypes, Set.of()));
     }
 
+    /** The most elements {@code container}, standing where it is followed to, holds on any run
+     *  where it is written out ({@link ElementsWrittenOut#mostOf}). */
+    public static OptionalLong mostOf(Denotation container, Symbols symbols,
+                                      DeclarationNewtypes newtypes) {
+        return ElementsWrittenOut.mostOf(new ElementsWrittenOut.Stood<>(container.value(),
+                container.at()), new Names(symbols, newtypes, Set.of()));
+    }
+
     /** How a walk of the elements of a container reads names here, for a reading that walks them
      *  itself ({@link LawAtACall}). */
     public static ElementsWrittenOut.Reading<InputReads> reading(Symbols symbols,

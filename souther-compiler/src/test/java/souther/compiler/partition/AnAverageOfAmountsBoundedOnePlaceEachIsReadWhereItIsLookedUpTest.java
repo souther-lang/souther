@@ -82,7 +82,7 @@ class AnAverageOfAmountsBoundedOnePlaceEachIsReadWhereItIsLookedUpTest {
         return REPORTS.computeIfAbsent(List.of(bounds, helpers, looked), _ -> {
             Compilation compilation = Compilation.ofSource(
                     SOURCE.formatted(bounds, helpers, looked), "Main");
-            compilation.measure(Adequacy.Asked.fullReport());
+            compilation.measure(new Adequacy.Asked(Adequacy.Level.OFF, false));
             ACompiledModel.compiles(compilation);
             return AdequacyReport.of(compilation)
                     .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
@@ -269,6 +269,21 @@ class AnAverageOfAmountsBoundedOnePlaceEachIsReadWhereItIsLookedUpTest {
         assertFalse(someStopIsLeftUntold("""
                 invariant base.value <= 1000000000000
                     invariant extra.value <= 1000000000000"""));
+    }
+
+    /** And the comparison of that average is read: the total is over no more months than the
+     *  three the filter keeps from, each bounded, so it lies within an {@code Int}. */
+    @Test
+    void anAverageOfTheMonthsAFilterKeptAfterAGuardIsRead() {
+        Compilation compilation = Compilation.ofSource(
+                THE_MONTHS_ARE_FILTERED_AFTER_A_GUARD.formatted("""
+                        invariant base.value <= 1000000000000
+                            invariant extra.value <= 1000000000000"""), "Main");
+        compilation.measure(new Adequacy.Asked(Adequacy.Level.OFF, false));
+        ACompiledModel.compiles(compilation);
+        assertEquals(List.of(), AdequacyReport.of(compilation)
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
+                .filter(line -> line.contains("not read:")).toList());
     }
 
     @Test

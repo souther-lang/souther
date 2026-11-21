@@ -840,6 +840,11 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "(" + core + ")Z", Reading.STRUCTURE,
                 "asks whether an expression is one name or fields of it one inside another: a"
                         + " projection's one part is its base, down to the name");
+        row(out, c + "partition/AddedOfEachElement$Reader", "partOf",
+                "(" + core + ")L" + c + "partition/AddedOfEachElement$Part;", Reading.STRUCTURE,
+                "reads an operation, a choice, a name, or a field read off a value built there: a"
+                        + " projection is a run of names read off one value, which is a path of"
+                        + " the element or nothing read, and is asked as a path");
         row(out, c + "inputs/InputNumber", "namedIn", "(" + core + "Ljava/util/Map;)V",
                 Reading.STRUCTURE,
                 "records each name a node binds, going down to its parts: a projection binds none"

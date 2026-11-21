@@ -1807,22 +1807,28 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              * its type. Not applicable where it is no such walk; declined where the list is past a
              * figure of this compiler's work; and the stop of the part where one does not compose.
              *
-             * <p>Only a step written at the call over a list written there: what a step reached
-             * by a name works out is in no tree read here.
+             * <p>Only a step written at the call: what a step reached by a name works out is in no
+             * tree read here. The list is the one the container stands at, through the names and
+             * helpers it was given ({@link AffineForms#listWrittenOutBy}), each element read where
+             * the list was written.
              */
             @Override
             public Attempt walkOfWhatIsWrittenOut(Core node, InputReads at) {
                 SeededWalk walk = SeededWalk.of(node, closure ->
                         Core.withoutStanding(closure) instanceof Core.Block block ? block : null);
-                if (walk == null || !walk.inTheContainersOrder()
-                        || !(Core.withoutStanding(walk.container()) instanceof Core.ListLit list)) {
+                Optional<AffineForms.ListWrittenOut<InputReads>> written =
+                        (walk == null || !walk.inTheContainersOrder()) ? Optional.empty()
+                                : AffineForms.listWrittenOutBy(walk.container(), at, this);
+                if (written.isEmpty()) {
                     return new Attempt.NotApplicable();
                 }
+                Core.ListLit list = written.get().list();
+                InputReads listAt = written.get().at();
                 Optional<WhyUnread> declined = told.declinedAtCounting(list.elements().size());
                 if (declined.isPresent()) {
                     return new Attempt.Declined(declined.get());
                 }
-                builtFrom(list.elements(), at);
+                builtFrom(list.elements(), listAt);
                 Attempt seeded = Attempt.ofAPart(AffineForms.outcome(walk.seed(), at, this));
                 if (!(seeded instanceof Attempt.Form(LinearForm<NumericTerm> seed))) {
                     return seeded;
@@ -1836,7 +1842,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 try {
                     for (Core element : list.elements()) {
                         InputReads handing = at.handingTheElement(walk.step(), walk.container(),
-                                new Denotation(element, at), ruleSource.newtypes());
+                                new Denotation(element, listAt), ruleSource.newtypes());
                         if (handing == null) {
                             return new Attempt.NotApplicable();
                         }
@@ -2170,7 +2176,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              *
              * <p>A walk of decimals stops nowhere of its own: every answer so far is a decimal. What
              * is told of it is that its step adds or takes away a part of the element and works out
-             * nothing else ({@link AddedOfEachElement}).
+             * nothing else ({@link AddedOfEachElement}). A whole number it works out of the
+             * element, one it gives a name nothing reads among them, is told of each element
+             * where the measure of the walk is ({@link InputNumber#operationsAtEachElement}).
              *
              * <p>A walk of whole numbers from a written one stops beside the answer at a running
              * total. Where each step adds the same written number, every answer so far lies
@@ -2191,8 +2199,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                         ? AddedOfEachElement.ofAJoin()
                         : AddedOfEachElement.ofTheStep(seeded);
                 // What a walk of decimals or of rationals carries is one of its type at every step,
-                // so the walk stops a run nowhere the step does; a step read as adding a part of
-                // the element works out nothing else, and one that is not is not read.
+                // so the walk stops a run nowhere of its own; a step read as adding a part of the
+                // element works out nothing else, and one that is not is not read. The whole
+                // numbers it works out of the element were told with the measure of the walk.
                 if (seeded.step().body().type() != Type.INT) {
                     return each != null;
                 }
