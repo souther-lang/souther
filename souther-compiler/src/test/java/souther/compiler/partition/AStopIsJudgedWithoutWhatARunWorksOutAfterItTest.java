@@ -98,6 +98,56 @@ class AStopIsJudgedWithoutWhatARunWorksOutAfterItTest {
                 judged::toString);
     }
 
+    private static List<StopAssessment.Judgement.Stops> stopsPastItsEnds(
+            List<StopAssessment.Judgement> judged) {
+        return judged.stream()
+                .filter(StopAssessment.Judgement.Stops.class::isInstance)
+                .map(StopAssessment.Judgement.Stops.class::cast)
+                .filter(each -> each.shown().site() instanceof StopAssessment.Site.PastItsEnds)
+                .toList();
+    }
+
+    /**
+     * In {@code (q + 1) + (if e > 0 then q + 2 else 0)} the arm is worked out after {@code q + 1},
+     * so a run that stops at {@code q + 1} has not got to {@code q + 2}, which stops every run
+     * that does: the stop at {@code q + 1} is shown, though the arm has no place among what a
+     * run always works out.
+     */
+    @Test
+    void aStopIsShownWhereAnOperationInAnArmAfterItWouldStopEveryRun() {
+        List<StopAssessment.Judgement> judged =
+                judged("(q + 1) + (if e > 0 then q + 2 else 0) >= 2");
+        assertTrue(!stopsPastItsEnds(judged).isEmpty(), judged::toString);
+    }
+
+    /**
+     * The body of a {@code let} is worked out whenever the {@code let} is, but it is no step of it
+     * ({@code Evaluated.inOrder} lists the value), so {@code q + 2} has no place: it is worked out
+     * after {@code q + 1} all the same, and a run that stops at {@code q + 1} has not got to it.
+     */
+    @Test
+    void aStopIsShownWhereAnOperationInALetBodyAfterItWouldStopEveryRun() {
+        List<StopAssessment.Judgement> judged =
+                judged("(q + 1) + { let t = e\n q + 2 } >= 2");
+        assertTrue(!stopsPastItsEnds(judged).isEmpty(), judged::toString);
+    }
+
+    /**
+     * The control: the body of the {@code let} is worked out before {@code q + 1}, so a run that
+     * gets to {@code q + 1} has got past {@code q + 2}, which the way keeps it from: no value of
+     * the input is shown to stop at {@code q + 1}.
+     */
+    @Test
+    void aStopIsNotShownWhereAnOperationInALetBodyBeforeItWouldStopEveryRun() {
+        List<StopAssessment.Judgement> judged =
+                judged("{ let t = e\n q + 2 } + (q + 1) >= 2");
+        assertTrue(stopsPastItsEnds(judged).stream()
+                .noneMatch(each -> "1".equals(String.valueOf(
+                        ((StopAssessment.Site.PastItsEnds) each.shown().site())
+                                .operation().form().constant()))),
+                judged::toString);
+    }
+
     /**
      * {@code q + 1} is worked out before the division by it, so a run that gets to the division
      * has got past {@code q + 1}, which the way keeps it from: no value of the input is shown to

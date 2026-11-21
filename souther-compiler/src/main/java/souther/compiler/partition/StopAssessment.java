@@ -289,8 +289,11 @@ final class StopAssessment {
      * so one is passed over where that step comes after all of this
      * ({@link EvaluationPlaces#isWorkedOutAfter}) — a quotient whose dividend holds this divides
      * after it. What a run works out before the comparison is before all of it. One whose place is
-     * not known is asked of the value. One that is the same stop as the site
-     * ({@link Site#sameStopAs}) is not: a run that stops there stops in it.
+     * not known is asked of the value, unless the walk of the comparison says it is worked out
+     * after the site ({@code after}, {@link Evaluated#workedOutAfter}): a node a run always works
+     * out has its place in the order, and one it works out only on some runs, or in the body of a
+     * {@code let}, has none. One that is the same stop as the site ({@link Site#sameStopAs}) is
+     * not: a run that stops there stops in it.
      *
      * <p>A quotient whose divisor is no form of the input's numbers is among them as null, one a
      * value is not shown to get past ({@link #aStopIn}): what is not read of it is not that it does
@@ -305,7 +308,7 @@ final class StopAssessment {
         static StopsBefore of(ComparisonReadings.Reading each, Site site, Core node,
                               UndividedByARelation.Working earlier,
                               UndividedByARelation.Working working,
-                              List<LinearForm<NumericTerm>> divisors) {
+                              List<LinearForm<NumericTerm>> divisors, Set<Core> after) {
             int at = site instanceof Site.PastItsEnds(var operation)
                     ? indexOf(working.operations(), operation) : -1;
             List<UndividedByARelation.IntOperation> operations = new ArrayList<>();
@@ -317,6 +320,7 @@ final class StopAssessment {
             for (int other = 0; other < working.operations().size(); other++) {
                 UndividedByARelation.IntOperation it = working.operations().get(other);
                 if (working.mayComeBefore(other, at, node, each.places())
+                        && !entirelyAfter(it.origin().node(), after)
                         && !site.sameStopAs(new Site.PastItsEnds(it))) {
                     operations.add(it);
                 }
@@ -324,13 +328,43 @@ final class StopAssessment {
             List<LinearForm<NumericTerm>> before = new ArrayList<>();
             for (int quotient = 0; quotient < divisors.size(); quotient++) {
                 LinearForm<NumericTerm> divisor = divisors.get(quotient);
-                if (!each.places().isWorkedOutAfter(each.quotients().get(quotient), node)
+                Core asked = each.quotients().get(quotient);
+                if (!each.places().isWorkedOutAfter(asked, node)
+                        && !after.contains(Core.withoutStanding(asked))
                         && !(divisor != null && site.sameStopAs(new Site.ByNought(divisor)))) {
                     before.add(divisor);
                 }
             }
             return new StopsBefore(operations, before);
         }
+
+        /**
+         * Whether the whole of {@code node}, which an operation may stop anywhere in, is worked out
+         * after the site: it and every node under it is among {@code after}, which says where a
+         * node's own step stands. False where {@code node} is not known.
+         */
+        private static boolean entirelyAfter(Core node, Set<Core> after) {
+            if (node == null) {
+                return false;
+            }
+            boolean[] every = {true};
+            Core.forEachDistinctNode(node,
+                    part -> every[0] &= after.contains(Core.withoutStanding(part)));
+            return every[0];
+        }
+    }
+
+    /**
+     * The nodes of the comparison a run takes the step of only after it has taken the step of
+     * {@code siteNode} ({@link Evaluated#workedOutAfter}), none where the statement is no
+     * comparison. Asked once for each site, of the two readers of what is worked out before it.
+     */
+    private static Set<Core> workedOutAfter(ComparisonReadings.Reading each, Core siteNode) {
+        if (!(each.statement() instanceof ComparisonReadings.Stated.AComparison(
+                var comparison))) {
+            return Set.of();
+        }
+        return Evaluated.workedOutAfter(List.of(comparison.left(), comparison.right()), siteNode);
     }
 
     /**
@@ -347,14 +381,12 @@ final class StopAssessment {
      */
     private static boolean everythingBeforeIsAccountedFor(ComparisonReadings.Reading each,
                                                           UndividedByARelation.Working working,
-                                                          Core siteNode,
+                                                          Set<Core> after,
                                                           boolean workingAccountsForTheRest) {
         if (!(each.statement() instanceof ComparisonReadings.Stated.AComparison(
                 var comparison))) {
             return false;
         }
-        Set<Core> after = Evaluated.workedOutAfter(
-                List.of(comparison.left(), comparison.right()), siteNode);
         Set<Core> told = Collections.newSetFromMap(new IdentityHashMap<>());
         working.operations().forEach(operation -> {
             if (operation.origin().node() != null) {
@@ -521,7 +553,8 @@ final class StopAssessment {
         // get past it.
         boolean workingAccountsForTheRest = !working.leavesUntoldBeyond(each.quotients())
                 && (!(site instanceof Site.PastItsEnds) || working.onEveryRun());
-        if (!everythingBeforeIsAccountedFor(each, working, siteNode, workingAccountsForTheRest)) {
+        Set<Core> after = workedOutAfter(each, siteNode);
+        if (!everythingBeforeIsAccountedFor(each, working, after, workingAccountsForTheRest)) {
             return new Judgement.Unresolved(site, WhyAStopIsNotShown.NOT_EVERY_OPERATION_TOLD);
         }
         Optional<UndividedByARelation.Working> earlier = each.workedOutBeforeIt();
@@ -544,7 +577,7 @@ final class StopAssessment {
         way.addAll(within);
         // Everything else a run may stop at before this ({@link StopsBefore}).
         StopsBefore stopsBefore = StopsBefore.of(each, site, siteNode, earlier.get(), working,
-                divisors);
+                divisors, after);
         List<UndividedByARelation.IntOperation> others = new ArrayList<>(stopsBefore.operations());
         List<LinearForm<NumericTerm>> quotients = stopsBefore.divisors();
         // One every value on the way keeps within its ends is got past by the value looked for,
