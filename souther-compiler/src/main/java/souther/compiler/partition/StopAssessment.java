@@ -32,7 +32,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
-import java.util.function.Predicate;
 
 /**
  * Whether a run stops in each operation a comparison works out: shown not to, shown to, or
@@ -585,7 +584,7 @@ final class StopAssessment {
         // product of the ways and the values.
         Tries tries = new Tries();
         List<Judgement> judged = new ArrayList<>();
-        Predicate<Attainment> lookFor = how -> {
+        Attainment.Visitor lookFor = how -> {
             if (!judged.isEmpty() && !tries.spend()) {
                 return false;
             }
@@ -597,7 +596,7 @@ final class StopAssessment {
             case Site.PastItsEnds(var operation) -> operation.forEachAttained(lookFor);
             case Site.ByNought(var divisor) -> {
                 if (divisor != null) {
-                    lookFor.test(Attainment.always(divisor));
+                    lookFor.wantsMore(Attainment.always(divisor));
                 }
                 yield true;
             }

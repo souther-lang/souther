@@ -29,6 +29,17 @@ record Attainment(LinearForm<NumericTerm> form, List<TakenConstraint.Affine> hol
         holding = List.copyOf(holding);
     }
 
+    /** What looks at the ways of a value one at a time, and answers after each whether it wants
+     *  another. A type of its own and no {@code Predicate}: what it answers is no property of the
+     *  way it is asked of, and what a caller that asks without reading the answer has not been
+     *  told is its own business to say. */
+    @FunctionalInterface
+    interface Visitor {
+
+        /** Whether to be given another way, once this one is looked at. */
+        boolean wantsMore(Attainment way);
+    }
+
     /** The value is {@code form} on every row. */
     static Attainment always(LinearForm<NumericTerm> form) {
         return new Attainment(form, List.of());

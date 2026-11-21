@@ -369,10 +369,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
          *         ({@link Attainments#leftUnmade}), which no visit says: all of them that were made
          *         may have been visited
          */
-        boolean forEachAttained(Predicate<Attainment> visit) {
+        boolean forEachAttained(Attainment.Visitor visit) {
             LinearForm<NumericTerm> alone = overTheInput();
             if (alone != null) {
-                visit.test(Attainment.always(alone));
+                visit.wantsMore(Attainment.always(alone));
                 return true;
             }
             List<Map.Entry<IntOperand, ExactRatio>> operands = List.copyOf(form.coefs().entrySet());
@@ -402,9 +402,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
          *  of none. */
         private static boolean puttingTogether(List<Map.Entry<IntOperand, ExactRatio>> operands,
                                                List<List<Attainment>> ways, int at,
-                                               Attainment sofar, Predicate<Attainment> visit) {
+                                               Attainment sofar, Attainment.Visitor visit) {
             if (at == operands.size()) {
-                return visit.test(sofar);
+                return visit.wantsMore(sofar);
             }
             for (Attainment way : ways.get(at)) {
                 LinearForm<NumericTerm> scaled = way.form().times(operands.get(at).getValue())
