@@ -167,7 +167,8 @@ final class DatesThatHoldEveryStatement {
 
     /** {@code whole} as a whole number whose negation a statement's constant holds, or null. */
     private static Long wholeOrNull(BigInteger whole) {
-        return whole == null || whole.bitLength() >= Long.SIZE - 1 ? null : whole.longValueExact();
+        return (whole == null || whole.bitLength() >= Long.SIZE - 1) ? null
+                : whole.longValueExact();
     }
 
     /**

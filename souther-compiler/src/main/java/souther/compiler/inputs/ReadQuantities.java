@@ -3685,8 +3685,8 @@ final class ReadQuantities implements Quantities {
         if (rules != null && rules.isEmpty()) {
             return rules;
         }
-        return asking(Set.of(date)) instanceof StructuralContext.Merge.Together(
-                StructuralContext under) && under.holds(opened.opening()) ? rules : List.of();
+        return (asking(Set.of(date)) instanceof StructuralContext.Merge.Together(
+                StructuralContext under) && under.holds(opened.opening())) ? rules : List.of();
     }
 
     /** The magnitude of the divisor {@code taken} is a remainder by, or null where it is no
