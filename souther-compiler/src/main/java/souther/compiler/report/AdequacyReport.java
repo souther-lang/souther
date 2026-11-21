@@ -33,6 +33,7 @@ import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.ValueName;
 import souther.compiler.types.WrittenOwner;
 import souther.compiler.check.RuleCitation;
+import souther.compiler.check.RuleKey;
 import souther.compiler.check.RuleCitations;
 import souther.compiler.check.RuleRef;
 import souther.compiler.numeric.Towards;
@@ -114,6 +115,8 @@ import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.ElementKey;
 import souther.compiler.inputs.EveryRunStops;
 import souther.compiler.inputs.WhatAConstructionAsks;
+import souther.compiler.inputs.WhatIsShownOfAStop;
+import souther.compiler.inputs.WhatKeepsEveryRunGoing;
 import souther.compiler.inputs.CasesAtARule;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.ElementProjection;
@@ -4502,7 +4505,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         }
         // And a rule that some run is shown to stop in, and one where whether a run stops is not
         // resolved. Whatever else is said of the rule, and whatever line it draws, this is what
-        // the line leaves out.
+        // the line leaves out. The region that keeps the rule's runs going is the rule's, said
+        // once: under the stop shown where there is one.
+        Set<RuleRef> aStopShown = new HashSet<>();
+        for (Adequacy.Finding f : behavior.findings()) {
+            if (f.about() instanceof About.ARuleThatMayStopARun(var it)) {
+                aStopShown.add(it.rule());
+            }
+        }
         for (Adequacy.Finding f : behavior.findings()) {
             if (f.about() instanceof About.ARuleWhoseStopIsNotShown(var it)) {
                 marked(out, f, page, new ReportMessage.StopNotShown(
@@ -4515,15 +4525,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                                 declaredIn)),
                         inCopies(it.readAt(), behavior.conditionPlaces().copies(),
                                 page, declaredIn)));
-                // And the invariant that is enough to keep every run from such a stop, under the
-                // line that says where it is: whether a run now stops there is not said.
-                for (EveryRunStops stop : it.everyRunStops()) {
-                    if (stop.keeping() != null) {
-                        out.append("          · ").append(page.say(
-                                new ReportMessage.ABoundOnTheInputWouldKeepEveryRunFromIt(
-                                        stop.keeping().data(), invariantWritten(stop.keeping()))))
-                                .append(NEW_LINE);
-                    }
+                if (!aStopShown.contains(it.rule())) {
+                    keepingSaid(it, page, out);
                 }
             }
             if (f.about() instanceof About.ARuleThatMayStopARun(var it)) {
@@ -4540,16 +4543,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         everyRunStopsAt(it.everyRunStops(), page),
                         inCopies(it.readAt(), behavior.conditionPlaces().copies(),
                                 page, declaredIn)));
-                // And, where a stop is where the representation of a number stops, the invariant
-                // that keeps every run from it, under the line that says where it is.
-                for (EveryRunStops stop : it.everyRunStops()) {
-                    if (stop.keeping() != null) {
-                        out.append("          · ").append(page.say(
-                                new ReportMessage.ABoundOnTheInputKeepsEveryRunGoing(
-                                        stop.keeping().data(), invariantWritten(stop.keeping()))))
-                                .append(NEW_LINE);
-                    }
-                }
+                keepingSaid(it, page, out);
             }
         }
         // And, for a rule a line of which was not worked out because its cases were too many, what
@@ -7330,7 +7324,41 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             default -> throw new IllegalStateException("a bound kept on an input is a whole number"
                     + " or a date: " + bound.bound());
         };
-        return "invariant " + bound.named() + (bound.atMost() ? " <= " : " >= ") + value;
+        RuleKey named = bound.holder().named();
+        return "invariant " + (named.isTheValueItself() ? "value" : named.toString())
+                + (bound.atMost() ? " <= " : " >= ")
+                + value;
+    }
+
+    /** Where the stops of {@code it} are where the representation of a number stops, the
+     *  invariants that keep every run from them, under the line that says the rule. */
+    private static void keepingSaid(WhatIsShownOfAStop it, Page page, StringBuilder out) {
+        Optional<WhatKeepsEveryRunGoing> said = it.keeping().flatMap(WhatKeepsEveryRunGoing::said);
+        if (said.isEmpty()) {
+            return;
+        }
+        WhatKeepsEveryRunGoing region = said.get();
+        for (ABoundThatKeepsEveryRunGoing bound : region.bounds()) {
+            out.append("          · ").append(page.say(keepingSaid(bound,
+                    region.asFarOutAsCanBe(bound)))).append(NEW_LINE);
+        }
+    }
+
+    /** The line that says {@code bound}: on the data that holds the place, or on a data the
+     *  author introduces for a parameter no data holds; as far out as one can be where
+     *  {@code furthestOut}. */
+    private static ReportMessage keepingSaid(ABoundThatKeepsEveryRunGoing bound,
+                                             boolean furthestOut) {
+        Message furthest = furthestOut ? new ReportMessage.AFurtherBoundLetsInAStop()
+                : new ReportMessage.Nothing();
+        return switch (bound.holder()) {
+            case ABoundThatKeepsEveryRunGoing.Holder.AData data ->
+                    new ReportMessage.ABoundOnTheInputKeepsEveryRunGoing(data.data().key().qualified(),
+                            invariantWritten(bound), furthest);
+            case ABoundThatKeepsEveryRunGoing.Holder.AParameter parameter ->
+                    new ReportMessage.ABoundOnAParameterKeepsEveryRunGoing(parameter.parameter(),
+                            parameter.type(), invariantWritten(bound), furthest);
+        };
     }
 
     /** Each operation of a rule whether a run stops in is not resolved, and why, as the human
@@ -11547,11 +11575,32 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         bound.put("greatest", within.greatest());
                     }
                 }
-                if (each.keeping() != null) {
-                    ObjectNode keeping = one.putObject("keeping");
-                    keeping.put("data", each.keeping().data());
-                    keeping.put("invariant", invariantWritten(each.keeping()));
+            }
+        }
+        // And the invariants that keep every run getting to a rule from stopping there, where its
+        // stops are where the representation of a number stops, said of a stop shown or not.
+        WhatIsShownOfAStop ofAStop = switch (finding.about()) {
+            case About.ARuleThatMayStopARun(var it) -> it;
+            case About.ARuleWhoseStopIsNotShown(var it) -> it;
+            default -> null;
+        };
+        Optional<WhatKeepsEveryRunGoing> said = ofAStop == null ? Optional.empty()
+                : ofAStop.keeping().flatMap(WhatKeepsEveryRunGoing::said);
+        if (said.isPresent() && !said.get().bounds().isEmpty()) {
+            WhatKeepsEveryRunGoing region = said.get();
+            ArrayNode bounds = f.putArray("keeping");
+            for (ABoundThatKeepsEveryRunGoing each : region.bounds()) {
+                ObjectNode keeping = bounds.addObject();
+                switch (each.holder()) {
+                    case ABoundThatKeepsEveryRunGoing.Holder.AData data ->
+                            keeping.put("data", data.data().key().qualified());
+                    case ABoundThatKeepsEveryRunGoing.Holder.AParameter parameter -> {
+                        keeping.put("parameter", parameter.parameter());
+                        keeping.put("type", parameter.type());
+                    }
                 }
+                keeping.put("invariant", invariantWritten(each));
+                keeping.put("furthestOut", region.asFarOutAsCanBe(each));
             }
         }
         // And, of a rule where whether a run stops is not resolved, each operation that is not,

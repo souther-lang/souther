@@ -4782,25 +4782,56 @@
                       }
                     }
                   }
-                },
-                "keeping": {
-                  "type": "object",
-                  "description": "Where the operation stops where the representation of its number stops — an Int, the calendar — and the rows are the values of one place an input holds on one side: the invariant that keeps every run from them, on the data that holds the place. As far out as a bound can be; the value to declare is the domain's. Absent where the operation stops where the clauses of a type a construction makes leave the number, which the model states, where the rows are any others, or where no data holds the place.",
+                }
+              }
+            }
+          },
+          "keeping": {
+            "type": "array",
+            "minItems": 1,
+            "description": "On `rule_may_stop_a_run` and `rule_stop_not_shown`, where every stop a run getting to the rule may meet is told — wherever it is worked out: at the rule, on an arm of a choice it is read through, on an application of a closure it stands in, or making a value a walk hands one — and every one stops where the representation of its number stops — an Int, the calendar — and is over the values of one place: the invariants that together keep every run there from taking a number past its type in them, one for each data and side the stops ask a bound on. A stop of any other kind, such as a construction on the way refusing what it is handed, is none of what they keep a run from. Each is on the data that holds the place, or, where the place is a parameter whose type no data of the model is, on a data of that type the author introduces and takes the parameter as. The bounds are one region, of what they are declared on: an invariant holds every value of its data, so places one data holds share one bound, the tightest any of them asks, and a rule read at several places says the one region every reading of it does. Within all of them no run stops so there, and each data keeps a value under them beside the rules it already states. Absent where some reading of the rule says no region, where the bounds together leave some data no value, or where what the rules already leave a place is not shown. The value to declare is the domain's. Absent where some operation that may stop a run is over several places, or stops where the clauses of a type a construction makes leave the number, which the model states, or where no place is held by either.",
+            "items": {
+              "type": "object",
+              "required": [
+                "invariant",
+                "furthestOut"
+              ],
+              "oneOf": [
+                {
+                  "description": "A data of the model holds the place.",
                   "required": [
-                    "data",
-                    "invariant"
-                  ],
-                  "additionalProperties": false,
-                  "properties": {
-                    "data": {
-                      "type": "string",
-                      "description": "The data the invariant is declared on: the place's own type where it is written under a name, otherwise the record the place is a field of."
-                    },
-                    "invariant": {
-                      "type": "string",
-                      "description": "The clause as an author writes it, the place as that data names it and the bound as a literal of its type."
-                    }
-                  }
+                    "data"
+                  ]
+                },
+                {
+                  "description": "The place is a parameter no data holds.",
+                  "required": [
+                    "parameter",
+                    "type"
+                  ]
+                }
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "type": "string",
+                  "description": "The data the invariant is declared on, qualified by the module that declares it, as two modules may each declare a data of one name: the place's own type where it is written under a name, otherwise the record the place is a field of. Absent where the place is a parameter no data holds."
+                },
+                "parameter": {
+                  "type": "string",
+                  "description": "The parameter the place is, where no data holds it: the invariant is declared on a data the author introduces, and names that data's value. Absent where a data holds the place."
+                },
+                "type": {
+                  "type": "string",
+                  "description": "The type of `parameter` as it is written, which the data introduced for it is of. Present exactly where `parameter` is."
+                },
+                "invariant": {
+                  "type": "string",
+                  "description": "The clause as an author writes it, the place as that data names it and the bound as a literal of its type."
+                },
+                "furthestOut": {
+                  "type": "boolean",
+                  "description": "Whether the bound is as far out as one can be: with it declared one step further out on every place its data holds, every other bound of the array holding, a run is shown to get there and stop, as `rule_may_stop_a_run` shows a stop. False where the bound is enough to keep every run from the stops and nothing is said of how far out one may go."
                 }
               }
             }
@@ -4834,7 +4865,7 @@
                     "no_value_found",
                     "no_value_found_within_what_is_tried"
                   ],
-                  "description": "Why neither is shown. `no_operation_told`: a run may stop in something worked out that this compiler does not read as an operation. `on_rows_of_the_statement`: the comparison stops a run on rows it states, such as a divisor of nought, and no input reaching them is looked for. `on_an_arm` and `on_an_application`: the operation is worked out on one arm of a choice, or inside a function applied to each element, and a stop is looked for only where the comparison itself is evaluated. `not_every_operation_told`: another part of the comparison may stop a run first and is not read. `something_before_it_may_stop`: something evaluated before the comparison may stop a run first. `a_condition_not_read`: a condition on the way is no comparison of whole numbers of the input, so no input is checked against it. `not_over_the_input`: the operation is over a value the body works out, such as a total or a product, and not over numbers of the input. `no_value_shown`: the input's types declare invariants or cases, and no input meeting them is built. `no_value_found`: no input tried takes the operation past its type. `no_value_found_within_what_is_tried`: the inputs tried ran out first, and another may."
+                  "description": "Why neither is shown. `no_operation_told`: a run may stop in something worked out that this compiler does not read as an operation. `on_rows_of_the_statement`: the comparison stops a run on rows it states, such as a divisor of nought, and no input reaching them is looked for. `on_an_arm` and `on_an_application`: the operation is worked out on one arm of a choice, or inside a function applied to each element, and the comparison is no condition, so nothing says which runs take the arm or make the application. `not_every_operation_told`: another part of the comparison may stop a run first and is not read. `something_before_it_may_stop`: something evaluated before the comparison may stop a run first. `a_condition_not_read`: a condition on the way is no comparison of whole numbers of the input, so no input is checked against it. `not_over_the_input`: the operation is over a value the body works out, such as a total or a product, and not over numbers of the input. `no_value_shown`: the input's types declare invariants or cases, and no input meeting them is built. `no_value_found`: no input tried takes the operation past its type. `no_value_found_within_what_is_tried`: the inputs tried ran out first, and another may."
                 }
               }
             }

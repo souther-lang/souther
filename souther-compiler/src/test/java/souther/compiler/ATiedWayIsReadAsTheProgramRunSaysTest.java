@@ -278,12 +278,11 @@ class ATiedWayIsReadAsTheProgramRunSaysTest {
             }
         }
         assertFalse(isRead(behaviorReport), () -> behaviorReport.get("partition").toString());
-        // Declarations that state what the numbers hold leave no input shown to exist, so the stop
-        // is not shown, and is left unresolved and not taken for none.
+        // The declarations leave each number a run of its own, every one a value, so an input
+        // holding the divisor at nought is shown and the stop the program comes to is said.
         String said = AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
-        assertTrue(said.contains("stop not resolved"), said);
-        assertFalse(said.contains("· may stop a run"), said);
+        assertTrue(said.contains("· may stop a run"), said);
     }
 
     /**

@@ -75,8 +75,8 @@ class AnElementOfAListOfWholeNumbersIsReadAsTheNumberAndNotWhereItStandsTest {
      * A walk that does not stop on an answer makes every application, so the sum over the last
      * element stops every run where it is past the type, after the first got past; and each
      * application still draws its own line, the stop taking none away. The sum is worked out on
-     * an application of a closure, where no existence of a run stopping is shown, so the stop is
-     * said as not resolved, with the rows every run getting there stops at.
+     * the application the second element is handed, which every run makes, the first having got
+     * past: a value of the input shown to stop there is a run that does.
      */
     @Test
     void aSumOverTheLastElementAFilterIsHandedStopsEveryRunPastIt() {
@@ -88,19 +88,18 @@ class AnElementOfAListOfWholeNumbersIsReadAsTheNumberAndNotWhereItStandsTest {
         List<String> report = AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
                 .map(String::strip).toList();
-        assertEquals(List.of("· stop not resolved: comparison@3:36; whether a run stops in a + 10"
-                        + " is not determined: " + ON_EACH_ELEMENT + "; a run that gets there"
-                        + " stops in a + 10 where a is at least 9223372036854775798, and no such"
-                        + " run is shown to exist"),
+        assertEquals(List.of("· may stop a run: comparison@3:36 — some run that reaches it stops"
+                        + " in an operation it is read through; every run stops in a + 10 where a"
+                        + " is at least 9223372036854775798"),
                 report.stream().filter(line -> line.startsWith("· may stop")
                         || line.startsWith("· stop not resolved")).toList());
         assertEquals(List.of("0", "-10"), lines(compilation));
     }
 
-    /** Why a stop worked out on each element is not resolved, as the report says it. */
-    private static final String ON_EACH_ELEMENT = "it is worked out inside a function applied to"
-            + " each element, and a stop is looked for only where the comparison itself is"
-            + " evaluated";
+    /** Why a stop worked out on an application is not resolved where the applications before it
+     *  work out what is not read, as the report says it. */
+    private static final String ON_EACH_ELEMENT = "something evaluated before the comparison may"
+            + " end the run first";
 
     /** The values of the lines drawn in {@code m}, in the order they are measured. */
     private static List<String> lines(Compilation compilation) {

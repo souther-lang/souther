@@ -1372,6 +1372,23 @@ public final class BoundOperationFacts {
         return Collections.unmodifiableSet(out);
     }
 
+    /**
+     * The operation of the library that takes {@code part} of a date, or null where none does.
+     * Read off the account rather than declared beside it, so a reader that has a date and wants
+     * its year asks the operation the account names.
+     */
+    public ValueName.Stdlib takesThePart(TakenAs.DatePart part) {
+        for (ValueName operation
+                : ones(BoundOperationFact.AnswersANumberTakenOfAValueItIsGiven.class)) {
+            if (operation instanceof ValueName.Stdlib library
+                    && takenAs(operation) instanceof TakenAs.PartOfDate(TakenAs.DatePart taken)
+                    && taken == part) {
+                return library;
+            }
+        }
+        return null;
+    }
+
     /** The operations that count what they are given, which is the narrower vocabulary a size is
      *  asked for under. Read off the account rather than declared beside it. */
     public Set<ValueName> countsWhatItIsGiven() {

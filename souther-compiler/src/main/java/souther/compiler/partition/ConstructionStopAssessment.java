@@ -552,9 +552,14 @@ final class ConstructionStopAssessment {
         for (NumericTerm number : numbers) {
             places.add(((NumericTerm.ValueOf) number).position());
         }
-        if (!AValueOfTheInput.holdsAnyWholeNumbersAt(read, places)) {
+        // A value of the input holding them exists where they meet what the input's declarations
+        // ask of the places, which the value looked for is asked to meet with the way.
+        Optional<List<TakenConstraint.Affine>> declared =
+                AValueOfTheInput.whatAValueAtThemMeets(read, places);
+        if (declared.isEmpty()) {
             return new Found.None(WhyAConstructionStopIsNotShown.NO_VALUE_SHOWN);
         }
+        taken.addAll(declared.get());
         Map<NumericTerm, List<ExactRatio>> tried = new LinkedHashMap<>();
         for (NumericTerm number : numbers) {
             tried.put(number, valuesToTry(number, taken, first, ask, read));

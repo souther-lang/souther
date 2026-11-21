@@ -595,14 +595,6 @@ public sealed interface ReportMessage extends Message {
      *  there. */
     record ARunGettingThereStops(String stops) implements ReportMessage, Prose {}
 
-    /**
-     * The invariant an author may declare on {@code data} that is enough to keep every run from
-     * the stop said above it, said where no run is shown to stop there now: a bound that keeps a
-     * run from that stop, and no more.
-     */
-    record ABoundOnTheInputWouldKeepEveryRunFromIt(String data, String invariant)
-            implements ReportMessage, Prose {}
-
     /** The constructions on the way to a rule of which neither that a run stops there nor that
      *  none does is shown: {@code asks}, each said by {@link ConstructionAsksAndNotShown},
      *  {@link ConstructionNeverPassedAndNotShown} or {@link ConstructionNotShown}. */
@@ -641,10 +633,24 @@ public sealed interface ReportMessage extends Message {
     /**
      * The invariant an author may declare on {@code data}, the data holding an input, that keeps
      * every run from the stop said above it, where that stop is where the representation of a
-     * number stops: the furthest out a bound can be, which the domain may put further in.
+     * number stops, which the domain may put further in. {@code furthest} says, where it is so,
+     * that the bound is as far out as one can be ({@link AFurtherBoundLetsInAStop}), and nothing
+     * otherwise.
      */
-    record ABoundOnTheInputKeepsEveryRunGoing(String data, String invariant)
+    record ABoundOnTheInputKeepsEveryRunGoing(String data, String invariant, Message furthest)
             implements ReportMessage, Prose {}
+
+    /**
+     * The same, where the input is {@code parameter}, a {@code type} no data of the model holds:
+     * the invariant is declared on a data of that type the author introduces and takes the
+     * parameter as.
+     */
+    record ABoundOnAParameterKeepsEveryRunGoing(String parameter, String type, String invariant,
+                                                Message furthest)
+            implements ReportMessage, Prose {}
+
+    /** That a bound one step further out lets in a run that stops: one is shown to. */
+    record AFurtherBoundLetsInAStop() implements ReportMessage, Prose {}
 
     /** What one construction on the way to a rule asks of a run that works it out. */
     record ConstructionAsks(String construction, String at, String asked)

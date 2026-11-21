@@ -113,4 +113,20 @@ final class EvaluationPlaces {
         Stretch before = stretches.get(Core.withoutStanding(earlier));
         return after != null && before != null && after.first() > before.own();
     }
+
+    /**
+     * Whether {@code later} itself is worked out after everything {@code earlier} works out: both
+     * have a place, and its own is past where the other's ends. So what stops at {@code later}'s
+     * own step — a quotient, at its divisor — stops after any stop of {@code earlier}, though what
+     * {@code later} works out on its way to it, such as its operands, may come first. False where
+     * either has none.
+     */
+    boolean isWorkedOutAfter(Core later, Core earlier) {
+        if (later == null || earlier == null) {
+            return false;
+        }
+        Stretch after = stretches.get(Core.withoutStanding(later));
+        Stretch before = stretches.get(Core.withoutStanding(earlier));
+        return after != null && before != null && after.own() > before.own();
+    }
 }

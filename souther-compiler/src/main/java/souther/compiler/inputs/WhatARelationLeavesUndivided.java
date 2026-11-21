@@ -904,6 +904,58 @@ public final class WhatARelationLeavesUndivided {
         return new EachWayItComesOut(Granularity.DENSE, out);
     }
 
+    /**
+     * The same of a whole-number term the relation settles at every value it may hold
+     * ({@code settled}): at the values of each run it settles that the term is shown to take
+     * ({@link Term#realizes}), the way the run settles it is reached and the other never is, and at
+     * the rest the other way is never reached and this one is not shown. Null where some value the
+     * term may hold is settled by no run, or whether a part of a run holds a value is not worked
+     * out. That the relation settles a run says how a row there comes out; that the term takes the
+     * value says there is one.
+     */
+    public static <P> EachWayItComesOut ofASettledWholeNumber(Term<P> term, Leaves.Settled settled) {
+        Span taken = term.realizes() == null ? null : Span.ofTheValues(term.realizes());
+        Span held = term.holds() == null ? null : Span.ofTheValues(term.holds());
+        List<SettledRun> runs = settled.runs();
+        if (runs.isEmpty() || !reachesOut(runs.getFirst().from(), held == null ? null
+                : held.lower(), true) || !reachesOut(runs.getLast().to(), held == null ? null
+                : held.upper(), false)) {
+            return null;
+        }
+        List<EachWayItComesOut.Stretch> out = new ArrayList<>();
+        ExactCut after = null;
+        for (SettledRun each : settled.runs()) {
+            if (after != null && (each.from() == null || !each.from().equals(after))) {
+                return null;
+            }
+            boolean holds = each.holds();
+            if (!shownOver(new Span(each.from(), each.to()), taken, out, _ -> holds, _ -> !holds,
+                    holds, !holds)) {
+                return null;
+            }
+            after = each.to() == null ? null : wholeNumberAfter(each.to());
+        }
+        return out.isEmpty() ? null : new EachWayItComesOut(Granularity.DISCRETE, out);
+    }
+
+    /** Whether a run ending at {@code end}, its lower end where {@code lower}, reaches as far out
+     *  as {@code held}, the end of the values the term may hold there: an end null is no end. */
+    private static boolean reachesOut(ExactCut end, ExactCut held, boolean lower) {
+        if (end == null) {
+            return true;
+        }
+        return held != null && (lower ? ExactCut.tighterLower(end, held)
+                : ExactCut.tighterUpper(end, held)).equals(held);
+    }
+
+    /** The cut that starts at the whole number after the one {@code end} closes at, or null where
+     *  it closes at no whole number. */
+    private static ExactCut wholeNumberAfter(ExactCut end) {
+        return end.at().isWhole() && end.inclusive()
+                && end.at().plus(ExactRatio.ONE) instanceof ExactAnswer.Held<ExactRatio>(
+                        ExactRatio next) ? ExactCut.inclusive(next) : null;
+    }
+
     /** Whether {@link #eachWayItComesOut} works anything out of a term spaced so, of a relation
      *  of order against {@code constant}: a dense term only. Asked before the terms are read. */
     public static boolean showsRowsEachWayOf(Granularity granularity, ExactRatio constant,

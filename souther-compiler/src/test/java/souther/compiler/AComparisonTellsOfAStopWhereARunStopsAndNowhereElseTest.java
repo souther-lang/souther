@@ -345,29 +345,21 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
         // row of the input holds at a place, every other operation and every condition on the way
         // read whole (StopAssessment). Each of these is a stop a run comes to and none of that is
         // shown of, so it is said as not resolved.
-        notShown("an operation on an arm of a choice", "armOfAChoice",
-                "takenFromAProductInAnArm", "elementsOfAChosenListThatAgree");
-        notShown("an operation over what a choice comes to, a value a run works out and no "
-                + "number of the input", "armPastTheType", "totalOfWrittenChoices", "maxOfASum");
+        notShown("an operation on an arm of a choice", "takenFromAProductInAnArm",
+                "elementsOfAChosenListThatAgree");
         notShown("an operation worked out on each application of a closure", "lengthOfAStep",
                 "lengthOfACancelledStep", "lengthOfAConditionStep", "lengthOfAFlatStep",
                 "lengthOfAShiftedStep", "lengthOfASortedStep", "lengthOfAStepAtAnIndex",
                 "lengthOfAStepInAWrittenList", "lengthOfATakenStep", "lengthOfATupleStep",
                 "lengthOfAnUnusedBinding", "lengthOfACancelledConstantStep", "emptyOfAStep",
                 "everyOfAStep", "everyOfAShiftedStep", "maxOfAStep", "maxOfAStepByQ",
-                "totalOfAStep", "totalOfAStepOverAStep", "totalOfChoicesAStepMakes",
-                "totalOfTakenSteps", "foldOfAStep", "totalOfThePositionsTimesTheElements",
-                "totalOfTheSameChoice", "totalOfWhatAFilterKeeps",
-                "totalOfWhatAFilterKeepsHeldAgainstWhatItKeeps");
+                "totalOfAStep", "totalOfAStepOverAStep", "totalOfTakenSteps", "foldOfAStep",
+                "totalOfThePositionsTimesTheElements", "totalOfTheSameChoice");
         notShown("a total of the elements, worked out exactly: no value of the elements is put "
                 + "to it", "totalOfTheElements", "foldOfTheElements", "foldAddingAChoice",
                 "sumOfAChoiceStep", "sumCarriedInATuple");
         notShown("a product of two numbers of the input, which is no form a value is put to",
                 "productOfTwoNumbers");
-        notShown("beside a call whose own stop no reading tells as an operation, here the least "
-                + "Int having no absolute value", "absOfASum", "absInALetBody");
-        notShown("a construction on the way refused at some q, which asks something of a run "
-                + "that no run is shown not to meet", "fieldBesideARefusedPart");
     }
 
     /** Each of {@code names} as a stop a run comes to that is said as not resolved, for

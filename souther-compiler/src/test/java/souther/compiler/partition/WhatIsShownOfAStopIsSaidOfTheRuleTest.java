@@ -19,7 +19,6 @@ import souther.compiler.query.Compilation;
 import java.math.BigInteger;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -50,15 +49,18 @@ class WhatIsShownOfAStopIsSaidOfTheRuleTest {
     }
 
     /** An operation on an arm of a choice, read and put on the way with the arm's condition, is
-     *  not resolved, of the rule, and holds no border: which rows get past it is read. */
+     *  shown to stop a run that takes the arm, of the rule, and holds no border: which rows get
+     *  past it is read. */
     @Test
-    void anUnresolvedStopOfAnOperationReadIsSaidOfTheRuleAndHoldsNoBorder() {
+    void aStopOnAnArmPutOnTheWayIsShownOfTheRuleAndHoldsNoBorder() {
         Compilation compilation = compiled("q: Int",
                 "if (if q > 5 then q + 1 else 3) >= q then 1 else 2");
         List<WhatIsShownOfAStop> shown = stopsShown(compilation);
-        assertEquals(List.of(RuleWhereAStopIsNotShown.class), kinds(shown));
-        assertEquals(List.of(new AStopNotShown(Optional.of("q + 1"), WhyAStopIsNotShown.ON_AN_ARM)),
-                ((RuleWhereAStopIsNotShown) shown.getFirst()).notShown());
+        assertEquals(List.of(RuleWhereARunMayStop.class), kinds(shown));
+        assertEquals(List.of(new AStopShown("q + 1",
+                        List.of(new AStopShown.NumberAt(TermPath.of("q"),
+                                BigInteger.valueOf(Long.MAX_VALUE))))),
+                ((RuleWhereARunMayStop) shown.getFirst()).shown());
         assertFalse(holdsABorderOpen(compilation));
     }
 
@@ -73,13 +75,30 @@ class WhatIsShownOfAStopIsSaidOfTheRuleTest {
         assertTrue(holdsABorderOpen(compilation));
     }
 
+    /** On the arm of a case of the input, the value shown is of that case: a run with any other
+     *  takes another arm and works none of it out. */
+    @Test
+    void aStopOnTheArmOfACaseIsShownByAValueOfThatCase() {
+        Compilation compilation = compiled("data Tier = Low | High", "q: Int, t: Tier",
+                "if (match t with | Low -> 3 | High -> q + 1) >= q then 1 else 2");
+        List<WhatIsShownOfAStop> shown = stopsShown(compilation);
+        assertEquals(List.of(RuleWhereARunMayStop.class), kinds(shown));
+        assertEquals(List.of(new AStopShown("q + 1", List.of(
+                        new AStopShown.NumberAt(TermPath.of("q"),
+                                BigInteger.valueOf(Long.MAX_VALUE)),
+                        new AStopShown.NumberAt(TermPath.of("t"), BigInteger.ONE)))),
+                ((RuleWhereARunMayStop) shown.getFirst()).shown());
+    }
+
     /** A product of two numbers of the input is no form a value is put to, so whether it stops
-     *  a run is not resolved; and its line stands, the border held by nothing. */
+     *  a run is not resolved; and its line stands, the border held by nothing. The factor worked
+     *  out first, {@code 2 * price}, is a form of the input, and a run is shown to stop in it. */
     @Test
     void aProductNotResolvedLeavesItsLineStanding() {
         Compilation compilation = compiled("price: Int, quantity: Int",
                 "if 2 * price * quantity >= 1000 then 1 else 2");
-        assertEquals(List.of(RuleWhereAStopIsNotShown.class), kinds(compilation));
+        assertEquals(List.of(RuleWhereARunMayStop.class, RuleWhereAStopIsNotShown.class),
+                kinds(compilation));
         assertFalse(holdsABorderOpen(compilation));
     }
 
@@ -313,10 +332,16 @@ class WhatIsShownOfAStopIsSaidOfTheRuleTest {
     }
 
     private static Compilation compiled(String parameters, String body) {
+        return compiled("", parameters, body);
+    }
+
+    private static Compilation compiled(String declarations, String parameters, String body) {
         return ACompiledModel.answered("""
                 module w1
+                %s
                 behavior m : (%s) -> Int
                 let m (%s) = %s
-                """.formatted(parameters, parameters.replaceAll(":\\s*[A-Za-z<>]+", ""), body));
+                """.formatted(declarations, parameters,
+                parameters.replaceAll(":\\s*[A-Za-z<>]+", ""), body));
     }
 }

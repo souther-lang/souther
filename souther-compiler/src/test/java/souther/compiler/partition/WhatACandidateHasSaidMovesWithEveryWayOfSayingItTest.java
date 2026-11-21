@@ -59,7 +59,8 @@ class WhatACandidateHasSaidMovesWithEveryWayOfSayingItTest {
                 trial -> trial.readOnAnArm(new Pullback.ArmRead.OfARelation(relation),
                         new Pullback.OnThisArm(() ->
                         AffineReading.WorkedOut.ofWhatIsToldOf(UndividedByARelation.Working.UNREAD),
-                        () -> UndividedByARelation.Working.AS_THE_FORM, List.of())),
+                        () -> StopEvidence.ofWhatIsToldOf(
+                                UndividedByARelation.Working.AS_THE_FORM), List.of())),
                 trial -> trial.tell(relation, UndividedByARelation.Working.UNREAD));
     }
 
