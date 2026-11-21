@@ -32,7 +32,10 @@ import java.util.stream.Collectors;
  * <p>How far out the region goes is a second fact, said of each bound apart: a bound is as far out
  * as one can be where a run with it declared one step further out, every other declaration
  * holding, is shown to stop ({@code asFarOutAsCanBe}). That is a claim about the region, so it is
- * made once the region is whole and never of a bound alone.
+ * made once the region is whole and never of a bound alone. It is shown by one reading, of a run
+ * of the input that reading reads, so it rests on the declarations and on nothing another reading
+ * says a holder is left: an account of another input that leaves the holder less is no account of
+ * the input the run was of, and takes nothing from the run.
  *
  * <p>That a value of the input holds every declaration at once is shown by a reading over the
  * places its own declarations hold ({@code shownTogether}), and is a third fact, kept apart from
@@ -42,7 +45,8 @@ import java.util.stream.Collectors;
  *
  * @param bounds          the declarations, each data and side once
  * @param held            what every reading put together says each data a bound is declared on is
- *                        already left, every one of which is a value
+ *                        already left, every one of which is a value: of exactly the data the
+ *                        bounds are declared on
  * @param asFarOutAsCanBe the bounds of {@code bounds} as far out as one can be
  * @param shownTogether   each set of what is declared on that a value of the input was shown to
  *                        hold at once, every combination of what its rules leave the places of
@@ -60,6 +64,11 @@ public record WhatKeepsEveryRunGoing(Set<ABoundThatKeepsEveryRunGoing> bounds,
         asFarOutAsCanBe = Set.copyOf(asFarOutAsCanBe);
         shownTogether = shownTogether.stream().map(Set::copyOf)
                 .collect(Collectors.toUnmodifiableSet());
+        if (!held.keySet().equals(bounds.stream().map(ABoundThatKeepsEveryRunGoing::holder)
+                .collect(Collectors.toSet()))) {
+            throw new IllegalArgumentException("what is held is said of the data the bounds are"
+                    + " declared on: " + bounds + " " + held.keySet());
+        }
         if (bounds.stream().map(ABoundThatKeepsEveryRunGoing::side).distinct().count()
                 != bounds.size() || !keepsEveryDataAValue(bounds, held)) {
             throw new IllegalArgumentException("a region declares each data and side once, and"
@@ -82,10 +91,6 @@ public record WhatKeepsEveryRunGoing(Set<ABoundThatKeepsEveryRunGoing> bounds,
             Map<ABoundThatKeepsEveryRunGoing.Holder, ABoundThatKeepsEveryRunGoing.Held> held) {
         Set<ABoundThatKeepsEveryRunGoing.Holder> declaredOn = new LinkedHashSet<>();
         asked.forEach(each -> declaredOn.add(each.holder()));
-        if (!held.keySet().containsAll(declaredOn)) {
-            throw new IllegalArgumentException("what each bound is declared on is held to"
-                    + " something: " + declaredOn + " " + held.keySet());
-        }
         return tightest(asked, held, Set.of(declaredOn));
     }
 
@@ -183,9 +188,6 @@ public record WhatKeepsEveryRunGoing(Set<ABoundThatKeepsEveryRunGoing> bounds,
         Map<ABoundThatKeepsEveryRunGoing.Holder, ABoundThatKeepsEveryRunGoing.Held> left =
                 new LinkedHashMap<>(held);
         for (ABoundThatKeepsEveryRunGoing each : bounds) {
-            if (!left.containsKey(each.holder())) {
-                return false;
-            }
             left.computeIfPresent(each.holder(), (_, was) -> was.bounded(each.at(), each.atMost()));
         }
         return left.values().stream().noneMatch(ABoundThatKeepsEveryRunGoing.Held::none);

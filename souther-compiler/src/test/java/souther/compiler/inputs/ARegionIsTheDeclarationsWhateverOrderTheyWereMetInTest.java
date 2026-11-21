@@ -110,4 +110,18 @@ class ARegionIsTheDeclarationsWhateverOrderTheyWereMetInTest {
         assertEquals(Set.of(x), TOGETHER.apply(Optional.of(one), Optional.of(other))
                 .orElseThrow().asFarOutAsCanBe());
     }
+
+    /**
+     * How far out a bound goes is shown of a run of the input the reading that showed it reads, so
+     * another reading's account of another input, leaving the holder less, takes nothing from it.
+     */
+    @Test
+    void howFarOutABoundGoesStandsBesideAnotherReadingsNarrowerAccount() {
+        ABoundThatKeepsEveryRunGoing x = on("x", true, 10);
+        Optional<WhatKeepsEveryRunGoing> shown = reading(held(0, 20), x)
+                .map(region -> region.asFarOutAsCanBe(Set.of(x)));
+        Optional<WhatKeepsEveryRunGoing> narrower = reading(held(0, 12), x);
+
+        assertEquals(Set.of(x), TOGETHER.apply(shown, narrower).orElseThrow().asFarOutAsCanBe());
+    }
 }
