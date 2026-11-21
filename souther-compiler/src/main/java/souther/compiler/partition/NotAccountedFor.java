@@ -102,7 +102,11 @@ final class NotAccountedFor {
 
     @Override
     public int hashCode() {
-        return kind.hashCode();
+        int sum = kind.hashCode();
+        for (Core.Binary each : quotients) {
+            sum += System.identityHashCode(each);
+        }
+        return sum;
     }
 
     @Override

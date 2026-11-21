@@ -73,6 +73,28 @@ class WhatIsNotAccountedForIsASetOfNodesAndTheirPlacesAreNotGuessedTest {
                 "where it stands is not known, and nothing is said to be after it");
     }
 
+    /** The same node held where it is worked out only on some runs, which no walk of what is
+     *  always worked out meets, and where it is worked out on every run. */
+    @Test
+    void aNodeHeldWhereItIsWorkedOutOnlyOnSomeRunsAndAgainOnEveryRunHasNoPlace() {
+        Core.Binary shared = binary(BinOp.ADD, one(), one());
+        Core.Binary division = binary(BinOp.DIV, binary(BinOp.AND, one(), shared), one());
+        EvaluationPlaces places = EvaluationPlaces.of(binary(BinOp.ADD, division, shared));
+        assertFalse(places.comesAfter(shared, division),
+                "on the runs where the left of the && holds it is worked out before the division");
+    }
+
+    /** A node held at many places is not walked once for each: a tree of depth 40 whose every
+     *  node holds the one below twice has 2^40 places. */
+    @Test
+    void aNodeHeldAtManyPlacesIsNotWalkedOnceForEachOfThem() {
+        Core node = one();
+        for (int depth = 0; depth < 40; depth++) {
+            node = binary(BinOp.ADD, node, node);
+        }
+        assertFalse(EvaluationPlaces.of(node).comesAfter(node, one()));
+    }
+
     private static UndividedByARelation.Working workingWithAnOperationAt(Core node) {
         return new UndividedByARelation.Working(List.of(new UndividedByARelation.IntOperation(
                 LinearForm.constant(ExactRatio.ONE), BigInteger.ZERO, BigInteger.TEN, List.of())

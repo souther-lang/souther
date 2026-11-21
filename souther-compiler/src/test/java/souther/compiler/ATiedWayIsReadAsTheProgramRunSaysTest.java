@@ -199,13 +199,14 @@ class ATiedWayIsReadAsTheProgramRunSaysTest {
      * Behind a gate that adds the two numbers, an order between them is told apart by a stop at
      * values far from the small ones: at {@code p = 2^62} no {@code e} that passes the gate has
      * the comparison come out as it does at {@code p = 1}, and one more than the greatest stops.
-     * A report that holds both to one class of {@code p} says what the program does not. The
-     * order written plainly and with a coefficient that rounds are two behaviors of one model,
-     * and neither is read: what the gate does is no part of how the order is written.
+     * A report that holds both to one class of {@code p} says what the program does not. Each way
+     * the order is written is a behavior of one model: a number a sum may stop at and one twice or
+     * three times the other differ in where the run stops, and none is read.
      */
     @Test
     void anOrderBehindASumThatMayStopIsNotReadHoweverItIsWritten() throws Exception {
-        List<String> orders = List.of("i.e.value < i.p.value", "i.e.value < 3 * i.p.value");
+        List<String> orders = List.of("i.e.value < i.p.value", "i.e.value < 3 * i.p.value",
+                "2 * i.p.value >= i.e.value", "i.e.value < i.p.value + 1");
         StringBuilder model = new StringBuilder("""
                 module demo
 
