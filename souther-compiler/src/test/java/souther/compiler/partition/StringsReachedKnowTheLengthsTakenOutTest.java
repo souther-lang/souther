@@ -18,6 +18,7 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
+import souther.compiler.values.TextExtents;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -77,11 +78,47 @@ class StringsReachedKnowTheLengthsTakenOutTest {
         NumericTerm[] length = new NumericTerm[1];
         StringsReached reached = reachedBy(
                 "String.length(value) <= 10 && String.length(value) /= 7", length);
-        assertFalse(reached.allowsAnEdgeAt(length[0], ExactRatio.of(7)),
-                "no string has seven code points");
-        assertTrue(reached.allowsAnEdgeAt(length[0], ExactRatio.of(6)));
-        assertTrue(reached.allowsAnEdgeAt(length[0], ExactRatio.of(8)));
-        assertTrue(reached.allowsAnEdgeAt(length[0], ExactRatio.of(0)));
+        assertFalse(reached.allowsAPointIn(length[0], at(7)), "no string has seven code points");
+        assertTrue(reached.allowsAPointIn(length[0], at(6)));
+        assertTrue(reached.allowsAPointIn(length[0], at(8)));
+        assertTrue(reached.allowsAPointIn(length[0], at(0)));
+    }
+
+    /** A run is shown by a length of it some string has, though the length beside its end is
+     *  taken out; and a run of lengths no string has, or past what the rules leave, by none. */
+    @Test
+    void aRunIsShownByALengthOfItAStringHas() {
+        NumericTerm[] length = new NumericTerm[1];
+        StringsReached reached = reachedBy(
+                "String.length(value) <= 10 && String.length(value) /= 7", length);
+        assertTrue(reached.allowsAPointIn(length[0], from(7, 8)));
+        assertFalse(reached.allowsAPointIn(length[0], from(7, 7)));
+        assertFalse(reached.allowsAPointIn(length[0], from(11, 20)));
+    }
+
+    /** The longest a String holds is a length one has, and a length past it is none: a run across
+     *  it is shown by what it holds below, and a run past it by nothing. */
+    @Test
+    void theLongestStringIsALengthAndNothingPastItIs() {
+        NumericTerm[] length = new NumericTerm[1];
+        StringsReached reached = reachedBy("String.length(value) >= 0", length);
+        long longest = TextExtents.LONGEST_STRING;
+        assertTrue(reached.allowsAPointIn(length[0], at(longest)));
+        assertFalse(reached.allowsAPointIn(length[0], at(longest + 1)));
+        assertTrue(reached.allowsAPointIn(length[0], from(longest - 1, longest + 1)));
+        assertFalse(reached.allowsAPointIn(length[0], from(longest + 1, longest + 9)));
+    }
+
+    /** The one length {@code n}. */
+    private static LevelRegion at(long n) {
+        return LevelRegion.point(new Level.OfTheQuantity(ExactRatio.of(n)));
+    }
+
+    /** The lengths from {@code least} to {@code most}, both counted. */
+    private static LevelRegion from(long least, long most) {
+        return LevelRegion.of(new LevelInterval(
+                Bound.at(new Level.OfTheQuantity(ExactRatio.of(least)), true),
+                Bound.at(new Level.OfTheQuantity(ExactRatio.of(most)), true)));
     }
 
     /**
@@ -107,7 +144,7 @@ class StringsReachedKnowTheLengthsTakenOutTest {
     void theSameLineWhereNoLengthIsTakenOutIsAtAStringsLength() {
         NumericTerm[] length = new NumericTerm[1];
         StringsReached reached = reachedBy("String.length(value) <= 10", length);
-        assertTrue(reached.allowsAnEdgeAt(length[0], ExactRatio.of(7)));
+        assertTrue(reached.allowsAPointIn(length[0], at(7)));
         assertTrue(reached.lengthsLeft().get(length[0]).isOneRun(),
                 "the lengths left are the one run between the ends");
     }
@@ -118,11 +155,10 @@ class StringsReachedKnowTheLengthsTakenOutTest {
         StringsReached reached = reachedBy("String.length(value) <= 10"
                 + " && (String.length(value) < 3 || String.length(value) > 5)", length);
         for (int taken : List.of(3, 4, 5)) {
-            assertFalse(reached.allowsAnEdgeAt(length[0], ExactRatio.of(taken)),
-                    "a line at " + taken);
+            assertFalse(reached.allowsAPointIn(length[0], at(taken)), "a point at " + taken);
         }
         for (int left : List.of(0, 2, 6, 10)) {
-            assertTrue(reached.allowsAnEdgeAt(length[0], ExactRatio.of(left)), "a line at " + left);
+            assertTrue(reached.allowsAPointIn(length[0], at(left)), "a point at " + left);
         }
     }
 }

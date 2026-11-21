@@ -3,6 +3,9 @@ package souther.compiler.partition;
 import souther.compiler.check.DeclarationReadings;
 import souther.compiler.check.ClassMembers;
 import souther.compiler.check.DatePartsLeft;
+import souther.compiler.check.DateRules;
+import souther.compiler.check.RuleOfDateParts;
+import souther.compiler.numeric.DateTranslation;
 import souther.compiler.check.HeldClass;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.ReadingPolicy;
@@ -390,8 +393,17 @@ public final class Partitions {
             return along.getOrDefault(axis.id(), List.of());
         }
 
-        /** Whether an edge of {@code line}, a line drawn on this term, is a value some row could
-         *  carry. A line at a level that is no number is asked nothing of its place.
+        /** Whether the values {@code asked} names of this term, a point of a line drawn on it,
+         *  hold one some row could carry. A point at a level that is no number is shown nothing of.
+         *
+         * <p>Of the point and not of the line it is of. The values a term may take can have a hole
+         * beside a line, so a value at the line says nothing of the value beside it or of the run
+         * past it, and a run is shown by any value of it. A part of a date is asked of the dates
+         * the declarations leave ({@link #aDateHasThePartIn}), and a number of a string of the
+         * numbers its strings have ({@link StringsReached#allowsAPointIn}). Each other arm answers
+         * of every value of its order or of none, so it says the same of every point: what a
+         * location holds is every value between its ends unless a rule the bounds do not state
+         * leaves the term uncertain, and the rest are said below.
          *
          * <p>False where a rule reaching the value the term is taken of was not read in full. Every
          * edge here is then where the rules this could read stop, and a rule it could not read can
@@ -414,8 +426,9 @@ public final class Partitions {
          * in the corpus over collections that have no values. And false at a number of a string
          * the position's strings do not reach, and wherever a string position may hold no value:
          * a row is a whole value of the input. */
-        public boolean edgeIsKnownWritable(NumericTerm term, Border line, Quantities reading) {
-            return strings.allowsAnEdgeAt(term, line.cut().cut().at().asANumber())
+        public boolean pointIsKnownWritable(NumericTerm term, Criterion asked,
+                                            Quantities reading) {
+            return asked != null && strings.allowsAPointIn(term, asked.region())
                     && !uncertain.contains(term) && switch (term) {
                 // What a location holds is what its type holds, so an edge on it is an edge some
                 // value stands at by the type having been declared.
@@ -428,7 +441,7 @@ public final class Partitions {
                 // every one of them has a date, so the operation's answer holds of them.
                 case NumericTerm.TakenOf taken -> DefaultBoundOperationFacts.get()
                         .everyAnswerItCanGiveHasASourceValue(taken.operation())
-                        && aDateHasThePartAt(taken, line, reading);
+                        && aDateHasThePartIn(taken, asked, reading);
                 // A string holding any number of the code points of a class is written by
                 // repeating one of them, as a string of any length is — and, counted in what a
                 // conversion makes of it, by repeating one the conversion leaves as it is.
@@ -472,39 +485,41 @@ public final class Partitions {
         }
 
         /**
-         * Whether the number {@code taken} is, at the number {@code line} falls at, is shown to be
-         * a number some date the declarations leave comes to. Said of a part of a date only: any
-         * other number is the operation's to say, and is no claim of the calendar.
+         * Whether some date the declarations leave is shown to come to a number {@code taken} is
+         * among the values {@code asked} names. Said of a part of a date only: any other number
+         * is the operation's to say, and is no claim of the calendar.
          *
-         * <p>Of a part of a date, true only where the calendar shows it ({@link
-         * DatePartsLeft#someDateHas}), with the date moved as the number moves it. What the
-         * declarations leave of the date is what they say of its parts ({@code month == 2}), or
-         * nothing; any other class of it is one nothing here reads, and a walk that shows no date
-         * is no proof that there is none. Neither is a proof, and both leave the edge not known.
+         * <p>Of a part of a date, true only where one date shows it, with the date moved as the
+         * number moves it, and that date is of everything the declarations say of it together
+         * ({@link DatesTheDeclarationsLeave}): its ends, the range of each part ({@code month ==
+         * 2}), and what they hold two parts to ({@code month + day <= 20}) — and only where those
+         * are shown to be all the declarations say of it ({@link DateRules.Whole}). A choice, a
+         * part of the date moved, a hole in the date or a rule tying it to another place is a
+         * rule those do not hold, and a date found without it is one it may refuse. A point in a
+         * run is asked of the whole run, whose value nearest the line may be one no date has
+         * while another is. A search that shows no date is no proof that there is none. None is a
+         * proof, and each leaves the point not known.
          */
-        private static boolean aDateHasThePartAt(NumericTerm.TakenOf taken, Border line,
+        private static boolean aDateHasThePartIn(NumericTerm.TakenOf taken, Criterion asked,
                                                  Quantities reading) {
             if (!(taken.takenAs() instanceof TakenAs.PartOfDate(TakenAs.DatePart part))) {
                 return true;
             }
-            DatePartsLeft left = switch (reading.region().classAt(
-                    new NumericTerm.ValueOf(taken.position()))) {
+            if (asked == null || !(reading.rulesOfTheDateAt(taken.position())
+                    instanceof DateRules.Whole(long least, long most, HeldClass held,
+                            List<RuleOfDateParts> rules))
+                    || least > most) {
+                return false;
+            }
+            DatePartsLeft left = switch (held) {
                 case HeldClass.None _ -> DatePartsLeft.EVERY_DATE;
                 case HeldClass.OfDays(DatePartsLeft parts) -> parts;
                 case HeldClass.OfResidues _, HeldClass.NoValue _ -> null;
             };
-            ExactRatio at = line.cut().cut().at().asANumber();
-            // What the declarations hold the number to, of every rule they write on it, is a bound
-            // the number's edge lies within: a rule of two parts of the date shows in it where it
-            // shows nowhere in the class.
-            return left != null && at != null && at.isWhole()
-                    && reading.projectionOfTheDeclarations(taken)
-                            instanceof NumericDomain.FormProjection.Within(
-                                    NumericDomain.Bounds bounds) && bounds.admits(at)
-                    && at.floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger whole)
-                    && whole.bitLength() < Integer.SIZE
-                    && left.someDateHas(part, whole.intValueExact(),
-                            taken.transformation().translation());
+            return left != null && DatesTheDeclarationsLeave.withThePartIn(left, rules,
+                    new DateTranslation(0, least, most), part, asked.region(),
+                    taken.transformation().translation())
+                    instanceof DatesThatHoldEveryStatement.Found;
         }
 
         /**

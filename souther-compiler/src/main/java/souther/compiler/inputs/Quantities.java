@@ -1,5 +1,6 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.DateRules;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
@@ -212,6 +213,17 @@ public sealed interface Quantities permits ReadQuantities {
      * projection answers both, so such a reader asks this alone rather than this and the range.
      */
     NumericDomain.FormProjection projectionOfTheDeclarations(NumericTerm term);
+
+    /**
+     * What the declarations hold the date at {@code place} to — its ends, the class of its parts
+     * and the rules of two of them — where that is shown to be all they say of it, or that it is
+     * not ({@link DateRules}).
+     *
+     * <p>Of the declarations, as {@link #projectionOfTheDeclarations} is: what a caller took in
+     * is no rule of the value, and an edge a declaration owes stays owed however much of a body
+     * was read.
+     */
+    DateRules rulesOfTheDateAt(TermPath place);
 
     /**
      * The same rules, with these positions fixed at these values.
