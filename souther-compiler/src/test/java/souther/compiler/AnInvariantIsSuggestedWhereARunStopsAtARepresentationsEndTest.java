@@ -367,6 +367,24 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
                         line.indexOf("invariant"), line.indexOf(" keeps"))).toList()), report);
     }
 
+    /** A bound past where the place's own type stops leaves it no value, and is no region. */
+    @Test
+    void aBoundPastWhereThePlacesTypeStopsIsNoRegion() {
+        String report = report("""
+                module m
+
+                data P = { x: Int }
+
+                behavior f : (p: P) -> Bool
+                let f (p) = (((p.x + 9223372036854775807) + 9223372036854775807)
+                    + 9223372036854775807) > 0
+                """);
+
+        // Every run stops: one that keeps the last sum within Int holds p.x at -2M or less.
+        assertTrue(report.contains("every run stops in"), report);
+        assertEquals(List.of(), suggested(report), report);
+    }
+
     /** A bound a record's clause on the same field leaves no value beside is no region. */
     @Test
     void aBoundARecordsClauseLeavesNoValueBesideIsNoRegion() {

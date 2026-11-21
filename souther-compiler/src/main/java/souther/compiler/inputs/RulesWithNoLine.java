@@ -348,17 +348,16 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
         }
 
         /** What this gathering came to, which is what a reader hands on. Each rule's findings of a
-         *  stop say one region that keeps its runs going, the region every reading of it says
-         *  together, whichever of the findings each reading made — and only where, every reading
-         *  put together, a value of the input is shown to hold all of it at once
-         *  ({@link WhatKeepsEveryRunGoing#heldTogether}). */
+         *  stop carry one region that keeps its runs going, the region every reading of it says
+         *  together, whichever of the findings each reading made. Whether it is said is asked
+         *  where a report says it ({@link WhatKeepsEveryRunGoing#said}), and not here: what is
+         *  gathered here may be put together with more, a reading of which may be what shows it. */
         public RulesWithNoLine found() {
             Map<RuleRef, Optional<WhatKeepsEveryRunGoing>> kept = new LinkedHashMap<>();
             stopping.values().forEach(one -> kept.merge(one.rule(), one.keeping(),
                     WhatKeepsEveryRunGoing::together));
             List<WhatIsShownOfAStop> stops = stopping.values().stream()
-                    .map(one -> one.keptBy(kept.get(one.rule())
-                            .filter(WhatKeepsEveryRunGoing::heldTogether))).toList();
+                    .map(one -> one.keptBy(kept.get(one.rule()))).toList();
             return new RulesWithNoLine(List.copyOf(reported.values()),
                     List.copyOf(unclassified.values()), stops,
                     List.copyOf(expanded.values()), List.copyOf(costly.values()));

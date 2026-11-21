@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * The declarations that together keep every run getting to a rule from taking a number past where
@@ -49,7 +50,8 @@ public record WhatKeepsEveryRunGoing(Set<ABoundThatKeepsEveryRunGoing> bounds,
     public WhatKeepsEveryRunGoing {
         bounds = Collections.unmodifiableSequencedSet(new LinkedHashSet<>(bounds));
         asFarOutAsCanBe = Set.copyOf(asFarOutAsCanBe);
-        shownTogether = Set.copyOf(shownTogether);
+        shownTogether = shownTogether.stream().map(Set::copyOf)
+                .collect(Collectors.toUnmodifiableSet());
         if (bounds.stream().map(ABoundThatKeepsEveryRunGoing::side).distinct().count()
                 != bounds.size() || !keepsEveryDataAValue(bounds)) {
             throw new IllegalArgumentException("a region declares each data and side once, and"
@@ -81,7 +83,7 @@ public record WhatKeepsEveryRunGoing(Set<ABoundThatKeepsEveryRunGoing> bounds,
         Map<ABoundThatKeepsEveryRunGoing.Side, ABoundThatKeepsEveryRunGoing> tightest =
                 new LinkedHashMap<>();
         for (ABoundThatKeepsEveryRunGoing each : asked) {
-            tightest.merge(each.side(), each, (one, other) -> one.within(other) ? one : other);
+            tightest.merge(each.side(), each, WhatKeepsEveryRunGoing::tighter);
         }
         return keepsEveryDataAValue(tightest.values())
                 ? Optional.of(new WhatKeepsEveryRunGoing(new LinkedHashSet<>(tightest.values()),
@@ -128,10 +130,19 @@ public record WhatKeepsEveryRunGoing(Set<ABoundThatKeepsEveryRunGoing> bounds,
     }
 
     /**
+     * The region as a report says it: this, where a value of the input was shown to hold all of
+     * it at once ({@link #heldTogether}), and none where not. The one place that is asked, and
+     * only of the region every reading of the rule put together comes to: what is put together
+     * before that may yet meet the reading that shows it.
+     */
+    public Optional<WhatKeepsEveryRunGoing> said() {
+        return heldTogether() ? Optional.of(this) : Optional.empty();
+    }
+
+    /**
      * Whether a value of the input was shown to hold every declaration of the region at once: one
      * reading showed it of all they declare on, and the bounds the others add are of the same
-     * places, each only tighter. Asked of the region of every reading of a rule put together, and
-     * the region is said only where it holds.
+     * places, each only tighter.
      */
     public boolean heldTogether() {
         Set<ABoundThatKeepsEveryRunGoing.Holder> declaredOn = new LinkedHashSet<>();
@@ -159,6 +170,20 @@ public record WhatKeepsEveryRunGoing(Set<ABoundThatKeepsEveryRunGoing> bounds,
         }
         return left.values().stream().allMatch(ends -> ends[0] == null || ends[1] == null
                 || ends[0].compareTo(ends[1]) <= 0);
+    }
+
+    /**
+     * The tighter of two bounds of one side, whichever was met first: at one number, the two are
+     * one bound, beside what both accounts of the holder leave it, so that which reading said it
+     * first decides nothing of what is kept.
+     */
+    private static ABoundThatKeepsEveryRunGoing tighter(ABoundThatKeepsEveryRunGoing one,
+                                                        ABoundThatKeepsEveryRunGoing other) {
+        if (one.at().equals(other.at())) {
+            return new ABoundThatKeepsEveryRunGoing(one.holder(), one.atMost(), one.at(),
+                    one.bound(), one.held().meet(other.held()));
+        }
+        return one.within(other) ? one : other;
     }
 
     /** The tighter of two ends of one side, a least where {@code least}: either where the other

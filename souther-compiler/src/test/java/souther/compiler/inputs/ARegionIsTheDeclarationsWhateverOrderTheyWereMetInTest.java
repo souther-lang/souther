@@ -52,6 +52,23 @@ class ARegionIsTheDeclarationsWhateverOrderTheyWereMetInTest {
                 .orElseThrow().heldTogether());
     }
 
+    /** One bound two readings say beside different accounts of what its holder holds is one
+     *  bound, beside what both leave it, whichever reading was met first. */
+    @Test
+    void oneBoundSaidBesideTwoAccountsOfItsHolderIsBesideBoth() {
+        ABoundThatKeepsEveryRunGoing open = on("x", true, 10);
+        ABoundThatKeepsEveryRunGoing fromNought = new ABoundThatKeepsEveryRunGoing(
+                open.holder(), true, open.at(), open.bound(),
+                new ABoundThatKeepsEveryRunGoing.Held(BigInteger.ZERO, null));
+        Optional<WhatKeepsEveryRunGoing> one = WhatKeepsEveryRunGoing.of(List.of(open));
+        Optional<WhatKeepsEveryRunGoing> other = WhatKeepsEveryRunGoing.of(List.of(fromNought));
+
+        assertEquals(Set.of(fromNought),
+                WhatKeepsEveryRunGoing.together(one, other).orElseThrow().bounds());
+        assertEquals(Set.of(fromNought),
+                WhatKeepsEveryRunGoing.together(other, one).orElseThrow().bounds());
+    }
+
     @Test
     void howFarOutABoundGoesStandsOfTheSameDeclarationsMetInAnotherOrder() {
         ABoundThatKeepsEveryRunGoing x = on("x", true, 10);

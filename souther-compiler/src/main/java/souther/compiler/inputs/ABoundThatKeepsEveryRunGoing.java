@@ -41,11 +41,34 @@ public record ABoundThatKeepsEveryRunGoing(Holder holder, boolean atMost, BigInt
     }
 
     /**
-     * The least and greatest whole number the rules already written leave a value, every one
-     * between them a value: each null where they leave no end there beside what the value's type
-     * holds.
+     * The least and greatest whole number the rules already written and the value's own type leave
+     * it, every one between them a value: each null where neither has an end there. A bound past
+     * one of them leaves no value, and a bound outside both asks nothing.
      */
-    public record Held(BigInteger least, BigInteger greatest) {}
+    public record Held(BigInteger least, BigInteger greatest) {
+
+        /** What this and {@code other}, two accounts of what one holder holds, leave it both. */
+        Held meet(Held other) {
+            return new Held(least == null ? other.least : other.least == null ? least
+                    : least.max(other.least),
+                    greatest == null ? other.greatest : other.greatest == null ? greatest
+                    : greatest.min(other.greatest));
+        }
+
+        /** Whether every value this holds is within {@code bound}, from above where
+         *  {@code atMost}: a bound there asks nothing of it. */
+        public boolean within(BigInteger bound, boolean atMost) {
+            return atMost ? greatest != null && greatest.compareTo(bound) <= 0
+                    : least != null && least.compareTo(bound) >= 0;
+        }
+
+        /** Whether no value this holds is within {@code bound}, from above where {@code atMost}:
+         *  declared, it leaves none. */
+        public boolean past(BigInteger bound, boolean atMost) {
+            return atMost ? least != null && bound.compareTo(least) < 0
+                    : greatest != null && bound.compareTo(greatest) > 0;
+        }
+    }
 
     /** Which declaration this is: what it is declared on, and the side. */
     record Side(Holder holder, boolean atMost) {}

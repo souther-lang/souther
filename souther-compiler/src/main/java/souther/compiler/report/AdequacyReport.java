@@ -7332,10 +7332,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     /** Where the stops of {@code it} are where the representation of a number stops, the
      *  invariants that keep every run from them, under the line that says the rule. */
     private static void keepingSaid(WhatIsShownOfAStop it, Page page, StringBuilder out) {
-        if (it.keeping().isEmpty()) {
+        Optional<WhatKeepsEveryRunGoing> said = it.keeping().flatMap(WhatKeepsEveryRunGoing::said);
+        if (said.isEmpty()) {
             return;
         }
-        WhatKeepsEveryRunGoing region = it.keeping().get();
+        WhatKeepsEveryRunGoing region = said.get();
         for (ABoundThatKeepsEveryRunGoing bound : region.bounds()) {
             out.append("          · ").append(page.say(keepingSaid(bound,
                     region.asFarOutAsCanBe(bound)))).append(NEW_LINE);
@@ -11582,9 +11583,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case About.ARuleWhoseStopIsNotShown(var it) -> it;
             default -> null;
         };
-        if (ofAStop != null && ofAStop.keeping().isPresent()
-                && !ofAStop.keeping().get().bounds().isEmpty()) {
-            WhatKeepsEveryRunGoing region = ofAStop.keeping().get();
+        Optional<WhatKeepsEveryRunGoing> said = ofAStop == null ? Optional.empty()
+                : ofAStop.keeping().flatMap(WhatKeepsEveryRunGoing::said);
+        if (said.isPresent() && !said.get().bounds().isEmpty()) {
+            WhatKeepsEveryRunGoing region = said.get();
             ArrayNode bounds = f.putArray("keeping");
             for (ABoundThatKeepsEveryRunGoing each : region.bounds()) {
                 ObjectNode keeping = bounds.addObject();

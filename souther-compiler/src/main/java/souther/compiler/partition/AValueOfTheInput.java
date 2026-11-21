@@ -112,7 +112,37 @@ final class AValueOfTheInput {
                 return Optional.empty();
             }
         }
-        return out.size() == asked.size() ? Optional.of(out) : Optional.empty();
+        if (out.size() != asked.size()) {
+            return Optional.empty();
+        }
+        // Within what the place's own order holds as well: an Int stops at its ends and a date
+        // at the calendar's, whatever the rules leave it, and a run past them holds nothing.
+        for (Map.Entry<TermPath, WholeRun> each : out.entrySet()) {
+            WholeRun run = withinTheEnds(each.getValue(),
+                    FormRange.endsOf(new NumericTerm.ValueOf(each.getKey()), read));
+            if (run == null) {
+                return Optional.empty();
+            }
+            each.setValue(run);
+        }
+        return Optional.of(out);
+    }
+
+    /** {@code run} held within {@code ends}, the ends of what its place's order holds, or null
+     *  where that leaves it no whole number; as it is where there are none. */
+    private static WholeRun withinTheEnds(WholeRun run, FormRange ends) {
+        if (ends == null) {
+            return run;
+        }
+        BigInteger least = ends.least().ceiling().orNull();
+        BigInteger greatest = ends.greatest().floor().orNull();
+        least = run.least() == null || (least != null && least.compareTo(run.least()) > 0)
+                ? least : run.least();
+        greatest = run.greatest() == null
+                || (greatest != null && greatest.compareTo(run.greatest()) < 0)
+                ? greatest : run.greatest();
+        return least != null && greatest != null && least.compareTo(greatest) > 0 ? null
+                : new WholeRun(least, greatest);
     }
 
     /**
