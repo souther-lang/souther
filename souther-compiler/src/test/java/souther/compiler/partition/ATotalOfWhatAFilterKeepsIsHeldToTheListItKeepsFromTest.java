@@ -14,6 +14,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A total over what a filter keeps of a list written out holds no more elements than that list,
@@ -84,6 +85,7 @@ class ATotalOfWhatAFilterKeepsIsHeldToTheListItKeepsFromTest {
         List<String> report = report(BOUNDED, FILTERED_HERE, compared);
         assertEquals(List.of(), unread(report));
         assertEquals(List.of(), stops(report));
+        assertTrue(complete(report, "k4"), () -> String.join("\n", report));
     }
 
     /** A walk carrying a total over the kept list takes as many steps as the list it keeps from,
@@ -105,7 +107,111 @@ class ATotalOfWhatAFilterKeepsIsHeldToTheListItKeepsFromTest {
             "List.filter(m -> m.days.value >= 17, [a, b, Month { pay = Yen(5), days = Days(20) }])",
     })
     void theFilteredListReachedAnotherWayIsRead(String kept) {
-        assertEquals(List.of(), unread(report(BOUNDED, kept, TOTAL + " / List.length(ms)")));
+        List<String> report = report(BOUNDED, kept, TOTAL + " / List.length(ms)");
+        assertEquals(List.of(), unread(report));
+        assertTrue(complete(report, "k4"), () -> String.join("\n", report));
+    }
+
+    /** The model of the report, as it was written, with its four rows. */
+    private static final String AS_REPORTED = """
+            module k4
+
+            data Yen = Int
+                invariant value >= 0 && value <= 1000000000000
+            data Days = Int
+                invariant value >= 0 && value <= 31
+            data Month = { pay: Yen, days: Days }
+            data NoMonth = { why: Int }
+
+            behavior decide : (a: Month, b: Month, c: Month) -> Int | NoMonth
+
+            let decide (a, b, c) = {
+                let ms = List.filter(m -> m.days.value >= 17, [a, b, c])
+                guard List.length(ms) >= 1 else NoMonth { why = 0 }
+                if %s >= 200 then 2 else 1
+            }
+
+            example decide
+                | "low"  : (Month { pay = Yen(50), days = Days(20) }, Month { pay = Yen(50), days = Days(20) }, Month { pay = Yen(50), days = Days(20) }) -> 1
+                | "high" : (Month { pay = Yen(250), days = Days(20) }, Month { pay = Yen(250), days = Days(20) }, Month { pay = Yen(250), days = Days(20) }) -> 2
+                | "one"  : (Month { pay = Yen(250), days = Days(20) }, Month { pay = Yen(50), days = Days(10) }, Month { pay = Yen(50), days = Days(10) }) -> 2
+                | "none" : (Month { pay = Yen(250), days = Days(10) }, Month { pay = Yen(50), days = Days(10) }, Month { pay = Yen(50), days = Days(10) }) -> NoMonth { why = 0 }
+            """;
+
+    /** The model as it was reported, and its form rounding the average down, are measured
+     *  complete: what the report was about. */
+    @ParameterizedTest
+    @ValueSource(strings = {
+            TOTAL + " / List.length(ms)",
+            "Rational.toInt(DOWN, " + TOTAL + " / List.length(ms))",
+    })
+    void theModelAsReportedIsMeasuredComplete(String compared) {
+        Compilation compilation = Compilation.ofSource(AS_REPORTED.formatted(compared), "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        ACompiledModel.compiles(compilation);
+        List<String> report = AdequacyReport.of(compilation)
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
+                .toList();
+        assertTrue(report.stream().anyMatch(line -> line.startsWith("k4")
+                && line.endsWith("measurement: complete")), () -> String.join("\n", report));
+    }
+
+    private static final String BUILT_BY_A_HELPER = """
+            module k5
+
+            data Yen = Int
+                invariant value >= 0 && value <= 1000000000000
+            data Days = Int
+                invariant value >= 0 && value <= 31
+            data Pay = { base: Yen, extra: Yen }
+            data Month = { pay: Pay, days: Days }
+            data NoMonth = { why: Int }
+
+            let totalOf (p: Pay): %s
+
+            behavior decide : (a: Month, b: Month, c: Month) -> Int | NoMonth
+
+            let decide (a, b, c) = {
+                let ms = List.filter(m -> m.days.value >= 17, [a, b, c])
+                guard List.length(ms) >= 1 else NoMonth { why = 0 }
+                if List.sum(List.map(m -> totalOf(m.pay)%s, ms)) / List.length(ms) >= 200
+                then 2 else 1
+            }
+            """;
+
+    /** The report of the model where a helper works each month's amount out, as {@code helper}
+     *  declares and answers it and {@code read} reads it off what it answers. */
+    private static List<String> reportOfTheHelper(String helper, String read) {
+        Compilation compilation = Compilation.ofSource(
+                BUILT_BY_A_HELPER.formatted(helper, read), "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        ACompiledModel.compiles(compilation);
+        return AdequacyReport.of(compilation)
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
+                .toList();
+    }
+
+    /** Whether {@code report} says its module is measured complete. */
+    private static boolean complete(List<String> report, String module) {
+        return report.stream().anyMatch(line -> line.startsWith(module)
+                && line.endsWith("measurement: complete"));
+    }
+
+    /**
+     * A helper that builds an amount of two, each at most the most an amount holds, may be
+     * refused the build: their sum passes it. What the field of the amount built comes to is read
+     * all the same, and the total over the months with it, but the build is no operation that
+     * ends no run: a run evaluating the comparison may stop there, and the model is not measured
+     * complete. The control works the same sum out as a whole number and builds nothing, and is.
+     */
+    @Test
+    void aBuildThatMayBeRefusedKeepsTheModelFromBeingComplete() {
+        List<String> built = reportOfTheHelper("Yen = p.base + p.extra", ".value");
+        assertFalse(complete(built, "k5"), () -> String.join("\n", built));
+        assertFalse(unread(built).isEmpty() && stops(built).isEmpty(),
+                () -> String.join("\n", built));
+        List<String> worked = reportOfTheHelper("Int = p.base.value + p.extra.value", "");
+        assertTrue(complete(worked, "k5"), () -> "control\n" + String.join("\n", worked));
     }
 
     /** Control: with each amount unbounded above the total of three passes an {@code Int}, and
