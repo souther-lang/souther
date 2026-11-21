@@ -3604,10 +3604,38 @@ public final class FieldDomains {
      * declaration holds them, each over the bindings of its fields.
      */
     private boolean holdsInAWitness() {
+        return writtenWhole(Map.of()) != null;
+    }
+
+    /**
+     * Whether a value of this declaration is written down holding the constants {@code held} at
+     * the places they name, that every rule of the declaration holds of. Where none is, the
+     * places are not shown to hold those numbers together, which says nothing about whether a
+     * value does.
+     *
+     * <p>Asked only where every clause of the declaration was gathered: a clause left out is a
+     * rule the value written is not held to, so a value written would stand for none of them.
+     *
+     * @param held the constant at each place, by the fields that reach it, as the fold reads a
+     *             constant: a {@code Long} for an {@code Int}, a {@code BigDecimal} for a
+     *             {@code Decimal}
+     */
+    public boolean holdsAValueWith(Map<RuleKey, Object> held) {
+        if (!notGathered.isEmpty()) {
+            return false;
+        }
+        Map<List<String>, Object> pinned = new LinkedHashMap<>();
+        held.forEach((at, value) -> pinned.put(at.steps(), value));
+        return writtenWhole(pinned) != null;
+    }
+
+    /** {@link ADeclarationsWitness#written} of every rule of the declaration over all its fields,
+     *  holding {@code pinned}, or null where no value is written. */
+    private Map<List<String>, Object> writtenWhole(Map<List<String>, Object> pinned) {
         // A witness is a value of a declaration with its fields written down. A value no declaration
         // stands under has no fields to write, so none is exhibited.
         if (named == null) {
-            return false;
+            return null;
         }
         Map<Core, Boolean> seen = new IdentityHashMap<>();
         List<Core> rules = new ArrayList<>();
@@ -3616,8 +3644,8 @@ public final class FieldDomains {
                 rules.add(each.clause());
             }
         }
-        return ADeclarationsWitness.exists(source, named, Set.copyOf(source.layout().of(named)),
-                rules, this::stringsAdmittedAt);
+        return ADeclarationsWitness.written(source, named, Set.copyOf(source.layout().of(named)),
+                rules, this::stringsAdmittedAt, pinned);
     }
 
     /** A string the reading of this declaration admits at {@code place}: the least one its

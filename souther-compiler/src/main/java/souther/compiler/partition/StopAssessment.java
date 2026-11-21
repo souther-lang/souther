@@ -1,7 +1,10 @@
 package souther.compiler.partition;
 
 import souther.compiler.abort.AbortKind;
+import souther.compiler.abort.AbortSet;
+import souther.compiler.check.WhatARunMayEndFor;
 import souther.compiler.core.Core;
+import souther.compiler.core.Evaluated;
 import souther.compiler.inputs.AStopNotShown;
 import souther.compiler.inputs.AStopShown;
 import souther.compiler.inputs.ElementsMet;
@@ -18,12 +21,16 @@ import souther.compiler.numeric.Rel;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Consumer;
 
 /**
  * Whether a run stops in each operation a comparison works out: shown not to, shown to, or
@@ -239,7 +246,7 @@ final class StopAssessment {
                 Site site = new Site.PastItsEnds(operations.get(at));
                 if (left == null) {
                     out.add(new Judgement.Safe(site, WhyNone.NOT_WORKED_OUT));
-                } else if (keptWithinItsEnds(left, operations.get(at))) {
+                } else if (left.keepsWithinItsEnds(operations.get(at))) {
                     out.add(new Judgement.Safe(site, WhyNone.WITHIN_ITS_ENDS));
                 } else {
                     out.add(aStopIn(each, place, left, site, operations.get(at).origin().node(),
@@ -249,13 +256,6 @@ final class StopAssessment {
         }
         out.addAll(divisionsOf(each, places, divisors, within, read));
         return out;
-    }
-
-    /** Whether every value the way {@code left} is of leaves keeps {@code operation} within its
-     *  ends: no run along it stops there, the value a stop is shown at among them. */
-    private static boolean keptWithinItsEnds(WhatAWayLeavesOfAValue left,
-                                             UndividedByARelation.IntOperation operation) {
-        return left.keepsWithinItsType(operation) || left.noRowTakesItPastItsEnds(operation);
     }
 
     /**
@@ -332,6 +332,69 @@ final class StopAssessment {
             }
             return new StopsBefore(operations, before);
         }
+    }
+
+    /**
+     * Whether everything a run works out in the comparison before the step {@code siteNode} takes
+     * is accounted for, which is all a run stopping there has to get past: a node
+     * ({@link Evaluated#workedOutAfter}) a run takes the step of after it is not asked, and every
+     * other is, whether or not its place in the order is known.
+     *
+     * <p>A node is accounted for where it ends a run only for what {@code working} tells of an
+     * operation or, a quotient the comparison asks, for a division by nought. Or, where the working
+     * says nothing is left untold ({@code workingAccountsForTheRest}), where it is of a kind the
+     * working reads itself: not a call of a declaration, whose body is no part of the comparison
+     * and so of no working, and whose owner says nothing of what it ends a run for.
+     */
+    private static boolean everythingBeforeIsAccountedFor(ComparisonReadings.Reading each,
+                                                          UndividedByARelation.Working working,
+                                                          Core siteNode,
+                                                          boolean workingAccountsForTheRest) {
+        if (!(each.statement() instanceof ComparisonReadings.Stated.AComparison(
+                var comparison))) {
+            return false;
+        }
+        Set<Core> after = Evaluated.workedOutAfter(
+                List.of(comparison.left(), comparison.right()), siteNode);
+        Set<Core> told = Collections.newSetFromMap(new IdentityHashMap<>());
+        working.operations().forEach(operation -> {
+            if (operation.origin().node() != null) {
+                told.add(Core.withoutStanding(operation.origin().node()));
+            }
+        });
+        Set<Core> asked = Collections.newSetFromMap(new IdentityHashMap<>());
+        each.quotients().forEach(quotient -> asked.add(Core.withoutStanding(quotient)));
+        boolean[] every = {true};
+        Consumer<Core> check = node -> {
+            Core bare = Core.withoutStanding(node);
+            if (!after.contains(bare) && !accountedFor(bare, told, asked,
+                    workingAccountsForTheRest)) {
+                every[0] = false;
+            }
+        };
+        Core.forEachDistinctNode(comparison.left(), check);
+        Core.forEachDistinctNode(comparison.right(), check);
+        return every[0];
+    }
+
+    private static boolean accountedFor(Core node, Set<Core> told, Set<Core> asked,
+                                        boolean workingAccountsForTheRest) {
+        WhatARunMayEndFor.Endings endings = WhatARunMayEndFor.itself(node);
+        if (workingAccountsForTheRest) {
+            return !(Core.withoutStanding(node) instanceof Core.Call)
+                    || endings instanceof WhatARunMayEndFor.Endings.Known;
+        }
+        if (!(endings instanceof WhatARunMayEndFor.Endings.Known(AbortSet kinds))) {
+            return false;
+        }
+        Set<AbortKind> left = new HashSet<>(kinds.kinds());
+        if (told.contains(node)) {
+            left.remove(AbortKind.REQUIRED_FORM_HAS_NO_PLACE);
+        }
+        if (asked.contains(node)) {
+            left.remove(AbortKind.DIVISION_BY_ZERO);
+        }
+        return left.isEmpty();
     }
 
     /**
@@ -439,13 +502,16 @@ final class StopAssessment {
                                      List<LinearForm<NumericTerm>> divisors,
                                      List<TakenConstraint.Affine> within, InputReading read) {
         UndividedByARelation.Working working = place.worked().stops().operations();
-        // A working is not on every run where the expression the comparison was stopped at may
-        // end a run before the operations it tells. A quotient is worked out wherever the
-        // comparison is ({@link QuotientsEveryRunWorksOut}), so only an operation is asked of the
-        // rest being worked out on every run. The stop of a quotient that is among those asked
-        // is not left untold: a witness is asked to get past it.
-        if (working.leavesUntoldBeyond(each.quotients())
-                || (site instanceof Site.PastItsEnds && !working.onEveryRun())) {
+        // What a run stopping at the site has to get past is what it works out before it. The
+        // working says nothing is left untold beyond what it tells and the quotients asked, and
+        // where it is of an operation that it is on every run, which it is not where the
+        // expression the comparison was stopped at may end a run before the operations it tells.
+        // A quotient is worked out wherever the comparison is ({@link QuotientsEveryRunWorksOut}),
+        // and the stop of one that is among those asked is not left untold: a witness is asked to
+        // get past it.
+        boolean workingAccountsForTheRest = !working.leavesUntoldBeyond(each.quotients())
+                && (!(site instanceof Site.PastItsEnds) || working.onEveryRun());
+        if (!everythingBeforeIsAccountedFor(each, working, siteNode, workingAccountsForTheRest)) {
             return new Judgement.Unresolved(site, WhyAStopIsNotShown.NOT_EVERY_OPERATION_TOLD);
         }
         Optional<UndividedByARelation.Working> earlier = each.workedOutBeforeIt();
@@ -475,7 +541,7 @@ final class StopAssessment {
         // which is one of them, and is not asked of it. That it is got past is held against the
         // value once one is found.
         List<UndividedByARelation.IntOperation> kept = others.stream()
-                .filter(it -> keptWithinItsEnds(left, it)).toList();
+                .filter(left::keepsWithinItsEnds).toList();
         others.removeAll(kept);
         Set<NumericTerm> numbers = new LinkedHashSet<>();
         List<LinearForm<NumericTerm>> forms = new ArrayList<>();
@@ -501,14 +567,14 @@ final class StopAssessment {
         }
         // A value of the input holding them exists where they meet what the input's declarations
         // ask of the places, which the value looked for is asked to meet with the way.
-        Optional<List<TakenConstraint.Affine>> declared =
+        Optional<AValueOfTheInput.Meets> declared =
                 AValueOfTheInput.whatAValueAtThemMeets(read, places);
         if (declared.isEmpty()) {
             return new Judgement.Unresolved(site, WhyAStopIsNotShown.NO_VALUE_SHOWN);
         }
-        way.addAll(declared.get());
+        way.addAll(declared.get().constraints());
         int[] tries = {MOST_VALUES_TRIED};
-        Before before = new Before(others, quotients, way);
+        Before before = new Before(others, quotients, way, declared.get());
         Shown shown = aValueItStopsAt(site, before, List.copyOf(numbers), read, tries);
         if (shown != null) {
             return new Judgement.Stops(againstWhatIsKept(shown, kept));
@@ -574,10 +640,13 @@ final class StopAssessment {
     /**
      * What a run that stops at a site has got past before it: the conditions of the way, every
      * operation within its ends and every quotient with its divisor away from nought.
+     *
+     * @param declared what a value of the input holding the numbers has to meet: the way holds
+     *                 its constraints, and its ties are asked of each value found
      */
     private record Before(List<UndividedByARelation.IntOperation> operations,
                           List<LinearForm<NumericTerm>> divisors,
-                          List<TakenConstraint.Affine> way) {}
+                          List<TakenConstraint.Affine> way, AValueOfTheInput.Meets declared) {}
 
     /**
      * A value of the input's {@code numbers} on the way, getting past what is worked out
@@ -709,7 +778,7 @@ final class StopAssessment {
                 return false;
             }
         }
-        return switch (site) {
+        boolean stops = switch (site) {
             case Site.PastItsEnds(var operation) -> {
                 ExactRatio comes = WholeValuesMeeting.valueOf(operation.overTheInput(), at);
                 yield comes != null && !withinItsEnds(comes, operation);
@@ -719,6 +788,7 @@ final class StopAssessment {
                 yield comes != null && comes.signum() == 0;
             }
         };
+        return stops && before.declared().tiesHoldAt(at);
     }
 
     private static boolean withinItsEnds(ExactRatio value,
