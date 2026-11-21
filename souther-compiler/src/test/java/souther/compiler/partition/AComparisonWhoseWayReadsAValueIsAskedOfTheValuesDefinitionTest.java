@@ -4,73 +4,67 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A comparison whose way reads a value defined by name is not read for that reason only where the
- * value's definition can end a run. Reading the value ends none; what it is defined as may, and
- * that is asked of the definition.
+ * Whether a run may stop on the way to a comparison that reads a value defined by name is
+ * whether what the value is defined as may end a run. Reading the value ends none; working out
+ * its definition may, and that is asked of the definition.
  *
- * <p>The comparison on the way to the later one reads {@code floor}, and the later one is what
- * is said not read when the reading of {@code floor} is left unsaid.
+ * <p>One model, and only the definition of {@code floor} differs: the comparison on the way
+ * reads it, and the one after it (line 12) is what is said not read where the reading of
+ * {@code floor} is left unsaid.
  */
 class AComparisonWhoseWayReadsAValueIsAskedOfTheValuesDefinitionTest {
 
     private static final String MODEL = """
             module e10
 
-            data Hours = Decimal
-                invariant value >= 0.0m
+            data Limit = Int
+                invariant value >= 0
 
-            behavior f : (hours: Hours, on: Date, endsOn: Date) -> Bool
+            behavior f : (n: Int, on: Date, endsOn: Date) -> Bool
 
-            %s
+            let floor = %s
 
-            let f (hours, on, endsOn) =
-                hours.value < %s && Date.daysBetween(on, endsOn) + 1 < %s
+            let f (n, on, endsOn) =
+                n < %s
+                    && Date.daysBetween(on, endsOn) + 1 < 31
             """;
 
+    private static final String THE_LATER_COMPARISON = "comparison@12:";
+
     @Test
-    void aValueDefinedByAConstantEndsNoRunWhenItIsRead() {
-        assertFalse(notRead(MODEL.formatted("let floor = 20.0m", "floor", "31")));
+    void aValueDefinedByAConstantIsReadWithoutEndingARun() {
+        assertEquals(MeasurementStatus.COMPLETE,
+                AdequacyReport.of(measured("31", "floor")).status());
     }
 
     @Test
-    void aBuildOfADeclaredTypeEndsNoRunWhenItsInvariantHolds() {
-        assertFalse(notRead(MODEL.formatted("let floor = Hours(20.0m)", "floor.value", "31")));
+    void aBuildOfADeclaredTypeIsReadWithoutEndingARunWhereItsInvariantHolds() {
+        assertEquals(MeasurementStatus.COMPLETE,
+                AdequacyReport.of(measured("Limit(31)", "floor.value")).status());
     }
 
     @Test
     void aValueWhoseDefinitionMayEndARunIsNotTakenToGetPast() {
-        assertTrue(notRead("""
-                module e10
-
-                behavior f : (n: Int, on: Date, endsOn: Date) -> Bool
-
-                let floor = Int.abs(9223372036854775807) + 1
-
-                let f (n, on, endsOn) =
-                    n < floor
-                        && Date.daysBetween(on, endsOn) + 1 < 31
-                """, "comparison@9:"));
+        Compilation compilation = measured("Int.abs(9223372036854775807) + 1", "floor");
+        AdequacyReport report = AdequacyReport.of(compilation);
+        assertEquals(MeasurementStatus.PARTIAL, report.status());
+        assertTrue(report.humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()))
+                .lines().anyMatch(line -> line.contains("not read:")
+                        && line.contains(THE_LATER_COMPARISON)));
     }
 
-    private static boolean notRead(String model) {
-        return notRead(model, "");
-    }
-
-    /** Whether the report says what was not read at {@code where}, or anywhere for the empty
-     *  one. */
-    private static boolean notRead(String model, String where) {
-        Compilation compilation = ACompiledModel.compiles(ACompiledModel.measured(model,
+    private static Compilation measured(String definition, String compared) {
+        return ACompiledModel.compiles(ACompiledModel.measured(
+                MODEL.formatted(definition, compared),
                 Adequacy.Asked.reportOnly(Adequacy.Level.OFF)));
-        return AdequacyReport.of(compilation)
-                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
-                .anyMatch(line -> line.contains("not read:") && line.contains(where));
     }
 }
