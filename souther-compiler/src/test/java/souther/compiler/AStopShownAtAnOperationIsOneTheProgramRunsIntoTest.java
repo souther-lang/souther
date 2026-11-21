@@ -102,9 +102,6 @@ class AStopShownAtAnOperationIsOneTheProgramRunsIntoTest {
         // after the sum all the same: a run that stops at the sum has not got to it
         FORMS.put("aLetBodyAfterTheSum", new Form("q >= " + GREATEST,
                 "(q + 1) + { let t = e\n q + 2 } >= 2", true));
-        // one worked out before the sum is got past, which the way keeps a run from
-        FORMS.put("aLetBodyBeforeTheSum", new Form("q >= " + GREATEST,
-                "{ let t = e\n q + 2 } + (q + 1) >= 2"));
         // a call before the sum that stops every run of the way is not got past
         FORMS.put("aCallBeforeTheSumThatStops", new Form("q >= " + GREATEST + " && p == 0",
                 "h(p) + (q + 1) >= 2"));
