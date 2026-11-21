@@ -148,6 +148,5 @@ class AnOrderWhoseOwnStepIsNoDecimalStillHasItsValuesTest {
         assertTrue(Boolean.TRUE.equals(thirds.attainable(at(A_THIRD)).orNull()));
         assertEquals(Optional.empty(), thirds.neighbour(at(A_THIRD), Towards.ABOVE).orNull(),
                 "what fills has no next value, which is a different answer from having none past it");
-        assertTrue(Boolean.TRUE.equals(thirds.anythingBeyond(at(A_THIRD), Towards.ABOVE).orNull()));
     }
 }

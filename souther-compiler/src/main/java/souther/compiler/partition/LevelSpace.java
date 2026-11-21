@@ -200,21 +200,6 @@ public interface LevelSpace {
         };
     }
 
-    /**
-     * Whether this quantity takes any value at all strictly past {@code from}, the way
-     * {@code towards} says — or which way the exact arithmetic could not tell.
-     *
-     * <p>What decides whether a border has a side there. False only where the order itself stops —
-     * an enumeration at its last case, a string a rule holds another string apart from — and never
-     * because the step between two values has no name.
-     */
-    default ExactAnswer<Boolean> anythingBeyond(Level from, Towards towards) {
-        return switch (inspect(runFrom(from, towards, false))) {
-            case Occupancy.NotWorkedOut not -> ExactAnswer.unheld(not.why());
-            case Occupancy other -> ExactAnswer.held(other.any());
-        };
-    }
-
     /** Everything one way of a level, which is what the three questions above are asked about. */
     private static LevelInterval runFrom(Level from, Towards towards, boolean itself) {
         Bound at = Bound.at(from, itself);
