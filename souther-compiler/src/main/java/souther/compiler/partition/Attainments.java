@@ -70,11 +70,6 @@ record Attainments(List<Attainment> ways, boolean leftUnmade) {
             leftUnmade |= of.leftUnmade();
         }
 
-        /** Whether there is room for another: not once the figure's worth are made. */
-        boolean hasRoom() {
-            return made.size() < MOST;
-        }
-
         /** What was made, and whether some were not. */
         Attainments build() {
             return new Attainments(made, leftUnmade);

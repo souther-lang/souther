@@ -27,7 +27,6 @@ class AValueIsMadeNoMoreWaysThanTheFigureAllowsTest {
         for (int at = 0; at < Attainments.MOST; at++) {
             assertTrue(made.add(way(at)));
         }
-        assertFalse(made.hasRoom());
         assertEquals(Attainments.MOST, made.build().ways().size());
         assertFalse(made.build().leftUnmade(), "the last of the room was used, and nothing was "
                 + "left for want of it");
@@ -49,8 +48,7 @@ class AValueIsMadeNoMoreWaysThanTheFigureAllowsTest {
     void whatWasLeftUnmadeOfWhatThisIsMadeOfIsLeftUnmadeOfThisAsWell() {
         Attainments.Builder made = new Attainments.Builder();
         made.noting(Attainments.TOO_MANY);
-        made.add(way(1));
-        assertTrue(made.hasRoom(), "what was left unmade took no room of what is made");
+        assertTrue(made.add(way(1)), "what was left unmade took no room of what is made");
         assertTrue(made.build().leftUnmade());
         assertEquals(1, made.build().ways().size());
     }

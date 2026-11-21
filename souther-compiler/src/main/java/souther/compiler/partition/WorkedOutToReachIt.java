@@ -1458,29 +1458,31 @@ final class WorkedOutToReachIt {
         out.noting(rights);
         for (Attainment left : lefts.ways()) {
             for (Attainment right : rights.ways()) {
-                if (!out.hasRoom()) {
-                    return out.build();
-                }
                 LinearForm<NumericTerm> apart = left.form().minus(right.form()).orNull();
                 if (apart == null) {
                     continue;
                 }
                 List<TakenConstraint.Affine> holding = new ArrayList<>(left.holding());
                 holding.addAll(right.holding());
-                answeredWhere(fork.then(), new TakenConstraint.Affine(apart, rel), holding, step,
-                        out);
-                answeredWhere(fork.els(), new TakenConstraint.Affine(apart, rel.denied()),
-                        holding, step, out);
+                // Made until one is refused, and no sooner: that the room is used up says
+                // nothing of whether there is another way to make.
+                if (!answeredWhere(fork.then(), new TakenConstraint.Affine(apart, rel), holding,
+                        step, out)
+                        || !answeredWhere(fork.els(),
+                                new TakenConstraint.Affine(apart, rel.denied()), holding, step,
+                                out)) {
+                    return out.build();
+                }
             }
         }
         return out.build();
     }
 
     /** What {@code arm} answers where a row meets {@code taken} and {@code before}, made into
-     *  {@code out}. */
-    private static void answeredWhere(Core arm, TakenConstraint.Affine taken,
-                                      List<TakenConstraint.Affine> before, AStepOverOne step,
-                                      Attainments.Builder out) {
+     *  {@code out}: false where one of them was refused for want of room. */
+    private static boolean answeredWhere(Core arm, TakenConstraint.Affine taken,
+                                         List<TakenConstraint.Affine> before, AStepOverOne step,
+                                         Attainments.Builder out) {
         Attainments answers = answersOfAStep(arm, step);
         out.noting(answers);
         for (Attainment answer : answers.ways()) {
@@ -1488,9 +1490,10 @@ final class WorkedOutToReachIt {
             holding.addAll(before);
             holding.add(taken);
             if (!out.add(new Attainment(answer.form(), holding))) {
-                return;
+                return false;
             }
         }
+        return true;
     }
 
     /** What {@code place} holds, where that is known ({@link #atAPlace}). */
