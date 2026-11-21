@@ -2700,14 +2700,10 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          *  every reading tried apart from it ({@link #apart}). */
         private final int[] elementsRead;
         private boolean exact = true;
-        /** Whether something that is not the stop of a quotient by a value was left untold, in an
-         *  operation or a stop: every way {@link #exact} is made false or {@link #aStopUntold}
-         *  made true but for {@link WhatWasTold#ownStopOfAQuotientByAValueUntold}, which is how
-         *  what is left out is said to be quotients and nothing else
+        /** What was left untold, in an operation or a stop: every way {@link #exact} is made false
+         *  or {@link #aStopUntold} made true joins its cause here
          *  ({@link UndividedByARelation.Working#leftUntold}). */
-        private boolean somethingElseUntold;
-        /** The quotients by a value whose own stop was left untold, by the node they are. */
-        private final List<Core.Binary> quotientsLeftUntold = new ArrayList<>();
+        private NotAccountedFor untold = NotAccountedFor.NOTHING;
         /** Whether a run may stop where an answer read here has no place, which no operation
          *  told and no row of a line is at ({@link UndividedByARelation.Working#aStopUntold}). */
         private boolean aStopUntold;
@@ -2951,8 +2947,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             keptOnce.addAll(apart.keptOnce);
             keptAt.addAll(apart.keptAt);
             exact &= apart.exact;
-            somethingElseUntold |= apart.somethingElseUntold;
-            quotientsLeftUntold.addAll(apart.quotientsLeftUntold);
+            untold = untold.join(apart.untold);
             partials.addAll(apart.partials);
         }
 
@@ -2983,8 +2978,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             toldMore();
             apart.keptElsewhere = true;
             aStopUntold |= apart.aStopUntold;
-            somethingElseUntold |= apart.somethingElseUntold;
-            quotientsLeftUntold.addAll(apart.quotientsLeftUntold);
+            untold = untold.join(apart.untold);
             keptOnce.addAll(apart.toldOnce);
             keptOnce.addAll(apart.keptOnce);
             keptAt.addAll(apart.lastToldAt.keySet());
@@ -3078,12 +3072,12 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         void ownStopOfAQuotientByAValueUntold(Core.Binary quotient) {
             exact = false;
             aStopUntold = true;
-            quotientsLeftUntold.add(quotient);
+            untold = untold.join(NotAccountedFor.quotients(List.of(quotient)));
         }
 
         private void leavingSomethingUntold() {
             exact = false;
-            somethingElseUntold = true;
+            untold = NotAccountedFor.SOMETHING_ELSE;
         }
 
         /**
@@ -3100,7 +3094,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          */
         void aStopWhereNoRowIs() {
             aStopUntold = true;
-            somethingElseUntold = true;
+            untold = NotAccountedFor.SOMETHING_ELSE;
         }
 
         /**
@@ -3239,20 +3233,18 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         }
 
         /** {@code told} as the working: every operation is told where {@code everyOne}, and
-         *  where not, what is left out is the stops of the quotients left untold if the walk
-         *  left nothing else untold and {@code quotientsAreAllThatIsLeft}, and something else
-         *  otherwise. */
+         *  where not, what is left out is what was left untold, which the running totals and
+         *  what is told beside the rows ({@code besideTheRows}) are not accounted for in. */
         private UndividedByARelation.Working working(
                 List<UndividedByARelation.IntOperation> told, boolean everyOne,
-                boolean quotientsAreAllThatIsLeft) {
-            NotAccountedFor left = everyOne ? NotAccountedFor.NOTHING
-                    : quotientsAreAllThatIsLeft && !somethingElseUntold && partials.isEmpty()
-                    ? NotAccountedFor.quotients(quotientsLeftUntold)
-                    : NotAccountedFor.SOMETHING_ELSE;
+                boolean besideTheRowsIsEmpty) {
             return new UndividedByARelation.Working(told, everyOne
                     ? WhatARelationLeavesUndivided.Told.EVERY
                     : WhatARelationLeavesUndivided.Told.SOME,
-                    true, exact ? partials : List.of(), aStopUntold, left);
+                    true, exact ? partials : List.of(), aStopUntold,
+                    everyOne ? NotAccountedFor.NOTHING
+                            : (besideTheRowsIsEmpty && partials.isEmpty()) ? untold
+                            : NotAccountedFor.SOMETHING_ELSE);
         }
     }
 
