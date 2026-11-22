@@ -2,7 +2,6 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 import souther.compiler.ACompiledModel;
-import souther.compiler.check.BehaviorAnswers.RunsAnswered;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.report.AdequacyReport;
 
@@ -12,14 +11,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Whether a run stops in a behavior called is asked of the behavior over its own inputs, and where
- * the behavior is not shown to answer every run of a row, the caller's comparison over the call is
- * not said to be read to the end.
+ * the runs of rows are not shown to get past it, the caller's comparison over the call is not said
+ * to be read to the end.
  *
  * <p>No body of a behavior is read where a call of it stands, so a stop in one is nothing a caller
- * reads; it is said by what the behavior answers of itself ({@link Adequacy.RunsAnsweredBy}). A
- * body that stops only past what the representation holds answers the runs of rows and is not
- * shown to answer every run there is: the two are told apart, since a proof of the second is not
- * made of the first.
+ * reads; it is said by what the behavior answers of itself ({@link Adequacy.RowsRunsGetPast}). The
+ * caller's account is settled where the answer is yes, and left open where it is not.
  */
 class ACallOfABehaviorIsGottenPastByTheRunsTheBehaviorAnswersTest {
 
@@ -47,37 +44,31 @@ class ACallOfABehaviorIsGottenPastByTheRunsTheBehaviorAnswersTest {
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
-    private static RunsAnswered runsAnswered(Compilation compilation, String behavior) {
-        return compilation.db().ask(new Adequacy.RunsAnsweredBy("m", behavior)).value();
+    private static boolean rowsRunsGetPast(Compilation compilation, String behavior) {
+        return compilation.db().ask(new Adequacy.RowsRunsGetPast("m", behavior)).value();
     }
 
-    private static boolean answersEveryRun(Compilation compilation, String behavior) {
-        return runsAnswered(compilation, behavior) == RunsAnswered.EVERY_ONE;
-    }
-
-    /** A text and a list made one longer stop where the representation does: every run of a row
-     *  is answered and not every run there is, in the body that makes it and in one that calls
-     *  it. The caller's comparison is read, as it is beside the operation itself. */
+    /** A text and a list made one longer stop past what the representation holds alone. The runs
+     *  of rows get past that, called as beside the operation itself, and that a run stops there is
+     *  said by the body whose operation it is. */
     @Test
-    void whereOnlyTheRepresentationStopsItTheRunsOfRowsAreAnsweredAndNotEveryRun() {
+    void aStopOfTheRepresentationIsSaidByTheBodyItIsInAndLeavesNoCallerOpen() {
         Compilation compilation = measured("""
                 behavior text : (s: String) -> String
                 let text (s) = s ++ "x"
                 behavior list : (xs: List<Int>) -> List<Int>
                 let list (xs) = xs ++ [1]
-                behavior through : (s: String) -> String
-                let through (s) = text(s)
                 data Out = Low | High
-                behavior chosen : (xs: List<Int>) -> Out
-                let chosen (xs) = if List.length(list(xs)) >= 3 then Low else High
+                behavior chosen : (s: String, xs: List<Int>) -> Out
+                let chosen (s, xs) =
+                    if List.length(list(xs)) >= 3 && String.length(text(s)) >= 3 then Low else High
                 """);
 
-        for (String behavior : new String[] {"text", "list", "through"}) {
-            assertEquals(RunsAnswered.ALL_BUT_PAST_THE_REPRESENTATION,
-                    runsAnswered(compilation, behavior), behavior);
+        for (String behavior : new String[] {"text", "list"}) {
+            assertTrue(rowsRunsGetPast(compilation, behavior), behavior);
+            assertTrue(reportOf(compilation, behavior).contains("a run stops only where"), behavior);
         }
         assertFalse(reportOf(compilation, "chosen").contains(NOT_RESOLVED));
-        assertTrue(reportOf(compilation, "list").contains("a run stops only where"));
     }
 
     @Test
@@ -88,23 +79,23 @@ class ACallOfABehaviorIsGottenPastByTheRunsTheBehaviorAnswersTest {
                 """ + CALLER);
         String report = reportOf(compilation, "chosen");
 
-        assertFalse(answersEveryRun(compilation, "made"));
-        assertFalse(answersEveryRun(compilation, "chosen"), "it calls one that may stop");
+        assertFalse(rowsRunsGetPast(compilation, "made"));
+        assertFalse(rowsRunsGetPast(compilation, "chosen"), "it calls one that may stop");
         assertTrue(report.contains(NOT_RESOLVED), report);
         assertTrue(report.contains("measurement: partial"), report);
         assertFalse(report.contains("adequacy: satisfied"), report);
     }
 
     @Test
-    void aBehaviorThatAnswersEveryRunLeavesNothingOpen() {
+    void aBehaviorTheRunsOfRowsGetPastLeavesNothingOpen() {
         Compilation compilation = measured("""
                 behavior made : (n: Int) -> Int
                 let made (n) = if n < 10 then 1 else 20
                 """ + CALLER);
         String report = reportOf(compilation, "chosen");
 
-        assertTrue(answersEveryRun(compilation, "made"));
-        assertTrue(answersEveryRun(compilation, "chosen"));
+        assertTrue(rowsRunsGetPast(compilation, "made"));
+        assertTrue(rowsRunsGetPast(compilation, "chosen"));
         assertFalse(report.contains(NOT_RESOLVED), report);
         assertFalse(report.contains("not accounted for"), report);
         assertTrue(report.contains("measurement: complete"), report);
@@ -126,9 +117,9 @@ class ACallOfABehaviorIsGottenPastByTheRunsTheBehaviorAnswersTest {
                 let chosen (n) = made(7) + n
                 """);
 
-        assertTrue(answersEveryRun(declared, "made"));
-        assertFalse(answersEveryRun(handedAConstant, "made"));
-        assertFalse(answersEveryRun(handedAConstant, "chosen"));
+        assertTrue(rowsRunsGetPast(declared, "made"));
+        assertFalse(rowsRunsGetPast(handedAConstant, "made"));
+        assertFalse(rowsRunsGetPast(handedAConstant, "chosen"));
     }
 
     /** A value the body builds is asked by its definition, which is run where it is built. */
@@ -149,8 +140,8 @@ class ACallOfABehaviorIsGottenPastByTheRunsTheBehaviorAnswersTest {
                 let mayStop (n) = if n < 3 then never else n
                 """);
 
-        assertTrue(answersEveryRun(compilation, "made"));
-        assertFalse(answersEveryRun(compilation, "mayStop"));
+        assertTrue(rowsRunsGetPast(compilation, "made"));
+        assertFalse(rowsRunsGetPast(compilation, "mayStop"));
     }
 
     /** A sum past what an `Int` holds ends the run, and one its inputs are declared within does
@@ -166,8 +157,8 @@ class ACallOfABehaviorIsGottenPastByTheRunsTheBehaviorAnswersTest {
                 let ofSmall (a, b) = a.value + b.value
                 """);
 
-        assertFalse(answersEveryRun(compilation, "ofAny"));
-        assertTrue(answersEveryRun(compilation, "ofSmall"));
+        assertFalse(rowsRunsGetPast(compilation, "ofAny"));
+        assertTrue(rowsRunsGetPast(compilation, "ofSmall"));
     }
 
     /** One with no body in the model is not known to answer, called or injected. */
@@ -181,8 +172,8 @@ class ACallOfABehaviorIsGottenPastByTheRunsTheBehaviorAnswersTest {
                 let chosen (n, made) = if made(n) >= 5 then Low else High
                 """);
 
-        assertFalse(answersEveryRun(compilation, "made"));
-        assertFalse(answersEveryRun(compilation, "chosen"));
+        assertFalse(rowsRunsGetPast(compilation, "made"));
+        assertFalse(rowsRunsGetPast(compilation, "chosen"));
         assertTrue(reportOf(compilation, "chosen").contains(NOT_RESOLVED));
     }
 

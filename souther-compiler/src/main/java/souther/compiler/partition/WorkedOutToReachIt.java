@@ -91,9 +91,6 @@ final class WorkedOutToReachIt {
      *  being worked out as part of the call that applies it; otherwise a closure is a value made
      *  and the call that applies it answers for its body. */
     private final boolean closuresApart;
-    /** Whether what is asked is about every run there is, and not the runs of rows, which are
-     *  taken to get past where the representation stops ({@link #completionOfARowsRun}). */
-    private final boolean everyRun;
     /** Expressions whose working out another reading told, whole: one that may end a run here
      *  gets past it all the same. */
     private final Predicate<Denotation> toldElsewhere;
@@ -463,21 +460,19 @@ final class WorkedOutToReachIt {
     }
 
     private WorkedOutToReachIt(InputReading read, Predicate<Denotation> beyond,
-                               boolean closuresApart, boolean everyRun) {
-        this(read, beyond, closuresApart, everyRun, _ -> false, _ -> false, ArmsTaken.NONE,
+                               boolean closuresApart) {
+        this(read, beyond, closuresApart, _ -> false, _ -> false, ArmsTaken.NONE,
                 new IdentityHashMap<>());
     }
 
     private WorkedOutToReachIt(InputReading read, Predicate<Denotation> beyond,
-                               boolean closuresApart, boolean everyRun,
-                               Predicate<Denotation> toldElsewhere,
+                               boolean closuresApart, Predicate<Denotation> toldElsewhere,
                                Predicate<Denotation> ownStopsSaidOnTheirWays,
                                ArmsTaken onTheWay,
                                Map<Core, Map<ReadAt, Optional<WhereAValueComesFrom>>> numbersAsked) {
         this.read = Objects.requireNonNull(read);
         this.beyond = Objects.requireNonNull(beyond);
         this.closuresApart = closuresApart;
-        this.everyRun = everyRun;
         this.toldElsewhere = toldElsewhere;
         this.ownStopsSaidOnTheirWays = Objects.requireNonNull(ownStopsSaidOnTheirWays);
         this.onTheWay = onTheWay;
@@ -493,7 +488,7 @@ final class WorkedOutToReachIt {
      */
     WorkedOutToReachIt besideTheStopsSaidOnTheirWays(Predicate<Core> said) {
         Predicate<Denotation> before = ownStopsSaidOnTheirWays;
-        return new WorkedOutToReachIt(read, beyond, closuresApart, everyRun, toldElsewhere,
+        return new WorkedOutToReachIt(read, beyond, closuresApart, toldElsewhere,
                 value -> before.test(value) || said.test(value.value()), onTheWay,
                 numbersAsked);
     }
@@ -513,7 +508,7 @@ final class WorkedOutToReachIt {
      * ({@link ArmsTaken}).
      */
     WorkedOutToReachIt onTheArm(Core fork, int part, InputReads at) {
-        return new WorkedOutToReachIt(read, beyond, closuresApart, everyRun, toldElsewhere,
+        return new WorkedOutToReachIt(read, beyond, closuresApart, toldElsewhere,
                 ownStopsSaidOnTheirWays, onTheWay.entering(Core.withoutStanding(fork), part, at),
                 numbersAsked);
     }
@@ -539,8 +534,7 @@ final class WorkedOutToReachIt {
         Predicate<Denotation> before = beyond;
         return new WorkedOutToReachIt(read,
                 value -> before.test(value) || Core.withoutStanding(value.value()) == answered,
-                closuresApart, everyRun,
-                value -> told.contains(Core.withoutStanding(value.value())),
+                closuresApart, value -> told.contains(Core.withoutStanding(value.value())),
                 ownStopsSaidOnTheirWays, onTheWay, numbersAsked);
     }
 
@@ -550,7 +544,7 @@ final class WorkedOutToReachIt {
      */
     WorkedOutToReachIt besideWhatIsTold(Predicate<Denotation> told) {
         Predicate<Denotation> before = toldElsewhere;
-        return new WorkedOutToReachIt(read, beyond, closuresApart, everyRun,
+        return new WorkedOutToReachIt(read, beyond, closuresApart,
                 value -> before.test(value) || told.test(value), ownStopsSaidOnTheirWays,
                 onTheWay, numbersAsked);
     }
@@ -561,17 +555,12 @@ final class WorkedOutToReachIt {
      * and the body of each such closure worked out with the call.
      */
     static WorkedOutToReachIt of(InputReading read) {
-        return new WorkedOutToReachIt(read, _ -> false, true, false);
+        return new WorkedOutToReachIt(read, _ -> false, true);
     }
 
-    /** The same, asked of every run there is: where the representation stops is a stop here. */
-    static WorkedOutToReachIt ofEveryRun(InputReading read) {
-        return new WorkedOutToReachIt(read, _ -> false, true, true);
-    }
-
-    /** The same as {@link #of}, each node asked with whatever it applies. */
+    /** The same, each node asked with whatever it applies. */
     static WorkedOutToReachIt asking(InputReading read) {
-        return new WorkedOutToReachIt(read, _ -> false, false, false);
+        return new WorkedOutToReachIt(read, _ -> false, false);
     }
 
     /**
@@ -599,21 +588,16 @@ final class WorkedOutToReachIt {
         // here.
         if (AnOperationApplied.of(written) instanceof AnOperationApplied applied
                 && applied.operation() instanceof ValueName.Behavior behavior) {
-            return switch (read.rules().declarations().answers().runsAnswered(behavior)) {
-                case EVERY_ONE -> true;
-                case ALL_BUT_PAST_THE_REPRESENTATION -> !everyRun;
-                case NOT_SHOWN -> false;
-            };
+            return read.rules().declarations().answers().rowsRunsGetPast(behavior);
         }
         if (!closuresApart) {
             return WhatARunMayEndFor.itself(written).endsNone()
-                    || (!everyRun && endsARowsRunOnlyPastTheRepresentation(written));
+                    || endsARowsRunOnlyPastTheRepresentation(written);
         }
         // The sites a library call works out are the ones it may end a run at, and it ends none
         // where the library shows it answers whatever it is handed.
         return WhatARunMayEndFor.itselfApartFromTheClosuresWrittenAtIt(written).endsNone()
-                || (everyRun ? WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(written)
-                        : completionOfARowsRun(written)) instanceof GetsPast.Always;
+                || completionOfARowsRun(written) instanceof GetsPast.Always;
     }
 
     /**
@@ -708,8 +692,7 @@ final class WorkedOutToReachIt {
                 || (standsFor.contains(Core.withoutStanding(value.value()))
                         && endsOnlyWhereItsOwnAnswerHasNoPlace(
                                 Core.withoutStanding(value.value()))),
-                closuresApart, everyRun, toldElsewhere, ownStopsSaidOnTheirWays, onTheWay,
-                numbersAsked);
+                closuresApart, toldElsewhere, ownStopsSaidOnTheirWays, onTheWay, numbersAsked);
     }
 
     private boolean endsOnlyWhereItsOwnAnswerHasNoPlace(Core written) {

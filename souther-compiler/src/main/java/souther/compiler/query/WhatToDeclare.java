@@ -107,38 +107,28 @@ public record WhatToDeclare(int conditions, List<HelperToDeclare> helpers, int i
     /** The helpers that leave every one of {@code conditions} with no more readings than are
      *  made, none of which can be left out. */
     private static List<HelperToDeclare> toDeclare(List<Through> conditions) {
-        Map<ValueName.Helper, BigInteger> takenOut = new LinkedHashMap<>();
-        Map<ValueName.Helper, Integer> heldBy = new LinkedHashMap<>();
-        conditions.forEach(each -> each.byHelper().forEach((helper, held) -> {
-            takenOut.merge(helper, held.readings(), BigInteger::multiply);
-            heldBy.merge(helper, 1, Integer::sum);
-        }));
-        Set<ValueName.Helper> declared = new LinkedHashSet<>(takenOut.keySet());
-        takenOut.entrySet().stream().sorted(Comparator
-                .comparing((Map.Entry<ValueName.Helper, BigInteger> each) ->
-                        heldBy.get(each.getKey()))
-                .thenComparing(Map.Entry.comparingByValue())).forEach(each -> {
-            declared.remove(each.getKey());
-            if (conditions.stream().anyMatch(condition ->
-                    condition.readingsWhere(declared).compareTo(left()) > 0)) {
-                declared.add(each.getKey());
-            }
-        });
-        List<HelperToDeclare> out = new ArrayList<>();
-        for (ValueName.Helper helper : takenOut.keySet()) {
-            if (declared.contains(helper)) {
-                out.add(toDeclare(helper, conditions.stream()
-                        .map(each -> each.byHelper().get(helper)).filter(Objects::nonNull)
-                        .toList()));
-            }
-        }
-        out.sort(Comparator.comparingInt(HelperToDeclare::conditions).reversed());
-        return out;
+        Map<ValueName.Helper, List<Held>> heldIn = new LinkedHashMap<>();
+        conditions.forEach(each -> each.byHelper().forEach((helper, held) ->
+                heldIn.computeIfAbsent(helper, _ -> new ArrayList<>()).add(held)));
+        Set<ValueName.Helper> declared = new LinkedHashSet<>(heldIn.keySet());
+        heldIn.entrySet().stream().sorted(Map.Entry.comparingByValue(
+                Comparator.<List<Held>>comparingInt(List::size).thenComparing(inEach ->
+                        inEach.stream().reduce(Held::and).orElseThrow().readings())))
+                .forEach(each -> {
+                    declared.remove(each.getKey());
+                    if (conditions.stream().anyMatch(condition ->
+                            condition.readingsWhere(declared).compareTo(left()) > 0)) {
+                        declared.add(each.getKey());
+                    }
+                });
+        return heldIn.entrySet().stream().filter(each -> declared.contains(each.getKey()))
+                .map(each -> toDeclare(each.getKey(), each.getValue()))
+                .sorted(Comparator.comparingInt(HelperToDeclare::conditions).reversed()).toList();
     }
 
     private static HelperToDeclare toDeclare(ValueName.Helper helper, List<Held> inEach) {
-        Set<ExpansionLineage.Expansion> calls = new LinkedHashSet<>();
-        inEach.forEach(each -> calls.addAll(each.calls()));
+        Set<ExpansionLineage.Expansion> calls =
+                inEach.stream().reduce(Held::and).orElseThrow().calls();
         return new HelperToDeclare(helper, inEach.size(), calls.size(), calls.stream()
                 .flatMap(call -> CaseExpansion.helpersAround(call).stream()).distinct().toList());
     }

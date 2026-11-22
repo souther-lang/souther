@@ -2156,9 +2156,9 @@ public final class Shapes {
             }
 
             @Override
-            public RunsAnswered runsAnswered(ValueName.Behavior behavior) {
-                return db.ask(new Adequacy.RunsAnsweredBy(behavior.module(), behavior.name()))
-                        .value();
+            public boolean rowsRunsGetPast(ValueName.Behavior behavior) {
+                return Boolean.TRUE.equals(db.ask(new Adequacy.RowsRunsGetPast(behavior.module(),
+                        behavior.name())).value());
             }
 
             @Override

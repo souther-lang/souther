@@ -96,7 +96,6 @@ import souther.compiler.check.FakeTables;
 import souther.compiler.check.AtomSpace;
 import souther.compiler.check.BoundaryOutput;
 import souther.compiler.check.DeparturesNoRunTakes;
-import souther.compiler.check.BehaviorAnswers;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.PathReachability;
 import souther.compiler.inputs.ValueDefinitions;
@@ -5178,17 +5177,16 @@ public final class Adequacy {
     }
 
     /**
-     * Which runs of its body a behavior is shown to answer, whatever its inputs hold: what its
-     * callers are told of it ({@link BehaviorAnswers#runsAnswered}).
+     * Whether the runs of rows get past the body of a behavior, whatever its inputs hold: what its
+     * callers are told of it ({@link souther.compiler.check.BehaviorAnswers#rowsRunsGetPast}).
      *
      * <p>Asked of the body over the behavior's own inputs, once, and of nothing a caller hands it,
      * so it is the behavior's and not the call's. Asked whether or not the build measures the
-     * behavior, since a caller that is measured reads it: no line of the body is drawn for it. Not
-     * shown where there is no body here to ask. A behavior that reaches itself is refused as that,
-     * and is told of nothing.
+     * behavior, since a caller that is measured reads it: no line of the body is drawn for it. No
+     * where there is no body here to ask. A behavior that reaches itself is refused as that, and is
+     * told of nothing.
      */
-    public record RunsAnsweredBy(String name, String behavior)
-            implements Key<BehaviorAnswers.RunsAnswered> {
+    public record RowsRunsGetPast(String name, String behavior) implements Key<Boolean> {
 
         @Override
         public String module() {
@@ -5196,21 +5194,20 @@ public final class Adequacy {
         }
 
         @Override
-        public Answer<BehaviorAnswers.RunsAnswered> compute(Db db) {
+        public Answer<Boolean> compute(Db db) {
             Bodies.Elaborated checked = db.ask(new Bodies.Observable(name)).value();
             Map<String, InputDomain> inputs = db.ask(new Inputs(name)).value();
             RuleReadingSource reading = Shapes.ruleReading(db, name).value();
             AnalysisBody body = checked == null ? null : checked.analysisBodies().get(behavior);
             InputDomain input = inputs == null ? null : inputs.get(behavior);
-            return Answer.of(body == null || input == null || reading == null
-                    ? BehaviorAnswers.RunsAnswered.NOT_SHOWN
-                    : GuardThresholds.runsAnswered(body, readingOf(db, input, reading),
+            return Answer.of(body != null && input != null && reading != null
+                    && GuardThresholds.rowsRunsGetPast(body, readingOf(db, input, reading),
                             ElementBindings.of(body, reading.newtypes())));
         }
 
         @Override
-        public Answer<BehaviorAnswers.RunsAnswered> onCycle(List<Key<?>> cycle) {
-            return Answer.of(BehaviorAnswers.RunsAnswered.NOT_SHOWN);
+        public Answer<Boolean> onCycle(List<Key<?>> cycle) {
+            return Answer.of(false);
         }
     }
 

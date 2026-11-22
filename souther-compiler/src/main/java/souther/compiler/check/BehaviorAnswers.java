@@ -1,6 +1,5 @@
 package souther.compiler.check;
 
-import souther.compiler.abort.GetsPast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.ValueName;
@@ -10,13 +9,13 @@ import java.util.Optional;
 /**
  * What a reader of a body asks of the bodies beside it: the body of each recursive helper as a
  * call of it is read ({@link ARecursion}), with the parameters standing for what the call handed,
- * which runs a behavior called answers, and which constructions are shown to hold where they are
- * made.
+ * whether the runs of rows get past a behavior called, and which constructions are shown to hold where
+ * they are made.
  *
  * <p>A recursive helper is the one helper a call in an analysed body is left standing for: every
  * other helper was expanded where it was called. A call of a behavior is a value a run works out,
- * and no body of one is read where the call stands. What its caller is told of the body is which
- * runs it answers ({@link RunsAnswered}), which is asked of the behavior over its own inputs.
+ * and no body of one is read where the call stands. What its caller is told of the body is whether
+ * the runs of rows get past it, which is asked of the behavior over its own inputs.
  *
  * <p>Empty where there is no such body: a helper whose parameters declare no types.
  */
@@ -31,8 +30,8 @@ public interface BehaviorAnswers {
         }
 
         @Override
-        public RunsAnswered runsAnswered(ValueName.Behavior behavior) {
-            return RunsAnswered.NOT_SHOWN;
+        public boolean rowsRunsGetPast(ValueName.Behavior behavior) {
+            return false;
         }
 
         @Override
@@ -51,31 +50,14 @@ public interface BehaviorAnswers {
     Optional<ARecursion> recursionOf(ValueName.Helper recursion);
 
     /**
-     * Which runs working out the body of {@code behavior} is shown to answer, over whatever its
-     * inputs may hold. {@link RunsAnswered#NOT_SHOWN} where there is no body to ask, one injected
-     * from outside the model included.
+     * Whether the run of every row is shown to get past working out the body of {@code behavior},
+     * over whatever its inputs may hold. Not that it answers every run there is: a run of a row is
+     * taken to get past where the representation stops, as it is past an operation, and the stop
+     * there is said in the account of the body whose operation it is. False where there is no body
+     * to ask, one injected from outside the model included: that it was not shown to answer is not
+     * that it was shown to stop.
      */
-    RunsAnswered runsAnswered(ValueName.Behavior behavior);
-
-    /**
-     * Which runs a body is shown to answer. Two answers and not one: a reader that draws classes
-     * takes the runs of rows, which get past where the representation stops
-     * ({@link GetsPast#endsOnlyPastTheRepresentation}), and one that proves a body answers does
-     * not.
-     */
-    enum RunsAnswered {
-
-        /** Every run there is. */
-        EVERY_ONE,
-
-        /** Every run but one that would make a text or a collection past what the representation
-         *  holds. The stop there is said of the operation, in the account of the body it is in. */
-        ALL_BUT_PAST_THE_REPRESENTATION,
-
-        /** Not shown of every run, whatever the representation: which is not that some run
-         *  stops. */
-        NOT_SHOWN
-    }
+    boolean rowsRunsGetPast(ValueName.Behavior behavior);
 
     /**
      * Whether the construction written at {@code construction} in {@code module} is in a value the

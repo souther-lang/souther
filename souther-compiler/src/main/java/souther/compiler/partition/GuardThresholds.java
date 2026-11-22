@@ -58,7 +58,6 @@ import souther.compiler.check.BooleanMeaning;
 import souther.compiler.core.Core;
 import souther.compiler.diag.Citation;
 import souther.compiler.types.SourceConstructOrigin;
-import souther.compiler.check.BehaviorAnswers;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.PathReachability;
 import souther.compiler.coverage.AnswerEmissionIndex;
@@ -277,25 +276,19 @@ public final class GuardThresholds {
     }
 
     /**
-     * Which runs working out the body {@code states} answers, over whatever its inputs may hold:
-     * what a caller is told of it ({@link BehaviorAnswers#runsAnswered}). Asked by the numbers its
-     * operations lie within: a sum of inputs declared within a range ends no run, and one of any
-     * {@code Int} may.
+     * Whether the runs of rows get past working out the body {@code states}, over whatever its
+     * inputs may hold: what a caller is told of it ({@link
+     * souther.compiler.check.BehaviorAnswers#rowsRunsGetPast}). Asked by the numbers its operations
+     * lie within: a sum of inputs declared within a range ends no run, and one of any {@code Int}
+     * may.
      *
      * @param elements the bindings of {@code states}, which hold what each value it builds is
      *                 defined as
      */
-    public static BehaviorAnswers.RunsAnswered runsAnswered(AnalysisBody states, InputReading read,
-                                                            ElementBindings elements) {
-        return OneReading.over(() -> {
-            Denotation body = new Denotation(states.core(), namesOf(read, elements));
-            if (!WorkedOutToReachIt.of(read).endsNoRunWhereItWasPassedOver(body)) {
-                return BehaviorAnswers.RunsAnswered.NOT_SHOWN;
-            }
-            return WorkedOutToReachIt.ofEveryRun(read).endsNoRunWhereItWasPassedOver(body)
-                    ? BehaviorAnswers.RunsAnswered.EVERY_ONE
-                    : BehaviorAnswers.RunsAnswered.ALL_BUT_PAST_THE_REPRESENTATION;
-        });
+    public static boolean rowsRunsGetPast(AnalysisBody states, InputReading read,
+                                          ElementBindings elements) {
+        return OneReading.over(() -> WorkedOutToReachIt.of(read).endsNoRunWhereItWasPassedOver(
+                new Denotation(states.core(), namesOf(read, elements))));
     }
 
     /** The walk of the body's comparisons, over the names {@code read} reads. */
