@@ -11,6 +11,7 @@ import souther.compiler.core.Core;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
 import souther.compiler.meaning.WhyUnread;
 import souther.compiler.query.Adequacy;
@@ -71,22 +72,30 @@ class AQuantifierOverWhatAnOperationBuiltIsOverWhatItWasBuiltFromTest {
     }
 
     /**
-     * Where a step stops at some elements the run turns on the order, and another order of the
-     * elements is read no further than the list is. What the elements a fold walks were kept by is
-     * not what the list holds.
+     * Where a step stops at some elements, or keeps the element it was handed last, the run turns
+     * on the order, and another order of the elements is read no further than the list is. What
+     * the elements a fold walks were kept by is not what the list holds.
      */
     @Test
     void aFoldOverAnotherOrderIsReadNoFurtherThanTheListAndOverWhatWasKeptIsNotReadAsTheList() {
-        for (String order : List.of("List.fold((acc, x) -> acc || 10 / x > 1, false, %s)",
-                "List.fold((_, x) -> x, 0, %s) > 0")) {
-            assertEquals(stated(order.formatted("xs")), stated(order.formatted("List.reverse(xs)")),
-                    order);
-        }
+        String stopping = "List.fold((acc, x) -> acc || 10 / x > 1, false, %s)";
+        assertEquals(stated(stopping.formatted("xs")),
+                stated(stopping.formatted("List.reverse(xs)")));
         // The one that stops at some elements is unread for the order it stops in, which is what
         // there is to say of it over the list as over the reordered one.
         Proposition.Unread stops = assertInstanceOf(Proposition.Unread.class,
-                stated("List.fold((acc, x) -> acc || 10 / x > 1, false, List.reverse(xs))"));
+                stated(stopping.formatted("List.reverse(xs)")));
         assertInstanceOf(WhyUnread.WhichElementARunStopsAt.class, stops.why());
+        // The one that keeps the element it was handed last answers a number its run works out,
+        // over the list as over the reordered one: each is the same comparison of what its own
+        // walk answers, and neither holds a number of the list.
+        String last = "List.fold((_, x) -> x, 0, %s) > 0";
+        Relation.Affine direct = overTheWalkAlone(stated(last.formatted("xs")));
+        Relation.Affine reordered = overTheWalkAlone(stated(last.formatted("List.reverse(xs)")));
+        assertEquals(direct.proposition(), reordered.proposition());
+        assertEquals(direct.form().constant(), reordered.form().constant());
+        assertEquals(List.copyOf(direct.form().coefs().values()),
+                List.copyOf(reordered.form().coefs().values()));
         String grown = "List.length(List.fold((acc, x) -> List.append(acc, [x]), [], %s)) >= 2";
         assertNotEquals(stated(grown.formatted("xs")),
                 stated(grown.formatted("List.filter(x -> x > 0, xs)")));
@@ -222,6 +231,19 @@ class AQuantifierOverWhatAnOperationBuiltIsOverWhatItWasBuiltFromTest {
             Proposition stated = stated(counted);
             assertTrue(unreadIn(stated), () -> counted + " was read: " + stated);
         }
+    }
+
+    /**
+     * The relation {@code stated} is, held to be one comparison of the number a call answers on a
+     * run with a number written out: no place of the input is in it.
+     */
+    private static Relation.Affine overTheWalkAlone(Proposition stated) {
+        Proposition.Compared compared = assertInstanceOf(Proposition.Compared.class, stated);
+        Relation.Affine affine = assertInstanceOf(Relation.Affine.class, compared.relation());
+        assertEquals(1, affine.form().coefs().size(), () -> "one number: " + stated);
+        assertInstanceOf(Quantity.OfACall.class, affine.form().coefs().keySet().iterator().next(),
+                () -> "what the walk answers: " + stated);
+        return affine;
     }
 
     private static boolean unreadIn(Proposition stated) {

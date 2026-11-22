@@ -614,6 +614,12 @@ final class MeaningAssumptions {
             case DecisionAtom.OfAnAnswer(DecisionSubject.AnAnswer answer) ->
                     named = answerAtom(answer);
             case Quantity.OfABinding bound -> named = boundAtom(bound);
+            // What a call answers on a run is a value a path names nothing by.
+            case Quantity.OfACall call -> {
+                call.madeOf().ifPresent(why -> notTaken(new WhyNotTaken.MeaningUnread(why)));
+                return new AtomAt.AtTheEdge(
+                        WhyNotTaken.DomainLimit.A_PLACE_THE_PATH_DOES_NOT_READ);
+            }
             case Quantity.HowManyMeet _, Quantity.HowManyMeetAcross _,
                  Quantity.HowManyHold _ -> {
                 return new AtomAt.AtTheEdge(

@@ -9,6 +9,8 @@ import souther.compiler.core.Core;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.Quantity;
+import souther.compiler.meaning.Relation;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -133,18 +135,32 @@ class AFoldOverAConstantTableIsTheStepFunctionItIsTest {
     /**
      * A row is worked out before any application, and so is its type's invariant: a row whose grade
      * may end a run is not skipped over, and neither is one whose invariant cannot be shown of the
-     * input it is built of. The same row of an input under no invariant is read.
+     * input it is built of. What is compared there is the number the walk answers on a run, which
+     * says nothing of a bound the table draws or of the input a row is built of. The same row of an
+     * input under no invariant is read at the bounds, over the input.
      */
     @Test
     void aRowThatMayEndARunIsNotSkippedOver() {
         String rows = "List.fold(%s, 0, [ Row { grade = %s, lowerBound = 100 },"
                 + " Row { grade = 2, lowerBound = 200 } ])";
-        assertTrue(Proposition.leavesSomethingUnread(
-                stated(compared(rows.formatted(STEP, "Int.abs(cur)")))));
+        assertIsOverTheWalkAlone(stated(compared(rows.formatted(STEP, "Int.abs(cur)"))));
         String ofAnInput = compared(rows.formatted(STEP, "cur"));
         Proposition plain = stated(ofAnInput);
         assertFalse(Proposition.leavesSomethingUnread(plain));
-        assertNotEquals(plain, stated(HELD_ROW, ofAnInput));
+        assertFalse(Proposition.isOverWhatARunWorksOut(plain), plain::toString);
+        assertIsOverTheWalkAlone(stated(HELD_ROW, ofAnInput));
+    }
+
+    /**
+     * Holds {@code stated} to be one comparison of the number a call answers on a run with a
+     * number written out: no bound of the table and no place of the input is in it.
+     */
+    private static void assertIsOverTheWalkAlone(Proposition stated) {
+        Proposition.Compared compared = assertInstanceOf(Proposition.Compared.class, stated);
+        Relation.Affine affine = assertInstanceOf(Relation.Affine.class, compared.relation());
+        assertEquals(1, affine.form().coefs().size(), () -> "one number: " + stated);
+        assertInstanceOf(Quantity.OfACall.class, affine.form().coefs().keySet().iterator().next(),
+                () -> "what the walk answers: " + stated);
     }
 
     /**

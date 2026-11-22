@@ -39,7 +39,9 @@ import java.util.Set;
  * nothing a line is drawn from — a comparison whose statement is carried past it, an application
  * stating nothing of its own — and how many lines the applications it stands on come to is not
  * said either, since readings drawing one line at one place come to one, and telling which do is
- * the drawing.
+ * the drawing. Nor is on which of the applications a run gets to the construct, past the
+ * conditions on the way: that is what the conditions state. So the number of applications is the
+ * most a comparison is met on, and is said as that.
  *
  * <p>A line asked no further for the number of its cases stands where the walk met it all the
  * same; so what a report says of a helper at such a line is read off this, of the copies the line
@@ -56,15 +58,15 @@ public record HelpersReadOnApplicationsAroundThem(String name, String behavior)
      * One helper, the copies of its comparisons with the calls around each, and how many
      * applications those copies stand on.
      *
-     * @param named        the helper, and each copy of its comparisons with a call outside it
-     *                     that applies a closure around it more than once
-     * @param applications how many applications those copies stand on together, each copy's as
-     *                     the walk said them one by one
-     * @param calledInside the helpers that call it, and the ones calling those, out to a behavior:
-     *                     every call of the helper written inside one has to move into the
-     *                     behavior's own body, since a helper cannot call a behavior
+     * @param named              the helper, and each copy of its comparisons with a call outside it
+     *                           that applies a closure around it more than once
+     * @param applicationsAtMost the most applications those copies are met on together, each
+     *                           copy's as the walk said them one by one
+     * @param calledInside       the helpers that call it, and the ones calling those, out to a
+     *                           behavior: every call of the helper written inside one has to move
+     *                           into the behavior's own body, since a helper cannot call a behavior
      */
-    public record Told(AHelperReadOnApplicationsAroundIt named, int applications,
+    public record Told(AHelperReadOnApplicationsAroundIt named, int applicationsAtMost,
                        List<ValueName.Helper> calledInside) {
 
         public Told {
@@ -80,21 +82,24 @@ public record HelpersReadOnApplicationsAroundThem(String name, String behavior)
      * <p>One per helper and not one per behavior: what an author does about it is declare the
      * helper, once, and every behavior it stands so in is told of together.
      *
-     * @param module       the module
-     * @param helper       the helper
-     * @param applications for each behavior its comparisons stand so in, on how many applications,
-     *                     in the order the behaviors are declared
-     * @param calledInside the helpers that call it, and the ones calling those, out to a behavior
+     * @param module             the module
+     * @param helper             the helper
+     * @param applicationsAtMost for each behavior its comparisons stand so in, on how many
+     *                           applications at most, in the order the behaviors are declared
+     * @param calledInside       the helpers that call it, and the ones calling those, out to a
+     *                           behavior
      */
-    public record Said(String module, ValueName.Helper helper, Map<String, Integer> applications,
+    public record Said(String module, ValueName.Helper helper,
+                       Map<String, Integer> applicationsAtMost,
                        List<ValueName.Helper> calledInside) {
 
         public Said {
             Objects.requireNonNull(module, "some module");
             Objects.requireNonNull(helper, "some helper");
-            applications = Collections.unmodifiableMap(new LinkedHashMap<>(applications));
+            applicationsAtMost =
+                    Collections.unmodifiableMap(new LinkedHashMap<>(applicationsAtMost));
             calledInside = List.copyOf(calledInside);
-            if (applications.isEmpty()) {
+            if (applicationsAtMost.isEmpty()) {
                 throw new IllegalArgumentException("a helper is told of where it stands in some"
                         + " behavior");
             }
@@ -137,7 +142,7 @@ public record HelpersReadOnApplicationsAroundThem(String name, String behavior)
                 for (Told each : told) {
                     ValueName.Helper helper = each.named().helper();
                     applications.computeIfAbsent(helper, _ -> new LinkedHashMap<>())
-                            .put(declared.name(), each.applications());
+                            .put(declared.name(), each.applicationsAtMost());
                     callers.putIfAbsent(helper, each.calledInside());
                 }
             }

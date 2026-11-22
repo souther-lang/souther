@@ -16,6 +16,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
@@ -23,6 +24,7 @@ import souther.compiler.query.Compilation;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -328,14 +330,23 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
         // A walk adding one for every element counts them, and one adding two counts them twice;
         // so does a walk putting one more in what it carries, and one that doubles what it
         // carries is no count of anything — though whether it puts in any is, so held at least
-        // one it is whether the elements are there, and held beyond one it is unread.
+        // one it is whether the elements are there, and held beyond one it is the number the walk
+        // answers on a run, added to how many items there are, and no number of the elements.
         assertEquals(once, stated(
                 "List.fold((acc, e) -> acc + 1, 0, b.xs) + List.length(b.items) >= 1"));
         assertEquals(once, stated(sum.formatted("List.fold((acc, e) -> acc ++ [e], [], b.xs)")));
         assertEquals(stated("List.length(b.xs) >= 1 || List.length(b.items) >= 1"), stated(
                 sum.formatted("List.fold((acc, e) -> acc ++ acc ++ [e], [], b.xs)")));
-        assertInstanceOf(Proposition.Unread.class, stated(sum.formatted(
-                "List.fold((acc, e) -> acc ++ acc ++ [e], [], b.xs)").replace(">= 1", ">= 2")));
+        Proposition beyondOne = stated(sum.formatted(
+                "List.fold((acc, e) -> acc ++ acc ++ [e], [], b.xs)").replace(">= 1", ">= 2"));
+        Set<Quantity> added = assertInstanceOf(Relation.Affine.class,
+                assertInstanceOf(Proposition.Compared.class, beyondOne).relation())
+                .form().coefs().keySet();
+        assertEquals(1, added.stream().filter(Quantity.OfACall.class::isInstance).count(),
+                () -> "what the one walk answers: " + beyondOne);
+        assertEquals(List.of("List.length(b.items)"), added.stream()
+                .filter(each -> !(each instanceof Quantity.OfACall)).map(Object::toString)
+                .toList(), () -> "and how many items there are: " + beyondOne);
         Proposition twice = stated(
                 "List.length(b.xs) + List.length(b.xs) + List.length(b.items) >= 1");
         assertEquals(twice, stated(

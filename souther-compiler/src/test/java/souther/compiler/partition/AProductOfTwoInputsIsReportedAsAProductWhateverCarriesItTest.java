@@ -76,14 +76,35 @@ class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
 
     @Test
     void aProductWrittenInAHelperIsTheSameProduct() {
-        assertEquals(List.of("xs: NON_AFFINE_PRODUCT", "xs[*]: NON_AFFINE_PRODUCT"),
+        assertEquals(List.of("xs: NON_AFFINE_PRODUCT", "xs[*].p: NON_AFFINE_PRODUCT",
+                        "xs[*].q: NON_AFFINE_PRODUCT"),
                 reasons("""
-                        behavior amount : (a: A) -> Int
-                        let amount (a) = a.q * a.p * a.q
+                        let amount (a: A): Int = a.q * a.p * a.q
 
                         behavior f : (xs: List<A>) -> Bool
                         let f (xs) = List.length(List.filter(i -> amount(i) >= 1000, xs)) >= 1
                         """));
+    }
+
+    /**
+     * A behavior the comparison calls is no carrier of the product: what its body multiplies is
+     * its own account, at its own positions, and its caller compares a number the call works out,
+     * which the caller's runs place. The product of any numbers may be past what an `Int` holds,
+     * so the behavior is not shown to answer every run, and its caller says that of the stop.
+     */
+    @Test
+    void aProductWrittenInABehaviorTheComparisonCallsIsThatBehaviorsToSay() {
+        String model = DATA + "\n" + """
+                behavior amount : (a: A) -> Int
+                let amount (a) = if a.q * a.p * a.q >= 1000 then 1 else 0
+
+                behavior f : (xs: List<A>) -> Bool
+                let f (xs) = List.length(List.filter(i -> amount(i) >= 1, xs)) >= 1
+                """;
+        assertEquals(List.of("xs[*]: EVALUATION_STOPS_NOT_FULLY_READ",
+                "xs[*]: RULE_MEASURED_ON_ITS_RUNS"), reasonsOf(model, "f"));
+        assertEquals(List.of("a.p: NON_AFFINE_PRODUCT", "a.q: NON_AFFINE_PRODUCT"),
+                reasonsOf(model, "amount"));
     }
 
     /**
@@ -220,8 +241,7 @@ class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
                             amount >= 1000
                         }, xs)
                         """, """
-                        behavior amount : (a: A) -> Int
-                        let amount (a) = a.q * a.p
+                        let amount (a: A): Int = a.q * a.p
 
                         behavior f : (xs: List<A>) -> Bool
                         let f (xs) = List.length(List.filter(i -> amount(i) >= 1000, xs)) >= 1
@@ -279,7 +299,7 @@ class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
                 behavior pick : (l: Line) -> Int
                 let pick (l) = if l.qty > 3 then 1 else 0
                 """.formatted(clause), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.OFF));
         ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
@@ -296,7 +316,7 @@ class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
 
     /** The same, of the readings that stopped alone, and not of a rule read to the end. */
     private static List<String> stopped(String behaviors) {
-        return notReadIn(DATA + "\n" + behaviors).stream()
+        return notReadIn(DATA + "\n" + behaviors, "f").stream()
                 .filter(PartitionEvidence.NotRead::readingStopped)
                 .map(each -> each.at() + ": " + each.reason())
                 .distinct()
@@ -304,18 +324,24 @@ class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
                 .collect(Collectors.toList());
     }
 
-    private static List<PartitionEvidence.NotRead> notReadIn(String model) {
-        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
+    private static List<PartitionEvidence.NotRead> notReadIn(String model, String behavior) {
+        Compilation compilation = ACompiledModel.measured(model,
+                Adequacy.Asked.reportOnly(Adequacy.Level.OFF));
         Map<String, PartitionEvidence> coverage =
                 compilation.db().ask(new Adequacy.Coverage("demo")).value();
         assertNotNull(coverage, () -> "the model under test compiles: " + model);
-        PartitionEvidence measured = coverage.get("f");
-        assertNotNull(measured, () -> "f was measured: " + model);
+        PartitionEvidence measured = coverage.get(behavior);
+        assertNotNull(measured, () -> behavior + " was measured: " + model);
         return measured.notRead();
     }
 
     private static List<String> reasonsOf(String model) {
-        return notReadIn(model).stream()
+        return reasonsOf(model, "f");
+    }
+
+    /** The same, of the behavior named. */
+    private static List<String> reasonsOf(String model, String behavior) {
+        return notReadIn(model, behavior).stream()
                 .map(each -> each.at() + ": " + each.reason())
                 .distinct()
                 .sorted()

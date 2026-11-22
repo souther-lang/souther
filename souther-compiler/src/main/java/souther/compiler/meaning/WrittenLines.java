@@ -420,7 +420,6 @@ public final class WrittenLines {
             case Derivation.ReadThrough(var read, var _) -> List.of(read);
             case Derivation.OfItsOwnElement(var _, var _, var read) -> List.of(read);
             case Derivation.OfWhatWasKept(var element, var kept) -> with(element, kept);
-            case Derivation.ABehaviorsBody(var _, var body) -> List.of(body);
             case Derivation.ARecursionsBody(var _, var body) -> List.of(body);
             case Derivation.OnEachValueWrittenOut(var each) -> each;
             case Derivation.AChoiceAt(var _, var choice) -> List.of(choice);

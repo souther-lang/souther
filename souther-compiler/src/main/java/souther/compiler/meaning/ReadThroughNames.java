@@ -838,6 +838,7 @@ public final class ReadThroughNames {
             case Quantity.OfABinding binding -> untold(quantity,
                     binding.handed().map(ReadThroughNames::positionsHandedFrom).orElse(List.of()),
                     telling);
+            case Quantity.OfACall _ -> untold(quantity, List.of(), telling);
         };
     }
 

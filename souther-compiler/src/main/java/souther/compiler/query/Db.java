@@ -263,6 +263,8 @@ public final class Db implements StoreWork {
      * left without a memo, which is what {@link #ask} does with a throw either way.
      */
     private Abandonment abandonment = Abandonment.NEVER;
+    /** Who is told which question is being worked out. */
+    private Answering told = Answering.UNTOLD;
     /** The keys being answered right now, outermost first — the chain a cycle is found on. */
     private final Set<Key<?>> inProgress = new LinkedHashSet<>();
     /** The reads of each in-progress key, innermost frame last. */
@@ -420,6 +422,28 @@ public final class Db implements StoreWork {
         this.abandonment = abandonment;
     }
 
+    /** Says who is told which question this store is working out ({@link Answering}). */
+    public void tell(Answering told) {
+        this.told = told;
+    }
+
+    /**
+     * Does the part of the question in flight that is about {@code behavior} of {@code module},
+     * and tells whoever listens that it is that part being worked out.
+     *
+     * <p>For a question about a module that goes through its behaviors in turn: the working out
+     * is the module's question's, and which behavior it is on is what someone waiting is told.
+     * Nothing is kept or recorded for it — what the work reads is read by the question in flight.
+     */
+    public <T> T onOneBehavior(String module, String behavior, Supplier<T> work) {
+        told.startedOn(module, behavior);
+        try {
+            return work.get();
+        } finally {
+            told.finishedOn(module, behavior);
+        }
+    }
+
     /** Answers {@code key}, computing it if nothing kept from before still holds. */
     @SuppressWarnings("unchecked")
     public <T> Answer<T> ask(Key<T> key) {
@@ -463,9 +487,11 @@ public final class Db implements StoreWork {
         // of its inputs, so an answer that was reached is as good as any other. Only the key that
         // failed is unfinished.
         boolean reachedThroughCycle = false;
+        told.started(key);
         try {
             answer = key.compute(this);
         } finally {
+            told.finished(key);
             // In the order they were read, so a caller walking the graph for reports meets them in
             // the order the work happened. An unordered copy here makes the first error a module
             // reports depend on hash order.

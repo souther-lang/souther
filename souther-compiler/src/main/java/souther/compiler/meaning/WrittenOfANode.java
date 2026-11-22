@@ -89,7 +89,7 @@ public final class WrittenOfANode {
         return switch (quantity) {
             case DecisionAtom.OfTheInput(NumericTerm term, var _) -> reads(term);
             case DecisionAtom.OfAnAnswer _, DecisionAtom.TakenOfAnAnswer _,
-                 DecisionAtom.ComputedOverAnAnswer _, Quantity.OfABinding _,
+                 DecisionAtom.ComputedOverAnAnswer _, Quantity.OfABinding _, Quantity.OfACall _,
                  Quantity.CodePointsOfAPiece _, Quantity.HowManyCarried _,
                  Quantity.TheKeptTotal _ -> false;
             case Quantity.HowManyMeet count -> reads(count.container())

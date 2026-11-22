@@ -160,10 +160,11 @@ final class ModelVocabulary {
     static final Set<String> DB_CHANGES = Set.of("running", "allowing", "set", "forget",
             "abandonWhen");
 
-    /** What asks a store what it holds, or what it was asked, and changes nothing. */
+    /** What asks a store what it holds, or what it was asked, and changes nothing; and what
+     *  says who is told which question it is working out, which changes no answer. */
     static final Set<String> DB_NEITHER = Set.of("readings", "execution", "allowances", "ask",
             "dependenciesOf", "isComputed", "watching", "everyAnswer", "revision",
-            "ruleReadingFor");
+            "ruleReadingFor", "tell", "onOneBehavior");
 
     /**
      * The static methods of a model that take a model or a store and are not changes: the rest of

@@ -416,7 +416,8 @@ class ANumberOverTheElementsIsReadAsTheNumberItIsTest {
      * A walk's step that keeps some of each element's values is read with what it carried standing
      * for any number, and adds how many it kept of each. One keeping them by how many it carried
      * adds a number of no one size — one at every step, as many as were carried then — so it is
-     * no number of each element, wherever in what it adds that number is read.
+     * no number of each element, wherever in what it adds that number is read: how many it holds
+     * in the end is a number the walk answers on a run.
      */
     @Test
     void aStepAddingANumberOfWhatItCarriedIsNoNumberOfEachElement() {
@@ -427,8 +428,21 @@ class ANumberOverTheElementsIsReadAsTheNumberItIsTest {
         assertEquals(1, control.size(), () -> "one statement: " + control);
         assertInstanceOf(Quantity.HowManyMeetAcross.class, assertInstanceOf(RowDemand.SoMany.class,
                 assertInstanceOf(OnTheWay.TakenIn.class, control.getFirst()).demand()).count());
-        assertEquals(List.of(), numbersAsked("keptPastWhatWasCarried"));
-        assertEquals(List.of(), numbersAsked("keptPastWhatWasCarriedWrittenOut"));
+        // What is compared of these is the number the walk answers on a run, which the run is
+        // asked and no row is composed for: no count across the elements stands in it.
+        for (String carried : List.of("keptPastWhatWasCarried",
+                "keptPastWhatWasCarriedWrittenOut")) {
+            List<OnTheWay> stated = statedAll(carried);
+            assertEquals(1, stated.size(), () -> "one statement: " + stated);
+            RowDemand.ForTheRun run = assertInstanceOf(RowDemand.ForTheRun.class,
+                    assertInstanceOf(OnTheWay.TakenIn.class, stated.getFirst()).demand(),
+                    () -> "the run decides it: " + stated);
+            assertEquals(RowDemand.NoComposer.A_VALUE_THE_BODY_WORKS_OUT, run.why());
+            List<Quantity> asked = numbersAsked(carried);
+            assertEquals(1, asked.size(), () -> "one number: " + asked);
+            assertInstanceOf(Quantity.OfACall.class, asked.getFirst(),
+                    () -> "what the walk answers: " + asked);
+        }
     }
 
     /**

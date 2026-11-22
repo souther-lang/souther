@@ -144,29 +144,6 @@ public sealed interface Derivation {
     }
 
     /**
-     * What a behavior a call names answers, read off its body where the call stands: the body's
-     * parameters stand for what the call handed, so what the body states of them is what it states
-     * of the call's arguments.
-     */
-    record ABehaviorsBody(ValueName.Behavior behavior, Derivation inItsBody) implements Derivation {
-
-        public ABehaviorsBody {
-            Objects.requireNonNull(behavior, "a call names a behavior");
-            Objects.requireNonNull(inItsBody, "whose body states something");
-        }
-
-        @Override
-        public Proposition conclusion(Conclusion numbering) {
-            return numbering.of(inItsBody);
-        }
-
-        @Override
-        public List<Derivation> oneOf() {
-            return List.of(inItsBody);
-        }
-    }
-
-    /**
      * What a recursive helper a call names answers, read off its body where the call stands: what
      * {@code inItsBody} states of the walk the body makes ({@link AcrossAWalk}).
      */

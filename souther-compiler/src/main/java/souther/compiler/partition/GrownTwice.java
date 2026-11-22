@@ -2,13 +2,10 @@ package souther.compiler.partition;
 
 import souther.compiler.observe.ObservedValue;
 
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
-import java.util.NoSuchElementException;
 import java.util.function.BiFunction;
-import java.util.function.Supplier;
 
 /**
  * The values a value becomes grown by one element and then by two, the ones a walk can be seen to go
@@ -53,31 +50,8 @@ final class GrownTwice {
     static Iterator<ObservedValue> of(
             ObservedValue value,
             BiFunction<ObservedValue, NearbyValues.Lists, Iterator<ObservedValue>> grow) {
-        List<Supplier<Iterator<ObservedValue>>> stages = LADDER.stream()
-                .<Supplier<Iterator<ObservedValue>>>map(kinds -> () -> grownBy(value, kinds, grow))
-                .toList();
-        Iterator<ObservedValue> all = new Iterator<>() {
-
-            private int stage;
-
-            private Iterator<ObservedValue> current = Collections.emptyIterator();
-
-            @Override
-            public boolean hasNext() {
-                while (!current.hasNext() && stage < stages.size()) {
-                    current = stages.get(stage++).get();
-                }
-                return current.hasNext();
-            }
-
-            @Override
-            public ObservedValue next() {
-                if (!hasNext()) {
-                    throw new NoSuchElementException();
-                }
-                return current.next();
-            }
-        };
+        Iterator<ObservedValue> all =
+                NearbyValues.flat(LADDER.iterator(), kinds -> grownBy(value, kinds, grow));
         // A value two growths reach in either order, a list at a time in two lists, is made twice.
         // Held as it is handed over, which is as many as the search takes.
         return NearbyValues.filtered(all, new HashSet<ObservedValue>()::add);

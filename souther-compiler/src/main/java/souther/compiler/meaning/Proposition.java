@@ -12,6 +12,7 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.Text;
 import souther.compiler.numeric.ValueTransformation;
+import souther.compiler.observe.Figure;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.semantics.StringContainment;
 import souther.compiler.semantics.TakenArguments;
@@ -26,6 +27,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -425,8 +427,8 @@ public sealed interface Proposition {
             case DecisionAtom.OfTheInput(var term, var _) -> term.placesReadOff().stream()
                     .anyMatch(at -> isAnElementOf(new DecisionSubject.AnInput(at), container));
             // What a recursion carries stands for any number, which may be any element's.
-            case DecisionAtom.OfAnAnswer _, Quantity.OfABinding _, Quantity.HowManyCarried _,
-                 Quantity.TheKeptTotal _ -> true;
+            case DecisionAtom.OfAnAnswer _, Quantity.OfABinding _, Quantity.OfACall _,
+                 Quantity.HowManyCarried _, Quantity.TheKeptTotal _ -> true;
             case DecisionAtom.TakenOfAnAnswer(var _, var _, var taken, var _) ->
                     isAnElementOf(taken, container);
             case DecisionAtom.ComputedOverAnAnswer computed ->
@@ -2156,6 +2158,64 @@ public sealed interface Proposition {
         return StatementReading.over(Proposition::firstStopAt);
     }
 
+    /**
+     * Whether some relation of {@code stated} is over a number a call answers on a run
+     * ({@link Quantity.OfACall}): a statement the runs place, which says nothing of where the
+     * input has to stand, and so states less than one of the same condition read over the input.
+     */
+    public static boolean isOverWhatARunWorksOut(Proposition stated) {
+        return StatementReading.<Boolean>over(Proposition::overWhatARunWorksOutAt).read(stated);
+    }
+
+    private static Boolean overWhatARunWorksOutAt(Proposition stated,
+                                                  StatementReading<Boolean> again) {
+        return switch (stated) {
+            case Compared compared -> compared.relation() instanceof Relation.Affine affine
+                    && affine.form().coefs().keySet().stream()
+                            .anyMatch(Quantity.OfACall.class::isInstance);
+            case All _, Any _, OnAnApplication _, SoManyHold _, Some _, SomeReachable _,
+                 WhereItAnswers _, OfTheWays _ -> {
+                for (Proposition part : stated.partsHeld()) {
+                    if (again.read(part)) {
+                        yield true;
+                    }
+                }
+                yield false;
+            }
+            case Always _, Unread _, Truth _, InCases _, Present _, InTheStrings _,
+                 SameValue _, StringInside _, LastToHold _, Carried _ -> false;
+        };
+    }
+
+    /** The figures counting how many times a condition is read that the parts of {@code stated}
+     *  nothing read stopped at, each once, each part asked once however many ways there are down
+     *  to it. */
+    public static Set<Figure> figuresOfReadingsIn(Proposition stated) {
+        Set<Figure> out = new LinkedHashSet<>();
+        StatementReading.<Boolean>over((part, again) -> figuresAt(part, again, out)).read(stated);
+        return Collections.unmodifiableSet(out);
+    }
+
+    /** Whether some part of {@code stated} stopped at such a figure, with each put into
+     *  {@code into}. */
+    private static Boolean figuresAt(Proposition stated, StatementReading<Boolean> again,
+                                     Set<Figure> into) {
+        return switch (stated) {
+            case Unread unread -> unread.why().countsReadings()
+                    && unread.why().figure().map(into::add).isPresent();
+            case All _, Any _, OnAnApplication _, SoManyHold _, Some _, SomeReachable _,
+                 WhereItAnswers _, OfTheWays _ -> {
+                boolean stopped = false;
+                for (Proposition part : stated.partsHeld()) {
+                    stopped |= again.read(part);
+                }
+                yield stopped;
+            }
+            case Always _, Compared _, Truth _, InCases _, Present _, InTheStrings _,
+                 SameValue _, StringInside _, LastToHold _, Carried _ -> false;
+        };
+    }
+
     private static Optional<WhyUnread> firstStopAt(Proposition stated,
                                                    StatementReading<Optional<WhyUnread>> again) {
         return switch (stated) {
@@ -2372,7 +2432,7 @@ public sealed interface Proposition {
         return switch (quantity) {
             case DecisionAtom.OfAnAnswer _, DecisionAtom.TakenOfAnAnswer _,
                  DecisionAtom.ComputedOverAnAnswer _ -> true;
-            case DecisionAtom.OfTheInput _, Quantity.OfABinding _,
+            case DecisionAtom.OfTheInput _, Quantity.OfABinding _, Quantity.OfACall _,
                  Quantity.CodePointsOfAPiece _, Quantity.RemainderOfADividend _,
                  Quantity.RemainderByAnInput _, Quantity.ProductOfTwo _,
                  Quantity.WhatAnOperationAnswers _, Quantity.HowManyCarried _,

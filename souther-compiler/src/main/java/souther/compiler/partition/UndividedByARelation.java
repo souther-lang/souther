@@ -329,9 +329,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
          *  stops at it stops in this as a finding says it is the site's
          *  ({@code StopAssessment.Site#sameStopAs}). */
         boolean sameOperationAs(IntOperation other) {
-            return form.equals(other.form) && least.equals(other.least)
-                    && greatest.equals(other.greatest);
+            return asANumber().equals(other.asANumber());
         }
+
+        /** This as a number held to two ends, wherever and after whatever it is worked out. */
+        AsANumber asANumber() {
+            return new AsANumber(form, least, greatest);
+        }
+
+        /** An operation as the number it comes to and the ends it is held to. */
+        record AsANumber(LinearForm<IntOperand> form, BigInteger least, BigInteger greatest) {}
 
         /** An operation over numbers of the input alone, whose ends are where its type stops. */
         static IntOperation overTheInput(LinearForm<NumericTerm> form, BigInteger least,

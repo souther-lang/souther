@@ -921,7 +921,7 @@ final class BindingEnvironment {
     }
 
     /**
-     * The same, where the body of a behavior a call names is read as well: what that body binds to
+     * The same, where another body is read as well, the one a call names: what that body binds to
      * the elements of what, beside what this one does. Its bindings are its own, so none of them is
      * one of these — and the values it builds are defined beside the ones this one does.
      */

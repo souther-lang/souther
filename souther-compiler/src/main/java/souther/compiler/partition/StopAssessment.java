@@ -226,6 +226,16 @@ final class StopAssessment {
                 .anyMatch(Judgement.Stops.class::isInstance);
     }
 
+    /** {@code places}, each that works out what an earlier one does on the same way left out. */
+    private static List<Place> distinctPlaces(List<Place> places) {
+        Map<List<Object>, Place> kept = new LinkedHashMap<>();
+        for (Place place : places) {
+            kept.putIfAbsent(List.of(place.worked().stops().operations(), place.way(),
+                    place.aRowArrives()), place);
+        }
+        return List.copyOf(kept.values());
+    }
+
     private static List<Judgement> of(ComparisonReadings.Reading each, List<Place> places,
                                       boolean onRowsOfTheStatement,
                                       List<TakenConstraint.Affine> within, InputReading read) {
@@ -234,6 +244,12 @@ final class StopAssessment {
             out.add(new Judgement.Unresolved(null, WhyAStopIsNotShown.ON_ROWS_OF_THE_STATEMENT));
         }
         List<LinearForm<NumericTerm>> divisors = divisorsOf(each, read);
+        // A comparison written over names that stand for other expressions has the places of
+        // every one of them: one for each combination of the arms they are read down, most of
+        // which work out the same operations on the same way. What is judged of a place is a
+        // function of what it works out, the way to it and whether a row arrives, so a place that
+        // says the same as one before it is judged once.
+        places = distinctPlaces(places);
         for (Place place : places) {
             UndividedByARelation.Working working = place.worked().stops().operations();
             WhatAWayLeavesOfAValue left = place.aRowArrives()

@@ -101,6 +101,12 @@ public final class BoundaryDerivation {
         return new Measure.NotApplicable<>(NoSubject.NO_SUBJECT);
     }
 
+    /** What a behavior the build measures none of the lines of comes to: it was not asked, and
+     *  nothing was gone without ({@link Adequacy.Choice}). */
+    static Measure<List<BorderAssessment>> notAsked() {
+        return new Measurement.NotMeasured<>(NothingWasAsked.NOT_ASKED);
+    }
+
     /** What the measure came to, from what it found and whether its reading ran out. The one place
      *  the states are chosen between.
      *

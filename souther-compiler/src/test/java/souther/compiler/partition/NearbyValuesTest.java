@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -64,6 +65,36 @@ class NearbyValuesTest {
 
     private static ObservedValue point(long x, long y) {
         return new ObservedValue.Constructed(declared("Point"), Map.of("x", whole(x), "y", whole(y)));
+    }
+
+    /** Twenty of them one inside another: asked twice at each, the innermost is asked a million
+     *  times for its one element. */
+    @Test
+    void theInnermostOfNestedWalksIsAskedOnceForEachElement() {
+        int[] asked = {0};
+        Iterator<Integer> walk = new Iterator<>() {
+            private boolean taken;
+
+            @Override
+            public boolean hasNext() {
+                asked[0]++;
+                return !taken;
+            }
+
+            @Override
+            public Integer next() {
+                taken = true;
+                return 7;
+            }
+        };
+        for (int depth = 0; depth < 20; depth++) {
+            Iterator<Integer> inner = walk;
+            walk = NearbyValues.flat(List.of(0).iterator(), _ -> inner);
+        }
+
+        assertEquals(7, walk.next());
+        assertFalse(walk.hasNext());
+        assertEquals(2, asked[0]);
     }
 
     @Test

@@ -93,7 +93,7 @@ class AHelperIsToldOfFromTheWalkOfTheBodyAloneTest {
         assertEquals(List.of(new ValueName.Helper(MODULE, "firstBusinessDay"),
                 new ValueName.Helper(MODULE, "onABusinessDay"),
                 new ValueName.Helper(MODULE, "dueDate")), one.calledInside());
-        assertTrue(one.applications() > 1, one::toString);
+        assertTrue(one.applicationsAtMost() > 1, one::toString);
         measuredNothing(compilation);
     }
 
@@ -119,7 +119,8 @@ class AHelperIsToldOfFromTheWalkOfTheBodyAloneTest {
                 HelpersReadOnApplicationsAroundThem.toldOf(compilation, null, null);
         assertEquals(1, said.size(), said::toString);
         assertEquals(new ValueName.Helper(MODULE, "isBusinessDay"), said.getFirst().helper());
-        assertEquals(List.of("g", "h"), List.copyOf(said.getFirst().applications().keySet()));
+        assertEquals(List.of("g", "h"),
+                List.copyOf(said.getFirst().applicationsAtMost().keySet()));
         measuredNothing(compilation);
     }
 
@@ -133,7 +134,7 @@ class AHelperIsToldOfFromTheWalkOfTheBodyAloneTest {
         List<HelpersReadOnApplicationsAroundThem.Said> said =
                 HelpersReadOnApplicationsAroundThem.toldOf(compilation, MODULE, "h");
         assertEquals(1, said.size(), said::toString);
-        assertEquals(List.of("h"), List.copyOf(said.getFirst().applications().keySet()));
+        assertEquals(List.of("h"), List.copyOf(said.getFirst().applicationsAtMost().keySet()));
         compilation.db().everyAnswer().keySet().forEach(key -> assertFalse(
                 (key instanceof Adequacy.ComparisonsRead read && !read.behavior().equals("h"))
                         || (key instanceof HelpersReadOnApplicationsAroundThem told

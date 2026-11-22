@@ -20,6 +20,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
 
 /**
  * The compiler pipeline facade: source → parse → derive → type check → ClassFile bytecode
@@ -262,6 +263,27 @@ public final class Compiler {
                                        List<Located> warningsOut, Adequacy.Asked measure,
                                        LocalDate writtenOn) {
         return answered(sources.compilation(path).writtenOn(writtenOn), warningsOut, measure);
+    }
+
+    /**
+     * As above, measuring only the behaviors {@code choice} names, and handing the compilation to
+     * {@code beforeTheMeasurement} once it is told what to measure and before anything is
+     * asked of it: what a caller can say of the model without the measurement is said before it
+     * waits for one.
+     */
+    public static Compilation analyzed(CompilationSources sources, ModulePath path,
+                                       List<Located> warningsOut, Adequacy.Asked measure,
+                                       LocalDate writtenOn, Adequacy.Choice choice,
+                                       Consumer<Compilation> beforeTheMeasurement) {
+        Compilation compilation = sources.compilation(path).writtenOn(writtenOn);
+        compilation.choose(choice);
+        return driven(() -> {
+            compilation.measure(measure);
+            beforeTheMeasurement.accept(compilation);
+            compilation.answerEverything();
+            warningsOut.addAll(compilation.warnings());
+            return compilation;
+        });
     }
 
     /** As {@link #analyzed(CompilationSources, ModulePath, List, Adequacy.Asked)}, measuring

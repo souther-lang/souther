@@ -394,13 +394,13 @@ sealed interface ClosureApplications {
      * is read in {@code reads} by a walk that is inside these.
      */
     default ClosureApplications into(Core.Block block, ScopeStep step, InputReads reads,
-                                     InputReading read) {
+                                     InputReading read, boolean saysWhereEachIsMade) {
         return switch (this) {
             case Outside(var metOn, var made) -> applied(block, step,
                     List.of(new Application(reads, WhereAnApplicationIsMade.nothingAsked(),
                             Map.of(), metOn, List.of(), made, List.of())),
-                    read, true);
-            case Each(var outer) -> applied(block, step, outer, read, false);
+                    read, true, saysWhereEachIsMade);
+            case Each(var outer) -> applied(block, step, outer, read, false, saysWhereEachIsMade);
             case NotSaid _, None _ -> this;
         };
     }
@@ -414,7 +414,7 @@ sealed interface ClosureApplications {
      */
     private static ClosureApplications applied(Core.Block block, ScopeStep step,
                                                List<Application> outer, InputReading read,
-                                               boolean outside) {
+                                               boolean outside, boolean saysWhereEachIsMade) {
         Symbols symbols = read.symbols();
         DeclarationNewtypes newtypes = read.newtypes();
         List<Application> out = new ArrayList<>();
@@ -432,12 +432,15 @@ sealed interface ClosureApplications {
                     // read here, and is past where its operators answer.
                     boolean aTruth = Type.BOOL.equals(block.body().type());
                     List<Proposition> regions = new ArrayList<>();
-                    each.forEach(one -> regions.add(WhatConditionsState.of(read)
-                            .whereItsOperatorsAnswer(block.body(), one.reads(), read)
-                            .answers().orElse(null)));
+                    if (saysWhereEachIsMade) {
+                        each.forEach(one -> regions.add(WhatConditionsState.of(read)
+                                .whereItsOperatorsAnswer(block.body(), one.reads(), read)
+                                .answers().orElse(null)));
+                    }
                     List<Proposition> answers = null;
-                    if (aTruth || how != HowAClosureIsApplied.TO_EVERY_ELEMENT
-                            || regions.stream().anyMatch(Objects::nonNull)) {
+                    if (saysWhereEachIsMade && (aTruth
+                            || how != HowAClosureIsApplied.TO_EVERY_ELEMENT
+                            || regions.stream().anyMatch(Objects::nonNull))) {
                         answers = new ArrayList<>();
                         for (int at = 0; at < each.size(); at++) {
                             Proposition states = aTruth ? WhatConditionsState.of(read)
@@ -450,7 +453,8 @@ sealed interface ClosureApplications {
                     List<List<Proposition>> keptBy = each.stream()
                             .map(one -> keptBy(one.keptWhere(), read)).toList();
                     List<Proposition> reached = WhereAnApplicationIsMade.reached(answers, keptBy,
-                            how, around.reached());
+                            saysWhereEachIsMade ? how : HowAClosureIsApplied.TO_EVERY_ELEMENT,
+                            around.reached());
                     // Where the container holds each element, which is where it is made: kept,
                     // whatever the applications before it answered.
                     List<Proposition> held = WhereAnApplicationIsMade.reached(null, keptBy,
@@ -484,7 +488,8 @@ sealed interface ClosureApplications {
                     out.add(around.inside(entered,
                             where.map(some -> WhereAnApplicationIsMade.past(around.reached(),
                                     some.holdingSomething())).orElse(around.reached()),
-                            metOn(block, containers, around, entered, read), Optional.empty(),
+                            saysWhereEachIsMade ? metOn(block, containers, around, entered, read)
+                                    : around.metOn(), Optional.empty(),
                             everyElementOf(block, containers, around, read), List.of(),
                             around.reached()));
                 }
@@ -696,6 +701,19 @@ sealed interface ClosureApplications {
                         : one.madeUnder(WhereAnApplicationIsMade.past(one.reached(), past))
                                 .forked();
             }).toList());
+            case Outside(var metOn, var made) -> new Outside(metOn, made.forked());
+            case NotSaid _, None _ -> this;
+        };
+    }
+
+    /**
+     * The same applications past a condition no one reads: each is where it was, and only what
+     * says which of them there are and which call made each is kept. What {@link #taking} adds
+     * on top is where each is made, which {@link #told} does not say.
+     */
+    default ClosureApplications takingNothingRead() {
+        return switch (this) {
+            case Each(var each) -> new Each(each.stream().map(Application::forked).toList());
             case Outside(var metOn, var made) -> new Outside(metOn, made.forked());
             case NotSaid _, None _ -> this;
         };

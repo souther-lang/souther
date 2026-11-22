@@ -159,8 +159,7 @@ public final class InputReads {
     private Map<BindingId, ElementsNamed> namedThrough;
 
     /**
-     * The applications of closures, the arms of choices and the calls of behaviors a reading here is
-     * on.
+     * The applications of closures, the arms of choices and the calls a reading here is on.
      *
      * @param handed   the names an application handed one of the values written out, on the way
      *                 here ({@link #handing})
@@ -170,13 +169,12 @@ public final class InputReads {
      * @param taken    what each value taken as another on the way down stands for, the latest
      *                 first; null where none was
      * @param given    what a name was handed that stands at no position and reads bindings of its
-     *                 own, read where it was handed: a parameter of a behavior a call entered on the
-     *                 way down ({@link #calling}), and one an application handed a value written out
-     *                 ({@link #handing})
+     *                 own, read where it was handed: a parameter of a body a call entered on the
+     *                 way down ({@link #calledWith}), and one an application handed a value written
+     *                 out ({@link #handing})
      * @param picked   the element of a list at an index written down that a name an arm opening
      *                 the lookup bound stands for ({@link WhatItHolds.AtAnIndex})
-     * @param entered  the behaviors whose bodies were entered on the way down
-     * @param widths   for each parameter a closure on the way down was applied through, how many
+     * @param widths  for each parameter a closure on the way down was applied through, how many
      *                 values it is handed: the applications of closures are among
      *                 {@code readings} as the product of these, the rest being the arms of
      *                 choices taken
@@ -188,17 +186,16 @@ public final class InputReads {
     private record Applied(Set<BindingId> handed, long readings, Taken taken,
                            Map<BindingId, Denotation> given,
                            Map<BindingId, PickedAtAnIndex> picked,
-                           Set<ValueName.Behavior> entered, Map<BindingId, Long> widths,
+                           Map<BindingId, Long> widths,
                            Map<BindingId, Set<BindingId>> turnsOn) {
 
-        static final Applied NONE = new Applied(Set.of(), 1, null, Map.of(), Map.of(), Set.of(),
-                Map.of(), Map.of());
+        static final Applied NONE = new Applied(Set.of(), 1, null, Map.of(), Map.of(), Map.of(),
+                Map.of());
 
         Applied {
             handed = Set.copyOf(handed);
             given = Map.copyOf(given);
             picked = Map.copyOf(picked);
-            entered = Set.copyOf(entered);
             widths = Map.copyOf(widths);
             turnsOn = Map.copyOf(turnsOn);
             long applications = applicationsOf(widths.values());
@@ -239,7 +236,7 @@ public final class InputReads {
          * being those {@code widths} says, with {@code taken} for what was taken.
          */
         Applied as(long readings, Map<BindingId, Long> widths, Taken taken) {
-            return new Applied(handed, readings, taken, given, picked, entered, widths, turnsOn);
+            return new Applied(handed, readings, taken, given, picked, widths, turnsOn);
         }
     }
 
@@ -258,8 +255,8 @@ public final class InputReads {
 
     /**
      * That a reading here takes {@code node} as {@code as}, and what {@code older} says before it:
-     * a choice as the answer of the arm the reading is on, a call of a behavior as the body it
-     * enters, a call of an operation defined by cases as what the case the reading is on answers.
+     * a choice as the answer of the arm the reading is on, a call of an operation defined by cases
+     * as what the case the reading is on answers.
      *
      * <p>The node, and not one equal to it. A value is one value however often it is read, so two
      * reads of the node are taken alike; two written alike are two values, each taken its own way.
@@ -279,6 +276,10 @@ public final class InputReads {
         private int asHash;
         /** {@link #hashCode}, nought where it has not been worked out. */
         private int hash;
+        /** The last other chain this one was found equal to, null where none was: kept so the
+         *  same pair is not compared down its length again ({@link #equals}). Every field equality
+         *  reads is final, so a chain found equal stays so. */
+        private Taken sameAs;
 
         Taken(Core node, TakenAs as, Taken older) {
             this(node, as, 0, older);
@@ -363,7 +364,18 @@ public final class InputReads {
             if (hash != 0 && that.hash != 0 && hash != that.hash) {
                 return false;
             }
-            return as.equals(that.as) && Objects.equals(older, that.older);
+            // The chain below first, and the pair kept once it is found the same: what a node is
+            // taken as is a value read where the chain below already stood, so comparing it comes
+            // to the same pair of chains again. Asked afresh there, a chain of two copies costs
+            // twice as much for each taking in it.
+            if (sameAs == that) {
+                return true;
+            }
+            if (Objects.equals(older, that.older) && as.equals(that.as)) {
+                sameAs = that;
+                return true;
+            }
+            return false;
         }
 
         @Override
@@ -580,7 +592,7 @@ public final class InputReads {
      * narrowing is. A value at a position is that position, as an arm's is. One that names nothing
      * is itself wherever it is read. One that names a binding of where it was written and stands at
      * no position is read where it was written, as what a call hands a parameter is
-     * ({@link #calling}): its names are that reading's and not these.
+     * ({@link #calledWith}): its names are that reading's and not these.
      */
     public InputReads handing(BindingId binding, Denotation value, DeclarationNewtypes newtypes) {
         return handedAs(binding, value, newtypes).turningOn(binding, List.of(value));
@@ -617,20 +629,19 @@ public final class InputReads {
         if (value.at().pathOf(value.value(), newtypes) instanceof ValuesAt.At(TermPath at)) {
             return new InputReads(names.naming(binding, at), narrower, declared, dependencies,
                     new Applied(handed, applied.readings(), applied.taken(), applied.given(),
-                            applied.picked(), applied.entered(), applied.widths(),
-                            applied.turnsOn()));
+                            applied.picked(), applied.widths(), applied.turnsOn()));
         }
         if (!WhatABodyReads.freeIn(value.value()).isEmpty()) {
             Map<BindingId, Denotation> given = new LinkedHashMap<>(applied.given());
             given.put(binding, value);
             return new InputReads(names, narrower, declared, dependencies, new Applied(handed,
                     applied.readings(), applied.taken(), given, applied.picked(),
-                    applied.entered(), applied.widths(), applied.turnsOn()));
+                    applied.widths(), applied.turnsOn()));
         }
         return new InputReads(names.handing(binding, value.value()), narrower, declared,
                 dependencies, new Applied(handed, applied.readings(), applied.taken(),
-                        applied.given(), applied.picked(), applied.entered(),
-                        applied.widths(), applied.turnsOn()));
+                        applied.given(), applied.picked(), applied.widths(),
+                        applied.turnsOn()));
     }
 
     /**
@@ -660,7 +671,7 @@ public final class InputReads {
      * value however it is read: a reader naming a value by its binding would name values of
      * different applications alike.
      */
-    public boolean turnsOnAnApplication(Core.Read name) {
+    public boolean turnsOnAnApplication(Core name) {
         if (applied.handed().isEmpty()) {
             return false;
         }
@@ -1022,7 +1033,7 @@ public final class InputReads {
         through.forEach((binding, width) -> widths.merge(binding, width, (a, b) -> a * b));
         return new InputReads(names, alternatives, declared, dependencies,
                 new Applied(applied.handed(), readings, applied.taken(), applied.given(),
-                        applied.picked(), applied.entered(), widths, applied.turnsOn()));
+                        applied.picked(), widths, applied.turnsOn()));
     }
 
     /**
@@ -1054,13 +1065,12 @@ public final class InputReads {
      * The same, taking {@code node} as {@code as}, as one of {@code readings} readings for each this
      * one is.
      *
-     * <p>Two things are taken as another value. A choice whose arm a reading is on: where a value
-     * chosen by cases stands inside what is being read, what is read is read once for each arm, with
-     * the choice standing for what that arm answers, and the readings are as many as the arms. And a
-     * call of a behavior whose body a reading enters, which is that body read with the parameters
-     * standing for what the call handed ({@link #calling}), one reading. Which arm a run takes is said
-     * beside each reading by whoever split it; what is here is only that on this reading the node is
-     * that value, wherever it is reached from — through a name, under an access, as an argument.
+     * <p>What is taken as another value is a choice whose arm a reading is on: where a value chosen
+     * by cases stands inside what is being read, what is read is read once for each arm, with the
+     * choice standing for what that arm answers, and the readings are as many as the arms. Which
+     * arm a run takes is said beside each reading by whoever split it; what is here is only that on
+     * this reading the node is that value, wherever it is reached from — through a name, under an
+     * access, as an argument.
      */
     public InputReads taking(Core node, Denotation as, int readings) {
         return taking(node, new TakenAs.AValue(as), readings);
@@ -1191,69 +1201,47 @@ public final class InputReads {
     }
 
     /**
-     * Where the body of {@code behavior}, called with {@code args} here, is read: its parameters
-     * standing for what the call handed — a position where the argument stands at one, and the
-     * argument read here where it does not — and what the body binds to the elements of what known
-     * beside what this body does. The body is read as the tree its behavior's analysis reads,
-     * where the language's operations stand as calls, whichever tree this reading is of ({@link
-     * #calledWith}). Null where its body is entered already on the way here, which is
-     * the behavior reached again while its own answer is being read, or where the call hands it
-     * another number of values than it takes.
-     *
-     * <p>Nothing is stood in inside it. A row stands in the dependencies of the body it was written
-     * for, and an evaluation inside the called body is one each call makes afresh, so what one of
-     * them answers is no answer a row controls.
-     */
-    public InputReads calling(ValueName.Behavior behavior, CalledBody body, List<Core> args,
-                              DeclarationNewtypes newtypes) {
-        if (applied.entered().contains(behavior)) {
-            return null;
-        }
-        Set<ValueName.Behavior> entered = new HashSet<>(applied.entered());
-        entered.add(behavior);
-        return calledWith(body, args, Map.of(), entered, newtypes);
-    }
-
-    /**
      * Where one step of a recursion over a list is read: the body a call of it names, with its
-     * parameters standing for what the call handed as {@link #calling} has them, and {@code element}
-     * standing at {@code at}, an element of the list the recursion walks — or null where the call
-     * hands another number of values than the body takes.
+     * parameters standing for what the call handed as {@link #calledWith} has them, and
+     * {@code element} standing at {@code at}, an element of the list the recursion walks — or null
+     * where the call hands another number of values than the body takes.
      *
      * <p>What the step's own calls of the recursion answer is no binding here; a reader of the step
      * says what it takes them to answer.
      */
     public InputReads steppingThrough(CalledBody body, List<Core> args, BindingId element,
                                       TermPath at, DeclarationNewtypes newtypes) {
-        return calledWith(body, args, Map.of(element, at), applied.entered(), newtypes);
+        return calledWith(body, args, Map.of(element, at), newtypes);
     }
 
     /**
      * Where the body of a search from a node is read: the body a call of it names, with its
-     * parameters standing for what the call handed as {@link #calling} has them — or null where the
-     * call hands another number of values than the body takes.
+     * parameters standing for what the call handed as {@link #calledWith} has them — or null where
+     * the call hands another number of values than the body takes.
      *
      * <p>What the body's own calls of the search answer is no binding here; a reader of the body
      * says what it takes them to answer.
      */
     public InputReads searching(CalledBody body, List<Core> args, DeclarationNewtypes newtypes) {
-        return calledWith(body, args, Map.of(), applied.entered(), newtypes);
+        return calledWith(body, args, Map.of(), newtypes);
     }
 
     /**
      * Where {@code body} is read with what it binds known beside what this body does, each of
-     * {@code standing} at its position, and its parameters standing for what a call handed it,
-     * {@code entered} the bodies entered on the way — or null where the call hands another number
-     * of values than the body takes. A parameter handed a value at a position stands at it, and
-     * one handed anything else is given it as read here.
+     * {@code standing} at its position, and its parameters standing for what a call handed it — or
+     * null where the call hands another number of values than the body takes. A parameter handed a
+     * value at a position stands at it, and one handed anything else is given it as read here.
      *
-     * <p>The body is the tree the analysis of its behavior reads, which keeps the language's
-     * operations standing as calls whichever tree the call was read in; the arguments stay read
-     * here.
+     * <p>The body is the tree the analysis reads, which keeps the language's operations standing as
+     * calls whichever tree the call was read in; the arguments stay read here.
+     *
+     * <p>Nothing is stood in inside it. A row stands in the dependencies of the body it was written
+     * for, and an evaluation inside the body a call names is one each call makes afresh, so what
+     * one of them answers is no answer a row controls.
      */
     private InputReads calledWith(CalledBody body, List<Core> args,
                                   Map<BindingId, TermPath> standing,
-                                  Set<ValueName.Behavior> entered, DeclarationNewtypes newtypes) {
+                                  DeclarationNewtypes newtypes) {
         if (args.size() != body.parameters().size()) {
             return null;
         }
@@ -1264,7 +1252,7 @@ public final class InputReads {
         InputReads reading = new InputReads(inside, alternatives, declared,
                 souther.compiler.carrier.Membership.none(),
                 new Applied(applied.handed(), applied.readings(), applied.taken(),
-                        applied.given(), applied.picked(), entered, applied.widths(),
+                        applied.given(), applied.picked(), applied.widths(),
                         applied.turnsOn()));
         for (int i = 0; i < args.size(); i++) {
             Core.Binder parameter = body.parameters().get(i);
@@ -1281,16 +1269,6 @@ public final class InputReads {
             reading = reading.turningOn(element, handedOver);
         }
         return reading;
-    }
-
-    /** Whether the body of {@code behavior} was entered on the way here ({@link #calling}). */
-    public boolean entered(ValueName.Behavior behavior) {
-        return applied.entered().contains(behavior);
-    }
-
-    /** Whether a reading here is inside the body of a behavior a call names ({@link #calling}). */
-    public boolean insideACalledBody() {
-        return !applied.entered().isEmpty();
     }
 
     /** What reading a closure's body on each of its applications comes to ({@link
@@ -2243,8 +2221,7 @@ public final class InputReads {
         picked.put(name, element);
         return new InputReads(names, alternatives, declared, dependencies,
                 new Applied(applied.handed(), applied.readings(), applied.taken(),
-                        applied.given(), picked, applied.entered(), applied.widths(),
-                        applied.turnsOn()));
+                        applied.given(), picked, applied.widths(), applied.turnsOn()));
     }
 
     /**
@@ -2319,7 +2296,7 @@ public final class InputReads {
         given.put(name, value);
         return new InputReads(names, alternatives, declared, dependencies,
                 new Applied(applied.handed(), applied.readings(), applied.taken(), given,
-                        applied.picked(), applied.entered(), applied.widths(), applied.turnsOn()))
+                        applied.picked(), applied.widths(), applied.turnsOn()))
                 .turningOn(name, List.of(value));
     }
 
@@ -2349,7 +2326,7 @@ public final class InputReads {
         });
         return new InputReads(names, alternatives, declared, dependencies,
                 new Applied(applied.handed(), applied.readings(), applied.taken(), applied.given(),
-                        applied.picked(), applied.entered(), applied.widths(), turnsOn));
+                        applied.picked(), applied.widths(), turnsOn));
     }
 
     /**

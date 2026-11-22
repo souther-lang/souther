@@ -269,6 +269,8 @@ public final class PositionsAStatementReads {
             case Quantity.OfABinding value -> handedOff ? readsWhatIsHanded(value)
                     : valuesBound && insideAnApplication == 0 && kept(value);
             case Quantity.HowManyCarried _, Quantity.TheKeptTotal _ -> false;
+            // What a call answers on a run is no place of the row and no value a name keeps.
+            case Quantity.OfACall _ -> false;
             // Made of numbers of the input and nothing else, so it is read as each of them is, and
             // they are asked of the answer, which holds them once however many paths lead to them.
             case Quantity.WhatAnOperationAnswers answers ->

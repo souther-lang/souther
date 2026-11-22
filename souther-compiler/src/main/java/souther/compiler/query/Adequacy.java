@@ -421,6 +421,45 @@ public final class Adequacy {
     public record Requested() implements Input<Asked> {}
 
     /**
+     * The behaviors a run measures, where it asks about some and not all: a null part chooses
+     * every one there is.
+     *
+     * <p>What a measure of a module reads off a behavior it was not asked about is work no one
+     * reads. So a measure leaves such a behavior out of its answer, the way it leaves out one it
+     * cannot read, and every reader of a module's behaviors under this choice asks {@link #chosen}
+     * first.
+     */
+    public record Choice(String module, String behavior) {
+
+        /** Every behavior of every module. */
+        public static final Choice EVERYTHING = new Choice(null, null);
+
+        /** Whether this leaves some behavior out. */
+        public boolean narrows() {
+            return module != null || behavior != null;
+        }
+
+        boolean includes(String inModule, String named) {
+            return (module == null || module.equals(inModule))
+                    && (behavior == null || behavior.equals(named));
+        }
+    }
+
+    /** Which behaviors the run measures. Absent is {@link Choice#EVERYTHING}. */
+    public record Chosen() implements Input<Choice> {}
+
+    /** The behaviors this build measures. */
+    static Choice choiceOf(Db db) {
+        Choice choice = db.ask(new Chosen()).value();
+        return choice == null ? Choice.EVERYTHING : choice;
+    }
+
+    /** Whether {@code behavior} of {@code module} is one this build measures. */
+    public static boolean chosen(Db db, String module, String behavior) {
+        return choiceOf(db).includes(module, behavior);
+    }
+
+    /**
      * Everything measured about one module, for a caller that wants it in one piece. A map is null
      * where the question could not be answered at all, which is not the same as an empty one.
      *
@@ -1394,10 +1433,11 @@ public final class Adequacy {
     }
 
     /**
-     * The body of one behavior as a call of it is read ({@link CalledBody}): the tree its analysis
-     * reads, the bindings its parameters arrive on in the order a call hands them, and what it binds
-     * to the elements of what — each read in its own module, where the declarations it names were
-     * written.
+     * The body of one behavior beside the bindings of its parameters ({@link CalledBody}): the tree
+     * its analysis reads, the bindings its parameters arrive on in the order a call hands them, and
+     * what it binds to the elements of what — each read in its own module, where the declarations it
+     * names were written. For a reader of which parameters the body reads
+     * ({@link #unreadParametersOf}); no reading of a call enters it.
      *
      * <p>Asked of the body as one behavior was checked and not as its module was: a module's check
      * judges what its bodies claim, which reads the conditions of a body calling this one, so an
@@ -1514,6 +1554,11 @@ public final class Adequacy {
             RuleReadingContext ruleReading = RuleReadingContext.of(reading.value(),
                     db.ask(new Front.Reading()).value(), db.readings(), Front.dayOf(db));
             for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
+                // Left out of the answer where this build measures others only, as one it cannot
+                // read is: nothing reads what is answered of it.
+                if (!chosen(db, name, behavior.name())) {
+                    continue;
+                }
                 // A composition has no body of its own and so no places of its own, and a behavior
                 // whose input this compilation could not read is one nothing here is measured
                 // against. Both are read off the one classification rather than worked out again:
@@ -1534,7 +1579,8 @@ public final class Adequacy {
                 if (both == null || fn == null) {
                     continue;
                 }
-                out.put(spec.name(), souther.compiler.check.PathReachability.of(
+                out.put(spec.name(), db.onOneBehavior(name, spec.name(),
+                        () -> souther.compiler.check.PathReachability.of(
                         both.emitted(), SpecImplementation.align(spec, fn), plan,
                         readingOf(db, read, reading.value()),
                         ruleReading, meaningsOf(both.analysis(), read, reading.value(),
@@ -1543,7 +1589,7 @@ public final class Adequacy {
                                 .getOrDefault(spec.name(), ElementBindings.NONE),
                         ValueDefinitions.of(both.analysis(), Shapes.declarationNewtypes(db)),
                         both.analysis() == null ? DeparturesNoRunTakes.NONE
-                                : both.analysis().departures()));
+                                : both.analysis().departures())));
             }
             return Answer.of(Ordered.map(out));
         }
@@ -1578,6 +1624,9 @@ public final class Adequacy {
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             Map<String, souther.compiler.partition.DecisionReading> out = new LinkedHashMap<>();
             for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
+                if (!chosen(db, name, behavior.name())) {
+                    continue;
+                }
                 // A composition has no body of its own, and a behavior whose input this compilation
                 // could not read is one whose conditions name no position. Both are read off the one
                 // classification the other readers of this walk read.
@@ -1591,8 +1640,9 @@ public final class Adequacy {
                 if (analysis == null) {
                     continue;
                 }
-                out.put(spec.name(), over(db, spec.name(), analysis, read, reading.value(),
-                        souther.compiler.partition.CaseCandidates.NEARBY));
+                out.put(spec.name(), db.onOneBehavior(name, spec.name(),
+                        () -> over(db, spec.name(), analysis, read, reading.value(),
+                                souther.compiler.partition.CaseCandidates.NEARBY)));
             }
             return Answer.of(Ordered.map(out));
         }
@@ -1657,6 +1707,9 @@ public final class Adequacy {
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             Map<String, CoverageRead.Read> out = new LinkedHashMap<>();
             for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
+                if (!chosen(db, name, behavior.name())) {
+                    continue;
+                }
                 // Read off the one classification every other reader of this walk reads. A
                 // composition has no body to meet in, and a behavior whose input could not be read
                 // has no positions for a factor to be about.
@@ -1670,9 +1723,11 @@ public final class Adequacy {
                 // analysis tree beside each holds the operations the language's own combinators
                 // stand for, and a walk of that one would find meetings at nodes no arm of the plan
                 // is in.
-                out.put(spec.name(), CoverageRead.of(spec.name(),
-                        checked.present() ? checked.value().run(spec.name()) : RunBodies.NONE,
-                        readingOf(db, read, reading.value())));
+                out.put(spec.name(), db.onOneBehavior(name, spec.name(),
+                        () -> CoverageRead.of(spec.name(),
+                                checked.present() ? checked.value().run(spec.name())
+                                        : RunBodies.NONE,
+                                readingOf(db, read, reading.value()))));
             }
             return Answer.of(Ordered.map(out));
         }
@@ -1691,6 +1746,13 @@ public final class Adequacy {
      */
     static BodyReading bodyReading(
             Db db, String module, Bodies.Elaborated checked, String behavior) {
+        // A behavior this build measures none of has its body here and unread. The lines its
+        // declarations and its clauses draw are still read, which is what a behavior that is
+        // measured shares with it; what its own rules add is the measurement nobody asked for.
+        if (!chosen(db, module, behavior) && givenABody(
+                db.ask(new Bodies.Implementation(module)).value(), behavior)) {
+            return new souther.compiler.partition.BodyReading.NotInElaboration();
+        }
         if (checked != null && checked.behaviorBodies().containsKey(behavior)) {
             return new souther.compiler.partition.BodyReading.Read(
                     checked.behaviorBodies().get(behavior),
@@ -2008,6 +2070,17 @@ public final class Adequacy {
             // that went through an arm this reading had proven nothing reaches settles it: what
             // happened happened, the proof was wrong rather than the row, and warning about it
             // would be a false report about a model the rows have already shown is fine.
+            // A proof is all a run can take back, so where none is made the rows are not read, nor
+            // the places below gone through: nothing proven unreachable anywhere is nothing to
+            // say, which is most modules.
+            Answer<Map<String, PathReachability.Answers>> proven = db.ask(new PathReached(name));
+            if (!proven.present()) {
+                return Answer.absent();
+            }
+            if (proven.value().values().stream()
+                    .allMatch(PathReachability.Answers::provesNothingUnreached)) {
+                return Answer.of(true, List.of());
+            }
             Answer<Map<String, souther.compiler.check.PathReachability.Answers.AsRun>> arrives =
                     db.ask(new Arrived(name));
             if (!arrives.present()) {
@@ -2018,24 +2091,24 @@ public final class Adequacy {
             // unreachable there while another call takes that arm: the arm is the author's, and
             // telling them to take it out because one call never goes there is telling them to
             // take out what another call needs. Said once however many calls left it dead.
-            // Nothing proven unreachable anywhere is nothing to say, which is most modules: asked
-            // first, so the places below are gone through only where there is a proof to weigh.
-            if (arrives.value().values().stream()
-                    .allMatch(asRun -> asRun.answers().provesNothingUnreached())) {
-                return Answer.of(true, List.of());
-            }
-            // Every place each arm stands is the plan's: what the reading found about some of them
-            // is not a list of all of them, and a place it said nothing about is not dead.
+            // Every place each arm stands is the plan's, in every behavior the module declares:
+            // what the reading found about some of them is not a list of all of them, and a place
+            // it said nothing about is not dead. A behavior the reading holds no answer for — one
+            // this build does not measure, one whose input it could not read — proves nothing of
+            // the arms it stands them in.
             Answer<Bodies.Elaborated> checked = db.ask(new Bodies.Observable(name));
-            if (!checked.present()) {
+            CheckSurface declared = db.ask(new Shapes.CheckSurface(name)).value();
+            if (!checked.present() || declared == null) {
                 return Answer.absent();
             }
             CoverageSites.Plan plan = checked.value().plan();
             Map<CoverageSites.AsWritten, Dead> dead = new LinkedHashMap<>();
             Set<CoverageSites.AsWritten> taken = new HashSet<>();
             Map<CoverageSites.AsWritten, SourceOutcome.Arm> outcomes = new LinkedHashMap<>();
-            arrives.value().forEach((behavior, asRun) -> {
-                for (CoverageSites.ArmSite site : plan.arms(behavior)) {
+            for (Hir.BehaviorDef behavior : declared.behaviors()) {
+                PathReachability.Answers.AsRun asRun =
+                        arrives.value().getOrDefault(behavior.name(), NOTHING_PROVEN);
+                for (CoverageSites.ArmSite site : plan.arms(behavior.name())) {
                     ControlPlace.Arm arm = site.place();
                     // Only the forks this module's own source wrote. A call into another module
                     // splices that module's forks in here, and an argument this call site hands
@@ -2062,7 +2135,7 @@ public final class Adequacy {
                         taken.add(written);
                     }
                 }
-            });
+            }
             taken.forEach(dead::remove);
             // An arm inside one nothing enters at every place it stands is said with that arm,
             // which is the one an author takes out.
@@ -4992,7 +5065,9 @@ public final class Adequacy {
             }
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             return answerEveryBehavior(prepared.value(),
-                    behavior -> linesReadIn(db, name, behavior, sigs.value(), readInputs, reading));
+                    behavior -> chosen(db, name, behavior.name())
+                            ? linesReadIn(db, name, behavior, sigs.value(), readInputs, reading)
+                            : BoundaryDerivation.notAsked());
         }
     }
 
@@ -5098,6 +5173,41 @@ public final class Adequacy {
         public Answer<List<TiltOfADerivedValue>> compute(Db db) {
             LineReadings readings = db.ask(new Readings(name, behavior)).value();
             return readings == null ? Answer.absent() : Answer.of(readings.tilts());
+        }
+    }
+
+    /**
+     * Whether the runs of rows get past the body of a behavior, whatever its inputs hold: what its
+     * callers are told of it ({@link souther.compiler.check.BehaviorAnswers#rowsRunsGetPast}).
+     *
+     * <p>Asked of the body over the behavior's own inputs, once, and of nothing a caller hands it,
+     * so it is the behavior's and not the call's. Asked whether or not the build measures the
+     * behavior, since a caller that is measured reads it: no line of the body is drawn for it. No
+     * where there is no body here to ask. A behavior that reaches itself is refused as that, and is
+     * told of nothing.
+     */
+    public record RowsRunsGetPast(String name, String behavior) implements Key<Boolean> {
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Boolean> compute(Db db) {
+            Bodies.Elaborated checked = db.ask(new Bodies.Observable(name)).value();
+            Map<String, InputDomain> inputs = db.ask(new Inputs(name)).value();
+            RuleReadingSource reading = Shapes.ruleReading(db, name).value();
+            AnalysisBody body = checked == null ? null : checked.analysisBodies().get(behavior);
+            InputDomain input = inputs == null ? null : inputs.get(behavior);
+            return Answer.of(body != null && input != null && reading != null
+                    && GuardThresholds.rowsRunsGetPast(body, readingOf(db, input, reading),
+                            ElementBindings.of(body, reading.newtypes())));
+        }
+
+        @Override
+        public Answer<Boolean> onCycle(List<Key<?>> cycle) {
+            return Answer.of(false);
         }
     }
 
@@ -9426,11 +9536,27 @@ public final class Adequacy {
             // How far finding them got is carried by whoever keeps an account, not here: what is
             // gathered is the points, and being short of some of them is a fact about the reading.
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
-            for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
-                readings.addAll(linesReadIn(db, name, behavior, sigs.value(), readInputs,
-                        scope.admits(behavior.name())
-                                ? reading : HowALineIsRead.THE_RULES_ALONE)
-                        .made().orElseGet(List::of));
+            //
+            // Where this build measures some behaviors only, theirs are read first. A point exists
+            // where one of them reads a line, and what the others read adds to how many readings it
+            // has and makes no point of its own — so where they read none there is nothing for the
+            // others to be counted at, and reading them is a cost for no answer.
+            Adequacy.Choice choice = choiceOf(db);
+            List<Hir.BehaviorDef> behaviors = prepared.value().behaviors();
+            for (int pass = 0; pass < 2; pass++) {
+                boolean theChosen = pass == 0 && choice.narrows();
+                for (Hir.BehaviorDef behavior : behaviors) {
+                    if (choice.narrows() && theChosen != chosen(db, name, behavior.name())) {
+                        continue;
+                    }
+                    readings.addAll(linesReadIn(db, name, behavior, sigs.value(), readInputs,
+                            scope.admits(behavior.name())
+                                    ? reading : HowALineIsRead.THE_RULES_ALONE)
+                            .made().orElseGet(List::of));
+                }
+                if (!choice.narrows() || readings.isEmpty()) {
+                    break;
+                }
             }
             if (readings.isEmpty()) {
                 return Answer.of(List.of());

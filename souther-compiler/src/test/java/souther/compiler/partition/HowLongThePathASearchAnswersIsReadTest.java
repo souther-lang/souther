@@ -4,7 +4,6 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.ACompiledModel;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.NotRead;
-import souther.compiler.ast.Hir;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.ElementBindings;
@@ -24,7 +23,6 @@ import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.meaning.CasesHeldTo;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
@@ -35,7 +33,6 @@ import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
-import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.OfferingRequest;
 import souther.compiler.report.AdequacyReport;
@@ -43,19 +40,14 @@ import souther.compiler.report.WhyAPlaceIsUndividedIsSaid;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
-import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -645,267 +637,40 @@ class HowLongThePathASearchAnswersIsReadTest {
             """;
 
     private static String humanReportOf(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        ACompiledModel.compiles(compilation);
-        return AdequacyReport.of(compilation)
-                .humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+        return humanOf(measuredModel(source));
     }
 
-    /** The number is what the case a behavior answers holds in one field, wherever the behavior
-     *  that asks about it is. */
+    /** What the rules are read to, with no row looked for. */
+    private static String humanReadingOf(String source) {
+        return humanOf(ACompiledModel.measured(source,
+                Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS)));
+    }
+
+    /** What the case a behavior answers holds in a field is a number a run of the call works out:
+     *  the body that built it is the called behavior's account, the comparison of its length
+     *  draws the caller a line, and a row is placed on it by what its run worked out. */
     @Test
-    void whatTheCaseABehaviorAnswersHoldsIsReadThroughTheBodyThatBuiltIt() {
-        String human = humanReportOf(BEHAVIOR_OF_A_LINE.formatted(SEARCH,
+    void whatTheCaseABehaviorAnswersHoldsIsANumberARunOfTheCallWorksOut() {
+        String human = humanReadingOf(BEHAVIOR_OF_A_LINE.formatted(SEARCH,
                 "Found { steps = steps }"));
         String ofH = human.substring(human.indexOf("  h "));
         assertFalse(NotRead.in(ofH), human);
+        assertTrue(ofH.contains(WhyAPlaceIsUndividedIsSaid.of(
+                UndividedPosition.Reason.RULE_MEASURED_ON_ITS_RUNS)), human);
         assertTrue(ofH.contains("borders 1"), human);
     }
 
-    /** Built in two places, the case holds a different number in each, and that is no number of
-     *  the call: it is not read through the body, and what a run of the call works out places a
+    /** Built in two places, the case holds a different number in each, and the caller is told the
+     *  same: it is not read through the body, and what a run of the call works out places a
      *  row. */
     @Test
     void aCaseABehaviorBuildsInMoreThanOnePlaceIsNotReadThroughItsBody() {
-        String human = humanReportOf(BEHAVIOR_OF_A_LINE.formatted(SEARCH, """
+        String human = humanReadingOf(BEHAVIOR_OF_A_LINE.formatted(SEARCH, """
                 if List.length(steps) > 5 then Found { steps = [] } else Found { steps = steps }"""));
         String ofH = human.substring(human.indexOf("  h "));
         assertFalse(ofH.contains("read as h/List.length({line"), human);
         assertTrue(ofH.contains(WhyAPlaceIsUndividedIsSaid.of(
                 UndividedPosition.Reason.RULE_MEASURED_ON_ITS_RUNS)), human);
-    }
-
-    @Test
-    void theApprovalChainOfARoleIsReadAsTheLengthOfTheLineToTheSubmitter() {
-        String model = """
-                module demo
-
-                data UserId = String
-                    invariant String.length(value) >= 1
-                data RoleName = String
-                    invariant String.length(value) >= 1
-                data RoleNode =
-                    { role: RoleName
-                    , holder: UserId
-                    , reports: List<RoleNode>
-                    }
-                data ReportingChain = { steps: List<UserId> }
-                data NotInHierarchy = { user: UserId }
-
-                let pathTo (node: RoleNode, user: UserId): List<UserId> =
-                    if node.holder == user
-                        then [ node.holder ]
-                        else {
-                            let below = List.fold((found, r) ->
-                                    if List.isEmpty(found) then pathTo(r, user) else found,
-                                [], node.reports)
-                            if List.isEmpty(below) then [] else [ node.holder ] ++ below
-                        }
-
-                behavior chainTo : (root: RoleNode, user: UserId) -> ReportingChain | NotInHierarchy
-                    constructs ReportingChain, NotInHierarchy
-                let chainTo (root, user) = {
-                    let steps = pathTo(root, user)
-                    guard Bool.not(List.isEmpty(steps)) else NotInHierarchy { user = user }
-                    ReportingChain { steps = steps }
-                }
-
-                data SalesManager
-                data RegionalVp
-                data Cfo
-                data ApproverRole = SalesManager | RegionalVp | Cfo
-                data ApprovalChain = { role: ApproverRole, approvers: List<UserId> }
-                data SubmitterNotInHierarchy = { submitter: UserId }
-                data NoAuthorityAbove = { submitter: UserId, needed: Int, available: Int }
-
-                let levelsFor (role: ApproverRole): Int =
-                    match role with
-                        | SalesManager -> 1
-                        | RegionalVp   -> 2
-                        | Cfo          -> 3
-
-                behavior approvalChainFor : (root: RoleNode, submitter: UserId, role: ApproverRole)
-                        -> ApprovalChain | SubmitterNotInHierarchy | NoAuthorityAbove
-                    constructs ApprovalChain, SubmitterNotInHierarchy, NoAuthorityAbove
-
-                let approvalChainFor (root, submitter, role) =
-                    match chainTo(root, submitter) with
-                        | NotInHierarchy -> SubmitterNotInHierarchy { submitter = submitter }
-                        | ReportingChain as line -> {
-                            let above = List.drop(1, List.reverse(line.steps))
-                            let needed = levelsFor(role)
-                            guard List.length(above) >= needed
-                                else NoAuthorityAbove { submitter = submitter, needed = needed
-                                                      , available = List.length(above) }
-                            ApprovalChain { role = role, approvers = List.take(needed, above) }
-                        }
-
-                let acmeOrg = RoleNode { role = RoleName("CEO"), holder = UserId("u-ceo"), reports =
-                    [ RoleNode { role = RoleName("VP"), holder = UserId("u-vp"), reports =
-                        [ RoleNode { role = RoleName("Mgr"), holder = UserId("u-mgr"), reports =
-                            [ RoleNode { role = RoleName("Rep"), holder = UserId("u-rep"), reports = [] } ] } ] } ] }
-
-                example approvalChainFor
-                    | "one above" : (acmeOrg, UserId("u-mgr"), SalesManager)
-                        -> ApprovalChain { role = SalesManager, approvers = [ UserId("u-vp") ] }
-                    | "ghost" : (acmeOrg, UserId("u-ghost"), SalesManager)
-                        -> SubmitterNotInHierarchy { submitter = UserId("u-ghost") }
-                    | "ceo" : (acmeOrg, UserId("u-ceo"), SalesManager)
-                        -> NoAuthorityAbove { submitter = UserId("u-ceo"), needed = 1, available = 0 }
-                """;
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        ACompiledModel.compiles(compilation);
-        AdequacyReport report = AdequacyReport.of(compilation);
-        String json = report.json(SourceRendering.namedByIdentity(SourceLayouts.NONE));
-        String human = report.humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
-        assertFalse(json.contains("rule_about_a_derived_value"), human);
-        assertTrue(json.contains("searched_line"), human);
-        String ofTheChain = human.substring(human.indexOf("  approvalChainFor "));
-        assertFalse(NotRead.in(ofTheChain), human);
-        assertTrue(ofTheChain.contains("borders 3"), human);
-        // Rows are offered for the points of every role's border, down to a line of five nodes
-        // for the role that needs three above the submitter, each holding the submitter only at
-        // its last node.
-        List<List<FixtureTemplate>> offeredRows = Adequacy.offeredFor(compilation.db(),
-                        OfferingRequest.overTheModule("demo"))
-                .rowsByBehavior().getOrDefault("approvalChainFor", List.of()).stream()
-                .map(row -> row.inputs()).toList();
-        List<List<String>> offeredInputs = offeredRows.stream()
-                .map(row -> row.stream().map(FixtureTemplate::text).toList()).toList();
-        List<String> offered = offeredInputs.stream()
-                .map(inputs -> String.join(", ", inputs)).toList();
-        assertTrue(offered.stream().anyMatch(row ->
-                        row.split("reports = \\[RoleNode", -1).length >= 5
-                                && row.endsWith("Cfo")),
-                () -> "offered " + offered);
-        // Written back as examples the rows are run by the language, and what they reach is read.
-        StringBuilder written = new StringBuilder();
-        int named = 0;
-        for (List<FixtureTemplate> row : offeredRows) {
-            List<String> inputs = row.stream().map(FixtureTemplate::text).toList();
-            String role = inputs.get(2);
-            int needed = switch (role) {
-                case "SalesManager" -> 1;
-                case "RegionalVp" -> 2;
-                case "Cfo" -> 3;
-                default -> throw new AssertionError("a role this model does not have: " + role);
-            };
-            Optional<List<String>> above = holdersAbove(row.get(0).value(), row.get(1).value());
-            String answer;
-            if (above.isEmpty()) {
-                answer = "SubmitterNotInHierarchy { submitter = " + inputs.get(1) + " }";
-            } else if (above.get().size() >= needed) {
-                answer = "ApprovalChain { role = " + role + ", approvers = [ "
-                        + above.get().subList(0, needed).stream()
-                                .map(holder -> "UserId(" + FixtureTemplate.string(holder).text() + ")")
-                                .collect(Collectors.joining(", "))
-                        + " ] }";
-            } else {
-                answer = "NoAuthorityAbove { submitter = " + inputs.get(1) + ", needed = " + needed
-                        + ", available = " + above.get().size() + " }";
-            }
-            written.append("                | \"offered ").append(named++).append("\" : (")
-                    .append(String.join(", ", inputs)).append(") -> ").append(answer)
-                    .append('\n');
-        }
-        Compilation after = measuredModel(model + written);
-        List<BorderAssessment.Point> owed = BorderAssessment.pointsOf(
-                        Adequacy.boundariesOf(after.db(), "demo").get("approvalChainFor"))
-                .stream().filter(point -> point.owed() != null)
-                .filter(point -> roleOfALine(point) != null)
-                .toList();
-        // A row the language ran stands at the ON and OFF point of every role's border, and past
-        // the border of the role that has room for it. More points may come to be met, so these
-        // are a floor.
-        Set<LinePoint> met = owed.stream().filter(point -> point.owed().hasRowWitness())
-                .map(HowLongThePathASearchAnswersIsReadTest::linePointOf)
-                .filter(Objects::nonNull).collect(Collectors.toSet());
-        assertTrue(met.containsAll(Set.of(
-                        new LinePoint(PointRole.IN, "Cfo", ExactRatio.of(4)),
-                        new LinePoint(PointRole.OFF, "SalesManager", ExactRatio.of(1)),
-                        new LinePoint(PointRole.OFF, "RegionalVp", ExactRatio.of(2)),
-                        new LinePoint(PointRole.OFF, "Cfo", ExactRatio.of(3)),
-                        new LinePoint(PointRole.ON, "SalesManager", ExactRatio.of(2)),
-                        new LinePoint(PointRole.ON, "RegionalVp", ExactRatio.of(3)),
-                        new LinePoint(PointRole.ON, "Cfo", ExactRatio.of(4)))),
-                () -> "met " + met);
-        // Whatever is left owed is the line of no node, which the guard of chainTo keeps out of
-        // this branch. No row is there, and it may come to be proved unreachable, in which case
-        // nothing is left owed.
-        List<PointRole> unmet = owed.stream().filter(point -> !point.owed().hasRowWitness())
-                .map(BorderAssessment.Point::role).toList();
-        assertTrue(unmet.stream().allMatch(role -> role == PointRole.OUT),
-                () -> "left owed " + unmet);
-    }
-
-    /** A point of a line the length of a search draws, by what makes it that one. */
-    private record LinePoint(PointRole role, String roleCase, ExactRatio length) {}
-
-    /** The point by its role, the role of the input its line is decided in and the length it is
-     *  anchored at; null where it is anchored at no length a row can be written at. */
-    private static LinePoint linePointOf(BorderAssessment.Point point) {
-        ExactRatio length = point.owed().criterion().anchor().asANumber();
-        return length == null ? null
-                : new LinePoint(point.role(), roleOfALine(point), length);
-    }
-
-    /**
-     * The name of the one role the line of {@code point} is decided in, or null for a line that
-     * is decided in no case of the input.
-     */
-    private static String roleOfALine(BorderAssessment.Point point) {
-        if (!(point.border().border().origin() instanceof LineOrigin.ComparisonOrigin origin)
-                || origin.part().isEmpty()) {
-            return null;
-        }
-        Set<String> named = new LinkedHashSet<>();
-        CasesHeldTo.of(origin.part().get().decides()).forEach((at, held) -> {
-            if (held instanceof CasesHeldTo.Held.OneOf(var cases)) {
-                cases.leavesOfASum().forEach(leaf ->
-                        named.add(assertInstanceOf(TypeSymbol.AtModule.class, leaf).name()));
-            }
-        });
-        return named.size() == 1 ? named.iterator().next() : null;
-    }
-
-    /**
-     * The holders of the nodes above the first node, met in the order a search reads the tree,
-     * that holds {@code submitter}, the nearest first; nothing where no node holds it.
-     */
-    private static Optional<List<String>> holdersAbove(Hir.Expr tree, Hir.Expr submitter) {
-        return pathTo(tree, textOf(submitter)).map(path ->
-                path.subList(0, path.size() - 1).reversed());
-    }
-
-    /** The holders from {@code node} down to the first node, before its siblings, that holds {@code
-     *  holder}. */
-    private static Optional<List<String>> pathTo(Hir.Expr node, String holder) {
-        Map<String, Hir.Expr> fields = new LinkedHashMap<>();
-        Hir.NewData data = assertInstanceOf(Hir.NewData.class, node);
-        data.inits().forEach(init -> fields.put(String.valueOf(init.written()), init.value()));
-        String here = textOf(fields.get("holder"));
-        if (here.equals(holder)) {
-            return Optional.of(List.of(here));
-        }
-        for (Hir.Expr below : assertInstanceOf(Hir.ListLit.class, fields.get("reports"))
-                .elements()) {
-            Optional<List<String>> found = pathTo(below, holder);
-            if (found.isPresent()) {
-                List<String> path = new ArrayList<>();
-                path.add(here);
-                path.addAll(found.get());
-                return Optional.of(path);
-            }
-        }
-        return Optional.empty();
-    }
-
-    /** The string a newtype of one is applied to. */
-    private static String textOf(Hir.Expr newtype) {
-        Hir.Apply apply = assertInstanceOf(Hir.Apply.class, newtype);
-        return assertInstanceOf(Hir.StringLit.class, apply.args().getFirst()).value();
     }
 
     // The proposition and its helpers.

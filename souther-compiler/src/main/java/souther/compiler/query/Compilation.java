@@ -406,6 +406,15 @@ public final class Compilation {
         observe(observationFor(asked.level()));
     }
 
+    /**
+     * That this build measures {@code choice} and not every behavior, before anything is asked of
+     * it: what a measure answers for a behavior outside it is nothing, and what the warnings that
+     * need every behavior to say anything say of it is left unsaid.
+     */
+    public void choose(Adequacy.Choice choice) {
+        db.set(new Adequacy.Chosen(), choice);
+    }
+
     /** What a report at {@code level} needs of the rows, which is this level's whole part in it. */
     private static RowObservation observationFor(Adequacy.Level level) {
         if (level.runsInstrumentedRows()) {
@@ -574,6 +583,11 @@ public final class Compilation {
     /** What makes a walk of this compilation stop short of an answer — {@link Db#abandonWhen}. */
     public void abandonWhen(Abandonment abandonment) {
         db.abandonWhen(abandonment);
+    }
+
+    /** Who is told which question this compilation is working out — {@link Db#tell}. */
+    public void tell(Answering told) {
+        db.tell(told);
     }
 
     /** The names of the modules these sources declare, in the order the sources were given. */

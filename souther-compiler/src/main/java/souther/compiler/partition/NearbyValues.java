@@ -1000,17 +1000,28 @@ final class NearbyValues {
      * Everything {@code how} gives for each of {@code outer}, one {@code outer} at a time. A stream's
      * flat map reads the whole of one inner source before handing its first element on, which for
      * a record holding a long list is the list's candidates all made at once.
+     *
+     * <p>Whether there is another is asked of the inner once for each element, and kept until the
+     * element is taken: these stand inside one another as deep as the value they walk, and an inner
+     * asked twice at each is asked twice as often again at each one further in.
      */
     static <A, B> Iterator<B> flat(Iterator<A> outer, Function<A, Iterator<B>> how) {
         return new Iterator<>() {
             private Iterator<B> inner = none();
+            private boolean ready;
 
             @Override
             public boolean hasNext() {
-                while (!inner.hasNext() && outer.hasNext()) {
-                    inner = how.apply(outer.next());
+                while (!ready) {
+                    if (inner.hasNext()) {
+                        ready = true;
+                    } else if (outer.hasNext()) {
+                        inner = how.apply(outer.next());
+                    } else {
+                        return false;
+                    }
                 }
-                return inner.hasNext();
+                return true;
             }
 
             @Override
@@ -1018,6 +1029,7 @@ final class NearbyValues {
                 if (!hasNext()) {
                     throw new NoSuchElementException();
                 }
+                ready = false;
                 return inner.next();
             }
         };

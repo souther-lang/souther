@@ -269,10 +269,26 @@ public final class GuardThresholds {
         for (ComparisonReadings.AConstructMet each : met) {
             Optional<ModelOccurrence> copy = ModelOccurrence.statedAt(each.occurrence());
             if (copy.isPresent()) {
-                out.add(new AComparisonRead(copy.get(), each.applying().told()));
+                out.add(new AComparisonRead(copy.get(), each.applying().told(), each.through()));
             }
         }
         return List.copyOf(out);
+    }
+
+    /**
+     * Whether the runs of rows get past working out the body {@code states}, over whatever its
+     * inputs may hold: what a caller is told of it ({@link
+     * souther.compiler.check.BehaviorAnswers#rowsRunsGetPast}). Asked by the numbers its operations
+     * lie within: a sum of inputs declared within a range ends no run, and one of any {@code Int}
+     * may.
+     *
+     * @param elements the bindings of {@code states}, which hold what each value it builds is
+     *                 defined as
+     */
+    public static boolean rowsRunsGetPast(AnalysisBody states, InputReading read,
+                                          ElementBindings elements) {
+        return OneReading.over(() -> WorkedOutToReachIt.of(read).endsNoRunWhereItWasPassedOver(
+                new Denotation(states.core(), namesOf(read, elements))));
     }
 
     /** The walk of the body's comparisons, over the names {@code read} reads. */
@@ -933,9 +949,18 @@ public final class GuardThresholds {
         if (!(stopped.failure().why() instanceof AffineForms.Halt.NoRule<?, ?>)) {
             return WhereAReadingStopped.ELSEWHERE;
         }
-        return worksOutByACallOrAWalk(stopped.node(), stopped.at(), read, new HashSet<>())
-                && !readsAnAnswer(stopped.node(), stopped.at(), read, new HashSet<>())
+        return isWorkedOutByARun(stopped.node(), stopped.at(), read)
                 ? WhereAReadingStopped.IN_WHAT_A_RUN_WORKS_OUT : WhereAReadingStopped.ELSEWHERE;
+    }
+
+    /**
+     * Whether {@code e} is a number a run works out where no reading does: a call of a behavior
+     * or a walk from a seed works it out, anywhere in it or in what the names in it stand for,
+     * and none of it is what a dependency a row stands in answered.
+     */
+    static boolean isWorkedOutByARun(Core e, InputReads reads, InputReading read) {
+        return worksOutByACallOrAWalk(e, reads, read, new HashSet<>())
+                && !readsAnAnswer(e, reads, read, new HashSet<>());
     }
 
     /**

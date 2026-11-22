@@ -4,11 +4,13 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.partition.Generator;
+import souther.compiler.partition.LineOrigin;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.report.AdequacyReport;
+import souther.compiler.types.WrittenOwner;
 
 import java.util.List;
 import java.util.Map;
@@ -34,9 +36,7 @@ class AClassTheOtherReadingsOfAComparisonCoverIsNotSearchedForTest {
     private static final String CLAMPED_EQUALITY = """
             module m
 
-            behavior clamp : (n: Int) -> Int
-
-            let clamp (n) = if n > 50 then 50 else n
+            let clamp (n: Int): Int = if n > 50 then 50 else n
 
             behavior full : (n: Int) -> Bool
 
@@ -52,6 +52,14 @@ class AClassTheOtherReadingsOfAComparisonCoverIsNotSearchedForTest {
         return attempt instanceof ItemAssessment.Attempt.Unresolved unresolved
                 && unresolved.why().reason()
                         == Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE;
+    }
+
+    /** The helper's own comparison is a line of the behavior as well, and is none of the two
+     *  readings of {@code clamp(n) == 50}: those are of the comparison written in the body. */
+    private static boolean isOfTheComparisonTheBehaviorWrote(BorderAssessment reading) {
+        return reading.border().origin() instanceof LineOrigin.ComparisonOrigin comparison
+                && comparison.rule().origin().owner() instanceof WrittenOwner.Body body
+                && body.definition().equals("full");
     }
 
     private static Compilation measured() {
@@ -95,6 +103,7 @@ class AClassTheOtherReadingsOfAComparisonCoverIsNotSearchedForTest {
                 Adequacy.readingsOf(compilation.db(), compilation.modules().get(0));
         assertNotNull(all, () -> "the model compiles: " + compilation.errors());
         List<ItemAssessment.Owed> above = BorderAssessment.pointsOf(all.get("full")).stream()
+                .filter(point -> isOfTheComparisonTheBehaviorWrote(point.border()))
                 .filter(point -> point.label() != null && point.label().contains("51 < n"))
                 .map(BorderAssessment.Point::item)
                 .filter(ItemAssessment.Owed.class::isInstance)

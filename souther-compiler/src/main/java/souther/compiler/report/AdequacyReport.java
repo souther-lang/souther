@@ -140,6 +140,7 @@ import souther.compiler.observe.Figure;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.MeasureReason;
 import souther.compiler.query.Bodies;
+import souther.compiler.query.ConditionsStoppedAtAFigure;
 import souther.compiler.query.FindingSubject;
 import souther.compiler.query.HelpersReadOnApplicationsAroundThem;
 import souther.compiler.meaning.AHelperReadOnApplicationsAroundIt;
@@ -156,6 +157,7 @@ import souther.compiler.query.RuleSettlement;
 import souther.compiler.query.SearchOutcomes;
 import souther.compiler.query.SettledAcross;
 import souther.compiler.query.SettledAt;
+import souther.compiler.query.WhatToDeclare;
 import souther.compiler.query.WhereTheReadingsDiffer;
 import souther.compiler.query.Weakening;
 import souther.compiler.query.WeakeningSet;
@@ -694,6 +696,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      *                  written in one of them names, beside what the other rules suggest there.
      *                  Asked of where the body's comparisons stand, and not of the cases of a
      *                  line, since a case of one candidate is made of nothing the function did
+     * @param stoppedAtAFigure the conditions of the body read no further at a figure, and what to
+     *                  declare as a behavior so that they are read
      */
     public record BehaviorReport(String name, BehaviorImplementation implementation,
                                  BehaviorEvidence evidence,
@@ -715,8 +719,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                  Map<Replacement, Citation> rewritePlaces,
                                  Map<DecisionReading.Ruled, List<WhereARunStopped>> wayStops,
                                  Map<ValueName.Helper, HelpersReadOnApplicationsAroundThem.Told>
-                                         helpersCalledOnEachElement) {
+                                         helpersCalledOnEachElement,
+                                 ConditionsStoppedAtAFigure.Stopped stoppedAtAFigure) {
         public BehaviorReport {
+            Objects.requireNonNull(stoppedAtAFigure, "what stopped at a figure, if nothing");
             helpersCalledOnEachElement = Map.copyOf(helpersCalledOnEachElement);
             weights = List.copyOf(weights);
             wayStops = Map.copyOf(wayStops);
@@ -1081,6 +1087,56 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         return out;
     }
 
+    /** What of {@code behavior} stopped at a figure; nothing where its body was not read. */
+    private static ConditionsStoppedAtAFigure.Stopped stoppedAtAFigure(Compilation compilation,
+                                                                       String name,
+                                                                       String behavior) {
+        ConditionsStoppedAtAFigure.Stopped stopped = compilation.db()
+                .ask(new ConditionsStoppedAtAFigure(name, behavior)).value();
+        return stopped == null ? ConditionsStoppedAtAFigure.Stopped.NOTHING : stopped;
+    }
+
+    /** What to declare, one sentence after another. */
+    private static String suggestedSaid(WhatToDeclare declare, Page page) {
+        StringBuilder out = new StringBuilder();
+        for (WhatToDeclare.HelperToDeclare each : declare.helpers()) {
+            out.append(page.say(new ReportMessage.DeclaredAsABehaviorItIsOneAnswer(
+                    each.helper().name(), each.conditions(), each.calls(),
+                    each.calledInside().isEmpty() ? new ReportMessage.Nothing()
+                            : new ReportMessage.TheCallIsWrittenInsideHelpers(listed(page,
+                                    each.calledInside().stream()
+                                            .map(helper -> "`" + helper.name() + "`")
+                                            .toList())))));
+        }
+        if (declare.inABehavior() > 0) {
+            out.append(page.say(new ReportMessage.WrittenInABehaviorItIsReadOnce(
+                    declare.inABehavior())));
+        }
+        return out.toString();
+    }
+
+    /** What of a behavior stopped at a figure, as the document writes it; absent where nothing
+     *  did. */
+    private static void stoppedAtAFigure(ObjectNode behavior,
+                                         ConditionsStoppedAtAFigure.Stopped stopped) {
+        if (stopped.conditions() == 0) {
+            return;
+        }
+        ObjectNode out = behavior.putObject("conditionsStoppedAtAFigure");
+        out.put("conditions", stopped.conditions());
+        figuresMet(out, stopped.figures());
+        ArrayNode helpers = out.putArray("helpersToDeclare");
+        for (WhatToDeclare.HelperToDeclare each : stopped.declare().helpers()) {
+            ObjectNode one = helpers.addObject();
+            one.put("helper", each.helper().toString());
+            one.put("conditions", each.conditions());
+            one.put("calls", each.calls());
+            ArrayNode inside = one.putArray("calledInside");
+            each.calledInside().forEach(caller -> inside.add(caller.toString()));
+        }
+        out.put("conditionsToWriteInABehavior", stopped.declare().inABehavior());
+    }
+
     /**
      * The helper a comparison is written in that a function applied outside it calls on each
      * element, as a reading of the comparison tells of it beside what the other rules suggest at
@@ -1293,7 +1349,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     // places a run is said to stop at: resolved here, where the texts are held.
                     wayStops(compilation, decisions == null ? null
                             : decisions.get(behavior.name())),
-                    helpersCalledOnEachElement(compilation, name, behavior.name())));
+                    helpersCalledOnEachElement(compilation, name, behavior.name()),
+                    stoppedAtAFigure(compilation, name, behavior.name())));
         }
         Adequacy.DeclaredBoundaries declared =
                 compilation.db().ask(new Adequacy.DeclaredBorders(name)).value();
@@ -4620,6 +4677,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                 .toList())));
             }
         }
+        // And the conditions a figure stopped, with what to do about them: once for the body,
+        // whichever measures met them.
+        ConditionsStoppedAtAFigure.Stopped stopped = behavior.stoppedAtAFigure();
+        if (stopped.conditions() > 0) {
+            noted(out, page, new ReportMessage.ConditionsStoppedAtAFigure(stopped.conditions(),
+                    figuresSaid(stopped.figures(), page),
+                    suggestedSaid(stopped.declare(), page)));
+        }
         // And a position whose rules this reading never arrived at, which names no rule because
         // nothing observed one. Its own line, so that a reader is not left reading an absent rule
         // to work out which of the two they are being told.
@@ -6889,12 +6954,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 };
             }
             case WhyUnread.AnInvariantNotReached _ -> new ReportMessage.AnInvariantNotReached();
-            case WhyUnread.InACalledBody(var what) -> switch (what) {
-                case WHAT_ITS_DEPENDENCY_ANSWERS ->
-                        new ReportMessage.AnotherBehaviorTurningOnItsDependency();
-                case ITSELF -> new ReportMessage.AnotherBehaviorReachingItself();
-                case AN_ANSWER_NOT_READ -> new ReportMessage.AnotherBehaviorNotRead();
-            };
+            case WhyUnread.WhatACalledBehaviorAnswers _ ->
+                    new ReportMessage.WhatACalledBehaviorAnswers();
             // Its own words: what the condition comes to is known, and it is the domain that has
             // no words for it.
             case WhyUnread.NoWordsFor(var operation, var _, var proposition) ->
@@ -7978,11 +8039,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 case A_FIELD_LEFT_OUT -> "clause_over_a_field_left_out";
             };
             case WhyUnread.AnInvariantNotReached _ -> "invariant_not_reached";
-            case WhyUnread.InACalledBody(var what) -> switch (what) {
-                case WHAT_ITS_DEPENDENCY_ANSWERS -> "called_body_asks_a_dependency";
-                case ITSELF -> "called_body_reaches_itself";
-                case AN_ANSWER_NOT_READ -> "called_body_not_read";
-            };
+            case WhyUnread.WhatACalledBehaviorAnswers _ -> "called_body_not_read";
             case WhyUnread.MoreReadingsThanAreMade _ -> "more_readings_than_are_made";
             case WhyUnread.MoreTotalReadingsThanAreMade _ -> "more_total_readings_than_are_made";
             case WhyUnread.MorePartsThanAreConcluded _ -> "more_parts_than_are_concluded";
@@ -9203,6 +9260,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 decision(b, behavior, sources);
                 interaction(b, behavior, sources);
                 replacement(b, behavior, sources);
+                stoppedAtAFigure(b, behavior.stoppedAtAFigure());
                 reachProofsContradicted(b, behavior.name(), behavior.reachShownWrong(),
                         waysGoneDown(behavior));
                 walkProofsContradicted(b, behavior.reachShownWrong());

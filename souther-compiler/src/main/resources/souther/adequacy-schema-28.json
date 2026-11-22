@@ -3841,6 +3841,75 @@
         "replacement": {
           "$ref": "#/$defs/replacement"
         },
+        "conditionsStoppedAtAFigure": {
+          "type": "object",
+          "description": "The conditions of the body some part of which was read no further at a figure that counts how many times a condition is read, and what an author declares as a behavior so that they are read. Once for the body, whichever measures met them: what a measure leaves unread because of one is said where that measure says it. Absent where nothing stopped so.",
+          "required": [
+            "conditions",
+            "figures",
+            "helpersToDeclare",
+            "conditionsToWriteInABehavior"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "conditions": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "How many conditions, one written in a helper counted once for each copy of the helper it is read in."
+            },
+            "figures": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "description": "The figures they stopped at, each by the name it is declared as.",
+              "items": {
+                "$ref": "#/$defs/figure"
+              }
+            },
+            "helpersToDeclare": {
+              "type": "array",
+              "description": "The helpers to declare as behaviors, the one in the most conditions first: what a behavior answers is one value to its caller, so declared as one, a helper leaves none of its choices for those conditions to be read through. Of the conditions counted above and of no other, and none of them can be left out: without it some of those conditions are made through too many choices still. Empty where none of those conditions is brought down so.",
+              "items": {
+                "type": "object",
+                "required": [
+                  "helper",
+                  "conditions",
+                  "calls",
+                  "calledInside"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "helper": {
+                    "type": "string",
+                    "description": "The helper, as its module and name."
+                  },
+                  "conditions": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "How many of those conditions its choices are taken out of."
+                  },
+                  "calls": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "How many calls of it those conditions are read through."
+                  },
+                  "calledInside": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "The helpers those calls are written inside, the nearest first, as module and name. A helper cannot call a behavior, so the calls move out of every one of them. Empty where the calls are written in the behavior's own body."
+                  }
+                }
+              }
+            },
+            "conditionsToWriteInABehavior": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "How many of the conditions are what is written in a behavior, handed what they compare: the choices written beside them come to too many readings whatever helper is declared, or it is not their choices that do. The others are brought down by the helpers."
+            }
+          }
+        },
         "reachProofsContradicted": {
           "type": "array",
           "minItems": 1,

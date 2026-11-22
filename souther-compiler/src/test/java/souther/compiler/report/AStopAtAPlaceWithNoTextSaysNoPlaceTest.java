@@ -202,7 +202,8 @@ class AStopAtAPlaceWithNoTextSaysNoPlaceTest {
                 b.rowsOwed(), b.claimed(), b.reported(), b.armPlaces(), b.conditionPlaces(),
                 b.rulePlaces(), b.partPlaces(), readings, b.ruleSettlements(),
                 b.reachShownWrong(), b.combinationReadings(), b.unobserved(), b.rowPlaces(),
-                b.weights(), b.rewritePlaces(), wayStops, b.helpersCalledOnEachElement());
+                b.weights(), b.rewritePlaces(), wayStops, b.helpersCalledOnEachElement(),
+                b.stoppedAtAFigure());
     }
 
     private static DecisionReading readUnderTheOtherRules(Compilation bodies) {

@@ -124,7 +124,7 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
 
     /**
      * What this and {@code other} say together, of two bodies that share no binding — a body, and
-     * the body of a behavior it calls read where the call stands.
+     * the body of a recursive helper it calls read where the call stands.
      *
      * <p>A value built in either means what it means wherever it is built, so the values both build
      * are one meaning each.

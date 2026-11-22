@@ -82,7 +82,7 @@ class AComparisonInAClosureIsReadOnceForTheWaysOfATotalThatDoesNotTurnOnTheEleme
         return REPORTS.computeIfAbsent(body, each -> {
             Compilation compilation = Compilation.ofSource(PREAMBLE + each, "Main")
                     .allowing(HELD);
-            compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
+            compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.OFF));
             ACompiledModel.compiles(compilation);
             return AdequacyReport.of(compilation)
                     .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()))
@@ -125,7 +125,7 @@ class AComparisonInAClosureIsReadOnceForTheWaysOfATotalThatDoesNotTurnOnTheEleme
     @Test
     void aLongTableDrawsTheLinesAShortOneDoes() {
         Set<String> drawnByTheLongTable = linesOn(reachedBy(KEPT, PAST_THE_READINGS));
-        for (int shorter : new int[] {1, 8}) {
+        for (int shorter : new int[] {1, PAST_THE_READINGS - 1}) {
             Set<String> drawn = linesOn(reachedBy(KEPT, shorter));
             assertFalse(drawn.isEmpty(), "rows " + shorter);
             Set<String> missing = new TreeSet<>(drawn);
@@ -199,11 +199,11 @@ class AComparisonInAClosureIsReadOnceForTheWaysOfATotalThatDoesNotTurnOnTheEleme
         String report = report(helpers + """
                 behavior g : (w: Window) -> Ok | No
                 let g (w) = {
-                    guard List.any(t -> List.any(s -> s <= t + spread(w) + pick(w, t), [ 1, 2, 3 ]),
+                    guard List.any(t -> List.any(s -> s <= t + spread(w) + pick(w, t), [ 1, 2 ]),
                         %s) else No
                     Ok
                 }
-                """.formatted(table(6)));
+                """.formatted(table(3)));
         assertFalse(report.contains(SPLIT_PAST_THE_WAYS), report);
     }
 
@@ -273,8 +273,7 @@ class AComparisonInAClosureIsReadOnceForTheWaysOfATotalThatDoesNotTurnOnTheEleme
     void aHelperHandedTheParametersFieldIsSplitWithTheParametersApplications() {
         int months = MOST / 2 + 1;
         String report = report("""
-                behavior cap : (x: Int) -> Int
-                let cap (x) = Int.max(x, 0)
+                let cap (x: Int): Int = Int.max(x, 0)
                 behavior g : (w: Window) -> Ok | No
                 let g (w) = {
                     guard List.any(t -> List.any(s -> s <= cap(t.pay), [ 1 ]), %s) else No
@@ -312,9 +311,11 @@ class AComparisonInAClosureIsReadOnceForTheWaysOfATotalThatDoesNotTurnOnTheEleme
 
     /**
      * However the outer parameter's field comes to be the value split — read off the parameter,
-     * given a name, handed to a behavior, one of the elements of a container it makes, answered by
+     * given a name, handed to a helper, one of the elements of a container it makes, answered by
      * a walk over a container — the cases are as many as the values the parameter is handed. A
-     * value that turns on nothing the parameter is handed is not.
+     * value that turns on nothing the parameter is handed is not. Neither is what a behavior
+     * handed the field answers: the cases in its body are its own account, and its caller holds a
+     * number the call works out, which has no cases to split.
      */
     @Test
     void aValueTurnsOnTheOuterParameterHoweverItWasReachedFrom() {
@@ -322,7 +323,7 @@ class AComparisonInAClosureIsReadOnceForTheWaysOfATotalThatDoesNotTurnOnTheEleme
         Map<String, String> reached = new LinkedHashMap<>();
         reached.put("read off it", "1 <= Int.max(t.pay, 0)");
         reached.put("given a name", "{ let x = t.pay\n 1 <= Int.max(x, 0) }");
-        reached.put("handed to a behavior", "1 <= cap(t.pay)");
+        reached.put("handed to a helper", "1 <= cap(t.pay)");
         reached.put("an element of a container it makes",
                 "List.any(s -> 1 <= Int.max(s, 0), [ t.pay ])");
         reached.put("an element of what a walk made of it",
@@ -338,12 +339,16 @@ class AComparisonInAClosureIsReadOnceForTheWaysOfATotalThatDoesNotTurnOnTheEleme
         assertEquals(List.of(), notStopped, "reached from the parameter and not stopped");
         String alike = outerParameterSplit("1 <= Int.max(w.first.pay, 0)", months);
         assertFalse(alike.contains(SPLIT_PAST_THE_WAYS), alike);
+        String called = outerParameterSplit("1 <= capped(t.pay)", months);
+        assertFalse(called.contains("READINGS_OF_ONE_CONDITION"), called);
+        assertTrue(called.contains("read as g/1 - capped(t.pay): = 0"), called);
     }
 
     private static String outerParameterSplit(String body, int months) {
         return report("""
-                behavior cap : (x: Int) -> Int
-                let cap (x) = Int.max(x, 0)
+                let cap (x: Int): Int = Int.max(x, 0)
+                behavior capped : (x: Int) -> Int
+                let capped (x) = Int.max(x, 0)
                 behavior g : (w: Window) -> Ok | No
                 let g (w) = {
                     guard List.any(t -> %s, %s) else No

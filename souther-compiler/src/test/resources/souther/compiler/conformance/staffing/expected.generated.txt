@@ -32,30 +32,30 @@ example judgeHours
 // fills value = 0
 // fills value in 0 <= value < 200
 // fills OUT point of comparison@staffing.sou:53:32
-    | (Standard, Hours(0))   -> <?>
+    | (Standard, Hours(0))                                      -> <?>
 // fills hours: 45 < x <= 100 at hours
 // fills a decision rule (it goes through `case Standard` (51:5); the comparison at 53:32 holds)
 // fills value in 0 < value <= 200
 // fills ON point of comparison@staffing.sou:53:32
-    | (Standard, Hours(46))  -> <?>
+    | (Standard, Hours(46))                                     -> <?>
+// fills IN point of comparison@staffing.sou:53:32
+    | "hours: 100 < x <= 200 at hours" : (Standard, Hours(101)) -> <?>
 // fills Extended at agreement
 // fills a decision rule (it goes through `case Extended` (51:5); the comparison at 52:32 does not hold)
 // fills OUT point of comparison@staffing.sou:52:32
-    | (Extended, Hours(0))   -> <?>
+    | (Extended, Hours(0))                                      -> <?>
 // fills a decision rule (it goes through `case Extended` (51:5); the comparison at 52:32 holds)
 // fills ON point of comparison@staffing.sou:52:32
-    | (Extended, Hours(101)) -> <?>
+    | (Extended, Hours(101))                                    -> <?>
 // fills OFF point of comparison@staffing.sou:52:32
-    | (Extended, Hours(100)) -> <?>
+    | (Extended, Hours(100))                                    -> <?>
 // fills IN point of comparison@staffing.sou:52:32
-    | (Extended, Hours(102)) -> <?>
+    | (Extended, Hours(102))                                    -> <?>
 // fills OFF point of comparison@staffing.sou:53:32
-    | (Standard, Hours(45))  -> <?>
-// fills value = 200
-// fills IN point of comparison@staffing.sou:53:32
-    | (Standard, Hours(200)) -> <?>
+    | (Standard, Hours(45))                                     -> <?>
 
 example settleOvertime
-    | "Standard at agreement" : (Standard, Hours(0)) -> <?>
+    | "Extended at agreement" : (Extended, Hours(0)) -> <?>
 // fills a decision rule (it goes through `case Over` (63:5))
-    | (Extended, Hours(101))                         -> <?>
+// fills value = 200
+    | (Standard, Hours(200))                         -> <?>
