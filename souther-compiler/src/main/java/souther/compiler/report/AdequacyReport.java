@@ -140,7 +140,6 @@ import souther.compiler.observe.Figure;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.MeasureReason;
 import souther.compiler.query.Bodies;
-import souther.compiler.query.ConditionsReadThroughTooManyChoices;
 import souther.compiler.query.ConditionsStoppedAtAFigure;
 import souther.compiler.query.FindingSubject;
 import souther.compiler.query.HelpersReadOnApplicationsAroundThem;
@@ -158,6 +157,7 @@ import souther.compiler.query.RuleSettlement;
 import souther.compiler.query.SearchOutcomes;
 import souther.compiler.query.SettledAcross;
 import souther.compiler.query.SettledAt;
+import souther.compiler.query.WhatToDeclare;
 import souther.compiler.query.WhereTheReadingsDiffer;
 import souther.compiler.query.Weakening;
 import souther.compiler.query.WeakeningSet;
@@ -720,7 +720,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                  Map<DecisionReading.Ruled, List<WhereARunStopped>> wayStops,
                                  Map<ValueName.Helper, HelpersReadOnApplicationsAroundThem.Told>
                                          helpersCalledOnEachElement,
-                                 StoppedAtAFigure stoppedAtAFigure) {
+                                 ConditionsStoppedAtAFigure.Stopped stoppedAtAFigure) {
         public BehaviorReport {
             Objects.requireNonNull(stoppedAtAFigure, "what stopped at a figure, if nothing");
             helpersCalledOnEachElement = Map.copyOf(helpersCalledOnEachElement);
@@ -1087,54 +1087,19 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         return out;
     }
 
-    /**
-     * The conditions of a body read no further at a figure of this compiler's work, and what an
-     * author declares as a behavior so that they are read: the helpers whose choices the
-     * conditions' values are made through ({@link ConditionsReadThroughTooManyChoices}), and, where
-     * no helper accounts for it, the condition itself, which a behavior handed what it compares
-     * reads once, over its own inputs. So a condition that stopped is never told of without what
-     * to do.
-     *
-     * @param stopped what stopped, and at which figures
-     * @param choices the helpers to declare
-     */
-    public record StoppedAtAFigure(ConditionsStoppedAtAFigure.Stopped stopped,
-                                   ConditionsReadThroughTooManyChoices.Told choices) {
-
-        /** Nothing stopped at a figure. */
-        public static final StoppedAtAFigure NOTHING = new StoppedAtAFigure(
-                ConditionsStoppedAtAFigure.Stopped.NOTHING,
-                ConditionsReadThroughTooManyChoices.Told.NOTHING);
-
-        public StoppedAtAFigure {
-            Objects.requireNonNull(stopped, "what stopped");
-            Objects.requireNonNull(choices, "the helpers to declare, if none");
-        }
-
-        boolean any() {
-            return stopped.conditions() > 0;
-        }
-    }
-
     /** What of {@code behavior} stopped at a figure; nothing where its body was not read. */
-    private static StoppedAtAFigure stoppedAtAFigure(Compilation compilation, String name,
-                                                     String behavior) {
+    private static ConditionsStoppedAtAFigure.Stopped stoppedAtAFigure(Compilation compilation,
+                                                                       String name,
+                                                                       String behavior) {
         ConditionsStoppedAtAFigure.Stopped stopped = compilation.db()
                 .ask(new ConditionsStoppedAtAFigure(name, behavior)).value();
-        if (stopped == null || stopped.conditions() == 0) {
-            return StoppedAtAFigure.NOTHING;
-        }
-        ConditionsReadThroughTooManyChoices.Told choices = compilation.db()
-                .ask(new ConditionsReadThroughTooManyChoices(name, behavior)).value();
-        return new StoppedAtAFigure(stopped, choices == null
-                ? ConditionsReadThroughTooManyChoices.Told.NOTHING : choices);
+        return stopped == null ? ConditionsStoppedAtAFigure.Stopped.NOTHING : stopped;
     }
 
-    /** What to do about {@code told}, one sentence after another. */
-    private static String suggestedSaid(StoppedAtAFigure told, Page page) {
+    /** What to declare, one sentence after another. */
+    private static String suggestedSaid(WhatToDeclare declare, Page page) {
         StringBuilder out = new StringBuilder();
-        for (ConditionsReadThroughTooManyChoices.HelperToDeclare each
-                : told.choices().helpers()) {
+        for (WhatToDeclare.HelperToDeclare each : declare.helpers()) {
             out.append(page.say(new ReportMessage.DeclaredAsABehaviorItIsOneAnswer(
                     each.helper().name(), each.conditions(), each.calls(),
                     each.calledInside().isEmpty() ? new ReportMessage.Nothing()
@@ -1143,28 +1108,25 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                             .map(helper -> "`" + helper.name() + "`")
                                             .toList())))));
         }
-        if (told.choices().beside() > 0) {
-            out.append(page.say(new ReportMessage.TheChoicesBesideTheCondition(
-                    told.choices().beside())));
-        }
-        if (told.choices().beside() > 0 || told.choices().helpers().isEmpty()) {
-            out.append(page.say(new ReportMessage.WrittenInABehaviorItIsReadOnce()));
+        if (declare.inABehavior() > 0) {
+            out.append(page.say(new ReportMessage.WrittenInABehaviorItIsReadOnce(
+                    declare.inABehavior())));
         }
         return out.toString();
     }
 
     /** What of a behavior stopped at a figure, as the document writes it; absent where nothing
      *  did. */
-    private static void stoppedAtAFigure(ObjectNode behavior, StoppedAtAFigure told) {
-        if (!told.any()) {
+    private static void stoppedAtAFigure(ObjectNode behavior,
+                                         ConditionsStoppedAtAFigure.Stopped stopped) {
+        if (stopped.conditions() == 0) {
             return;
         }
         ObjectNode out = behavior.putObject("conditionsStoppedAtAFigure");
-        out.put("conditions", told.stopped().conditions());
-        figuresMet(out, told.stopped().figures());
+        out.put("conditions", stopped.conditions());
+        figuresMet(out, stopped.figures());
         ArrayNode helpers = out.putArray("helpersToDeclare");
-        for (ConditionsReadThroughTooManyChoices.HelperToDeclare each
-                : told.choices().helpers()) {
+        for (WhatToDeclare.HelperToDeclare each : stopped.declare().helpers()) {
             ObjectNode one = helpers.addObject();
             one.put("helper", each.helper().toString());
             one.put("conditions", each.conditions());
@@ -1172,7 +1134,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             ArrayNode inside = one.putArray("calledInside");
             each.calledInside().forEach(caller -> inside.add(caller.toString()));
         }
-        out.put("byChoicesBesideTheCondition", told.choices().beside());
+        out.put("conditionsToWriteInABehavior", stopped.declare().inABehavior());
     }
 
     /**
@@ -4717,11 +4679,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         }
         // And the conditions a figure stopped, with what to do about them: once for the body,
         // whichever measures met them.
-        if (behavior.stoppedAtAFigure().any()) {
-            noted(out, page, new ReportMessage.ConditionsStoppedAtAFigure(
-                    behavior.stoppedAtAFigure().stopped().conditions(),
-                    figuresSaid(behavior.stoppedAtAFigure().stopped().figures(), page),
-                    suggestedSaid(behavior.stoppedAtAFigure(), page)));
+        ConditionsStoppedAtAFigure.Stopped stopped = behavior.stoppedAtAFigure();
+        if (stopped.conditions() > 0) {
+            noted(out, page, new ReportMessage.ConditionsStoppedAtAFigure(stopped.conditions(),
+                    figuresSaid(stopped.figures(), page),
+                    suggestedSaid(stopped.declare(), page)));
         }
         // And a position whose rules this reading never arrived at, which names no rule because
         // nothing observed one. Its own line, so that a reader is not left reading an absent rule

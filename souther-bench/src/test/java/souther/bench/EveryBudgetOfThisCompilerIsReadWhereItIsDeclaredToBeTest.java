@@ -815,7 +815,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             // the reading stops at its own figure and says so.
             Map.entry("souther.compiler.query.ConditionsReadThroughTooManyChoices#most()I",
                     "how many readings a condition's choices may come to before it is told of"),
-            Map.entry("souther.compiler.query.ConditionsReadThroughTooManyChoices#left()I",
+            Map.entry("souther.compiler.query.WhatToDeclare#left()Ljava/math/BigInteger;",
                     "how many a condition is left with by the helpers it is told to declare"),
             Map.entry("souther.compiler.partition.Pullback#readings()I",
                     "how many readings of one condition the reading of what it means makes"),

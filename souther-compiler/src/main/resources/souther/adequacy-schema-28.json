@@ -3843,19 +3843,19 @@
         },
         "conditionsStoppedAtAFigure": {
           "type": "object",
-          "description": "The comparisons of the body some part of which was read no further at a figure that counts how many times a condition is read, and what an author declares as a behavior so that they are read. Once for the body, whichever measures met them: what a measure leaves unread because of one is said where that measure says it. Absent where nothing stopped so.",
+          "description": "The conditions of the body some part of which was read no further at a figure that counts how many times a condition is read, and what an author declares as a behavior so that they are read. Once for the body, whichever measures met them: what a measure leaves unread because of one is said where that measure says it. Absent where nothing stopped so.",
           "required": [
             "conditions",
             "figures",
             "helpersToDeclare",
-            "byChoicesBesideTheCondition"
+            "conditionsToWriteInABehavior"
           ],
           "additionalProperties": false,
           "properties": {
             "conditions": {
               "type": "integer",
               "minimum": 1,
-              "description": "How many comparisons, one written in a helper counted once for each copy of the helper it is read in."
+              "description": "How many conditions, one written in a helper counted once for each copy of the helper it is read in."
             },
             "figures": {
               "type": "array",
@@ -3868,7 +3868,7 @@
             },
             "helpersToDeclare": {
               "type": "array",
-              "description": "The helpers whose choices the values of conditions are made through in more readings than are made of one condition, the one in the most conditions first: what a behavior answers is one value to its caller, so declared as one, a helper leaves none of its choices for those conditions to be read through. Counted of how the values are written, before a reading, so a condition counted here may be one that was read whole. Empty where no such choice is written in a helper.",
+              "description": "The helpers to declare as behaviors, the one in the most conditions first: what a behavior answers is one value to its caller, so declared as one, a helper leaves none of its choices for those conditions to be read through. Of the conditions counted above and of no other, and none of them can be left out: without it some of those conditions are made through too many choices still. Empty where none of those conditions is brought down so.",
               "items": {
                 "type": "object",
                 "required": [
@@ -3886,7 +3886,7 @@
                   "conditions": {
                     "type": "integer",
                     "minimum": 1,
-                    "description": "How many conditions its choices are taken out of."
+                    "description": "How many of those conditions its choices are taken out of."
                   },
                   "calls": {
                     "type": "integer",
@@ -3903,10 +3903,10 @@
                 }
               }
             },
-            "byChoicesBesideTheCondition": {
+            "conditionsToWriteInABehavior": {
               "type": "integer",
               "minimum": 0,
-              "description": "How many conditions are past the readings by choices written beside them, in the same body, whatever helper is declared."
+              "description": "How many of the conditions are what is written in a behavior, handed what they compare: the choices written beside them come to too many readings whatever helper is declared, or it is not their choices that do. The others are brought down by the helpers."
             }
           }
         },

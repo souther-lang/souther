@@ -27,16 +27,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>What a behavior answers is one value to its caller, so a helper whose choices multiply the
  * readings of a condition leaves none of them once it is a behavior
- * ({@link ConditionsReadThroughTooManyChoices}). Where no helper accounts for it, the condition is
- * what is written in a behavior. Each is held to the model it names: declared as told, the model
- * has no condition that stopped.
+ * ({@link WhatToDeclare}). Where no helper accounts for it, the condition is what is written in a
+ * behavior. Each is held to the model it names: declared as told, the model has no condition that
+ * stopped.
  */
 class AConditionStoppedAtAFigureIsToldWithWhatToDeclareTest {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
-    private static final String WRITTEN_IN_A_BEHAVIOR = "Written in a behavior that is handed what"
-            + " it compares, such a condition is read once, over the inputs of that behavior";
+    private static final String WRITTEN_IN_A_BEHAVIOR = "what is to be written in a behavior is"
+            + " the condition: handed what it compares, the behavior reads it once, over its own"
+            + " inputs";
 
     /** How many choices the value compared is made through, one after another. */
     private static final int CHOICES = 9;
@@ -60,13 +61,17 @@ class AConditionStoppedAtAFigureIsToldWithWhatToDeclareTest {
         return ACompiledModel.compiles(compilation);
     }
 
-    private static ConditionsReadThroughTooManyChoices.Told told(Compilation compilation) {
+    private static WhatToDeclare told(Compilation compilation) {
         return compilation.db().ask(new ConditionsReadThroughTooManyChoices("m", "paid")).value();
     }
 
+    private static ConditionsStoppedAtAFigure.Stopped stoppedIn(Compilation compilation,
+                                                                String behavior) {
+        return compilation.db().ask(new ConditionsStoppedAtAFigure("m", behavior)).value();
+    }
+
     private static int stopped(Compilation compilation, String behavior) {
-        return compilation.db().ask(new ConditionsStoppedAtAFigure("m", behavior)).value()
-                .conditions();
+        return stoppedIn(compilation, behavior).conditions();
     }
 
     private static String page(Compilation compilation) {
@@ -86,15 +91,15 @@ class AConditionStoppedAtAFigureIsToldWithWhatToDeclareTest {
                 "smaller(%s, %s)"));
         assertTrue(stopped(compilation, "paid") > 0, "the model stops a condition at a figure");
 
-        ConditionsReadThroughTooManyChoices.Told told = told(compilation);
+        WhatToDeclare told = told(compilation);
         assertEquals(List.of("smaller"),
                 told.helpers().stream().map(each -> each.helper().name()).toList());
         assertEquals(CHOICES, told.helpers().getFirst().calls());
         assertEquals(List.of(), told.helpers().getFirst().calledInside());
-        assertEquals(0, told.beside());
+        assertEquals(0, told.inABehavior());
 
         Compilation small = measured(SMALL);
-        AdequacyReport report = saying(small, stoppedIn(compilation), told);
+        AdequacyReport report = saying(small, stoppedIn(compilation, "paid"));
         SourceRendering rendering = SourceRendering.namedByIdentity(small.texts());
         String page = report.humanInEnglish(rendering);
         assertTrue(page.contains("conditions read no further: " + stopped(compilation, "paid")
@@ -120,14 +125,9 @@ class AConditionStoppedAtAFigureIsToldWithWhatToDeclareTest {
             let paid (n) = n
             """;
 
-    private static ConditionsStoppedAtAFigure.Stopped stoppedIn(Compilation compilation) {
-        return compilation.db().ask(new ConditionsStoppedAtAFigure("m", "paid")).value();
-    }
-
-    /** The report of {@code small}, its one behavior told {@code stopped} and {@code told} of. */
+    /** The report of {@code small}, its one behavior told {@code stopped} of. */
     private static AdequacyReport saying(Compilation small,
-                                         ConditionsStoppedAtAFigure.Stopped stopped,
-                                         ConditionsReadThroughTooManyChoices.Told told) {
+                                         ConditionsStoppedAtAFigure.Stopped stopped) {
         AdequacyReport real = AdequacyReport.of(small);
         AdequacyReport.ModuleReport module = real.modules().getFirst();
         AdequacyReport.BehaviorReport b = module.behaviors().getFirst();
@@ -140,8 +140,7 @@ class AConditionStoppedAtAFigureIsToldWithWhatToDeclareTest {
                                 b.ruleSettlements(), b.reachShownWrong(),
                                 b.combinationReadings(), b.unobserved(), b.rowPlaces(),
                                 b.weights(), b.rewritePlaces(), b.wayStops(),
-                                b.helpersCalledOnEachElement(),
-                                new AdequacyReport.StoppedAtAFigure(stopped, told))),
+                                b.helpersCalledOnEachElement(), stopped)),
                         module.declarations(), module.owedByDeclarations(), module.apart())));
     }
 
@@ -154,7 +153,7 @@ class AConditionStoppedAtAFigureIsToldWithWhatToDeclareTest {
 
         assertEquals(0, stopped(compilation, "paid"));
         assertEquals(0, stopped(compilation, "smaller"));
-        assertEquals(ConditionsReadThroughTooManyChoices.Told.NOTHING, told(compilation));
+        assertEquals(WhatToDeclare.NOTHING, told(compilation));
         assertFalse(page(compilation).contains("read no further"));
         document(compilation).get("modules").get(0).get("behaviors").forEach(each ->
                 assertNull(each.get("conditionsStoppedAtAFigure")));
@@ -168,16 +167,45 @@ class AConditionStoppedAtAFigureIsToldWithWhatToDeclareTest {
                 "(if %1$s < %2$s then %1$s else %2$s)"));
         assertTrue(stopped(compilation, "paid") > 0, "the model stops a condition at a figure");
 
-        ConditionsReadThroughTooManyChoices.Told told = told(compilation);
+        WhatToDeclare told = told(compilation);
 
         assertEquals(List.of(), told.helpers());
-        assertTrue(told.beside() > 0);
+        assertEquals(told.conditions(), told.inABehavior());
+        ConditionsStoppedAtAFigure.Stopped stopped = stoppedIn(compilation, "paid");
+        assertEquals(stopped.conditions(), stopped.declare().inABehavior());
         Compilation small = measured(SMALL);
-        String page = saying(small, stoppedIn(compilation), told)
+        String page = saying(small, stopped)
                 .humanInEnglish(SourceRendering.namedByIdentity(small.texts()));
-        assertTrue(page.contains("In " + told.beside() + " of them the choices written beside the"
-                + " condition come to more readings than are made by themselves. "
+        assertTrue(page.contains("In " + stopped.conditions() + " of them, "
                 + WRITTEN_IN_A_BEHAVIOR), page);
+    }
+
+    /** One condition is made through too many choices and is read whole, since no run takes an arm
+     *  of any; another stops on a long table. What is declared is told of the one that stopped, and
+     *  the helper of the other is told of before the reading alone. */
+    @Test
+    void aConditionReadWholeSuggestsNothingForOneThatStopped() {
+        String steps = IntStream.range(0, CHOICES)
+                .mapToObj(i -> "    let n" + (i + 1) + " = kept(n" + i + ")\n")
+                .collect(Collectors.joining());
+        String table = IntStream.rangeClosed(1, 300).mapToObj(String::valueOf)
+                .collect(Collectors.joining(", "));
+        Compilation compilation = measured("""
+                module m
+
+                let kept (n: Int): Int = if 1 < 2 then n else 0
+
+                behavior paid : (n0: Int, m: Int) -> Bool
+                let paid (n0, m) = {
+                """ + steps + "    if n" + CHOICES + " == 0 then true"
+                + " else List.any((x) -> x == n0 && x + m >= 10, [" + table + "])\n}\n");
+
+        assertEquals(List.of("kept"), told(compilation).helpers().stream()
+                .map(each -> each.helper().name()).toList());
+        ConditionsStoppedAtAFigure.Stopped stopped = stoppedIn(compilation, "paid");
+        assertTrue(stopped.conditions() > 0, "the model stops a condition at a figure");
+        assertEquals(List.of(), stopped.declare().helpers());
+        assertEquals(stopped.conditions(), stopped.declare().inABehavior());
     }
 
     /** The calls are written in a helper, which cannot call a behavior: the helper around them is
@@ -206,7 +234,7 @@ class AConditionStoppedAtAFigureIsToldWithWhatToDeclareTest {
                                 .toList()))
                 .toList();
 
-        List<ConditionsReadThroughTooManyChoices.HelperToDeclare> helpers =
+        List<WhatToDeclare.HelperToDeclare> helpers =
                 ConditionsReadThroughTooManyChoices.told(read).helpers();
 
         // The comparison of the body is read through `smallest`, called in the body itself; the

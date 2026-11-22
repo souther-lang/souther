@@ -32,6 +32,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ConditionsReadThroughTooManyChoices;
 import souther.compiler.query.HelpersReadOnApplicationsAroundThem;
+import souther.compiler.query.WhatToDeclare;
 import souther.compiler.types.ValueName;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.query.Offering;
@@ -716,7 +717,7 @@ public final class Main {
                 ConditionsReadThroughTooManyChoices.toldOf(compilation);
         for (HelpersReadOnApplicationsAroundThem.Said said : helpers) {
             List<String> readBy = new ArrayList<>();
-            said.applications().forEach((reader, times) -> readBy.add(
+            said.applicationsAtMost().forEach((reader, times) -> readBy.add(
                     Messages.get("cli.examples.helper.ahead.read", locale, reader, times)));
             err.println(Messages.get("cli.examples.helper.ahead", locale, said.helper().name(),
                     String.join(", ", readBy), calledInside(said.calledInside(), locale)));
@@ -730,14 +731,14 @@ public final class Main {
     /** The conditions of one behavior whose values are made through more choices than one
      *  condition is read on, and what to declare as a behavior so that they are not. */
     private void toldOfChoices(ConditionsReadThroughTooManyChoices.Said said, Locale locale) {
-        ConditionsReadThroughTooManyChoices.Told told = said.told();
+        WhatToDeclare told = said.told();
         StringBuilder suggested = new StringBuilder();
         told.helpers().forEach(each -> suggested.append(Messages.get(
                 "cli.examples.choices.ahead.declare", locale, each.helper().name(),
                 each.conditions(), calledInside(each.calledInside(), locale))));
-        if (told.beside() > 0) {
+        if (told.inABehavior() > 0) {
             suggested.append(Messages.get("cli.examples.choices.ahead.beside", locale,
-                    told.beside()));
+                    told.inABehavior()));
         }
         err.println(Messages.get("cli.examples.choices.ahead", locale,
                 said.module() + "." + said.behavior(), told.conditions(),

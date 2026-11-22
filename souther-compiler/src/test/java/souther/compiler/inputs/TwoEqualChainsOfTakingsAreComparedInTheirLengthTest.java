@@ -60,6 +60,14 @@ class TwoEqualChainsOfTakingsAreComparedInTheirLengthTest {
         InputReads another = afterTakings(reads, body);
 
         assertNotSame(one, another);
-        assertTimeoutPreemptively(Duration.ofSeconds(20), () -> assertEquals(one, another));
+        assertTimeoutPreemptively(Duration.ofSeconds(20), () -> {
+            assertEquals(one, another);
+            // The other way round, and against a third: what one comparison kept is of that pair
+            // and that way, and the next costs its length again and no more.
+            assertEquals(another, one);
+            InputReads third = afterTakings(reads, body);
+            assertEquals(third, one);
+            assertEquals(one, third);
+        });
     }
 }
