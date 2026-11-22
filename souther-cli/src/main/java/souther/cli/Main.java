@@ -608,8 +608,15 @@ public final class Main {
             // this command answers from whatever was observed, and taking the compilation from an
             // entry point that raises the first error made every failure the report describes the
             // one thing that stopped it being written.
+            // The helper notice is asked of the model as it stands, before the measurement the
+            // compile makes: what it says is what the author can change to make that cheaper, and
+            // it costs nothing of the measurement. Said once, which is why it is not said below.
+            String chosenModule = module;
+            String chosenBehavior = behavior;
             Compilation compilation = Compiler.analyzed(read, path, warnings, measure,
-                    environment.today());
+                    environment.today(), new Adequacy.Choice(module, behavior),
+                    early -> toldBeforeTheMeasurement(early, chosenModule, chosenBehavior,
+                            render.locale()));
             // Said first, and whatever the command answers with after. What is wrong with the source
             // is the same news whether the rest of this reports, refuses, or succeeds.
             List<Located> errors = compilation.errors();
@@ -624,11 +631,6 @@ public final class Main {
                 err.println(Messages.get(refused.key(), render.locale(), refused.args()));
                 return 2;
             }
-            // Before the lines are measured, which the offering and the report below both do: a
-            // helper whose comparisons are read again on every application of a function around
-            // it is something the author can act on while that runs, and asking which costs where
-            // the comparisons stand and nothing the measurement makes.
-            toldBeforeTheMeasurement(compilation, module, behavior, render.locale());
             // What this run offers, where rows were asked for. Before the report and not after it:
             // a line the rows do not tell from another is answered by whichever offered row tells
             // the two apart, so where the report sends a reader for one is settled by what goes

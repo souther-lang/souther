@@ -421,6 +421,45 @@ public final class Adequacy {
     public record Requested() implements Input<Asked> {}
 
     /**
+     * The behaviors a run measures, where it asks about some and not all: a null part chooses
+     * every one there is.
+     *
+     * <p>What a measure of a module reads off a behavior it was not asked about is work no one
+     * reads. So a measure leaves such a behavior out of its answer, the way it leaves out one it
+     * cannot read, and every reader of a module's behaviors under this choice asks {@link #chosen}
+     * first.
+     */
+    public record Choice(String module, String behavior) {
+
+        /** Every behavior of every module. */
+        public static final Choice EVERYTHING = new Choice(null, null);
+
+        /** Whether this leaves some behavior out. */
+        public boolean narrows() {
+            return module != null || behavior != null;
+        }
+
+        boolean includes(String inModule, String named) {
+            return (module == null || module.equals(inModule))
+                    && (behavior == null || behavior.equals(named));
+        }
+    }
+
+    /** Which behaviors the run measures. Absent is {@link Choice#EVERYTHING}. */
+    public record Chosen() implements Input<Choice> {}
+
+    /** The behaviors this build measures. */
+    static Choice choiceOf(Db db) {
+        Choice choice = db.ask(new Chosen()).value();
+        return choice == null ? Choice.EVERYTHING : choice;
+    }
+
+    /** Whether {@code behavior} of {@code module} is one this build measures. */
+    public static boolean chosen(Db db, String module, String behavior) {
+        return choiceOf(db).includes(module, behavior);
+    }
+
+    /**
      * Everything measured about one module, for a caller that wants it in one piece. A map is null
      * where the question could not be answered at all, which is not the same as an empty one.
      *
@@ -1514,6 +1553,11 @@ public final class Adequacy {
             RuleReadingContext ruleReading = RuleReadingContext.of(reading.value(),
                     db.ask(new Front.Reading()).value(), db.readings(), Front.dayOf(db));
             for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
+                // Left out of the answer where this build measures others only, as one it cannot
+                // read is: nothing reads what is answered of it.
+                if (!chosen(db, name, behavior.name())) {
+                    continue;
+                }
                 // A composition has no body of its own and so no places of its own, and a behavior
                 // whose input this compilation could not read is one nothing here is measured
                 // against. Both are read off the one classification rather than worked out again:
@@ -1578,6 +1622,9 @@ public final class Adequacy {
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             Map<String, souther.compiler.partition.DecisionReading> out = new LinkedHashMap<>();
             for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
+                if (!chosen(db, name, behavior.name())) {
+                    continue;
+                }
                 // A composition has no body of its own, and a behavior whose input this compilation
                 // could not read is one whose conditions name no position. Both are read off the one
                 // classification the other readers of this walk read.
@@ -1657,6 +1704,9 @@ public final class Adequacy {
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             Map<String, CoverageRead.Read> out = new LinkedHashMap<>();
             for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
+                if (!chosen(db, name, behavior.name())) {
+                    continue;
+                }
                 // Read off the one classification every other reader of this walk reads. A
                 // composition has no body to meet in, and a behavior whose input could not be read
                 // has no positions for a factor to be about.
@@ -4992,7 +5042,9 @@ public final class Adequacy {
             }
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             return answerEveryBehavior(prepared.value(),
-                    behavior -> linesReadIn(db, name, behavior, sigs.value(), readInputs, reading));
+                    behavior -> chosen(db, name, behavior.name())
+                            ? linesReadIn(db, name, behavior, sigs.value(), readInputs, reading)
+                            : new Measurement.NotMeasured<>(NothingWasAsked.NOT_ASKED));
         }
     }
 
@@ -9426,11 +9478,27 @@ public final class Adequacy {
             // How far finding them got is carried by whoever keeps an account, not here: what is
             // gathered is the points, and being short of some of them is a fact about the reading.
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
-            for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
-                readings.addAll(linesReadIn(db, name, behavior, sigs.value(), readInputs,
-                        scope.admits(behavior.name())
-                                ? reading : HowALineIsRead.THE_RULES_ALONE)
-                        .made().orElseGet(List::of));
+            //
+            // Where this build measures some behaviors only, theirs are read first. A point exists
+            // where one of them reads a line, and what the others read adds to how many readings it
+            // has and makes no point of its own — so where they read none there is nothing for the
+            // others to be counted at, and reading them is a cost for no answer.
+            Adequacy.Choice choice = choiceOf(db);
+            List<Hir.BehaviorDef> behaviors = prepared.value().behaviors();
+            for (int pass = 0; pass < 2; pass++) {
+                boolean theChosen = pass == 0 && choice.narrows();
+                for (Hir.BehaviorDef behavior : behaviors) {
+                    if (choice.narrows() && theChosen != chosen(db, name, behavior.name())) {
+                        continue;
+                    }
+                    readings.addAll(linesReadIn(db, name, behavior, sigs.value(), readInputs,
+                            scope.admits(behavior.name())
+                                    ? reading : HowALineIsRead.THE_RULES_ALONE)
+                            .made().orElseGet(List::of));
+                }
+                if (!choice.narrows() || readings.isEmpty()) {
+                    break;
+                }
             }
             if (readings.isEmpty()) {
                 return Answer.of(List.of());
