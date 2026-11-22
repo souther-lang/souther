@@ -2135,7 +2135,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 walk(both.right(), in, reads,
                         readsNothing ? applying.takingNothingRead()
                                 : applying.taking(both.left(), runsWhenLeftIs, in.read()), flow,
-                        readsNothing || applying.saysWhatStandsInIt() ? assumed
+                        (readsNothing || applying.saysWhatStandsInIt()) ? assumed
                                 : taking(Condition.of(both.left(), reads, symbols, in.newtypes(),
                                         numbering), runsWhenLeftIs, in.read(), assumed,
                                         in.conditions(), numbering),

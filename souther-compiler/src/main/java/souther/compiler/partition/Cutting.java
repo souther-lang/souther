@@ -2210,28 +2210,25 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                                 Function<Relation, UndividedByARelation.Working> working,
                                 InputReading read, InputReads reads, Arrivals answering,
                                 Optional<AuthorsLines> authors) {
-        switch (several(behavior, comparison.left(), written, read, reads, authors, working,
-                false, null)) {
-            case TheParts.Drawn(Read.Several lines) -> {
-                return lines;
-            }
-            case TheParts.NotDrawn none when none.readToTheEnd() -> {
-                return severalNotDrawn(comparison, read, reads, answering);
-            }
+        return switch (several(behavior, comparison.left(), written, read, reads, authors,
+                working, false, null)) {
+            case TheParts.Drawn(Read.Several lines) -> lines;
+            case TheParts.NotDrawn none when none.readToTheEnd() ->
+                    severalNotDrawn(comparison, read, reads, answering);
             case TheParts.NotDrawn(var stops, var beyondTheForm) -> {
                 Read whole = noLine(comparison, stated, stops, beyondTheForm, arithmetic, read,
                         reads, answering);
                 // What stopped it is a number a run works out, which the runs place. In each case
                 // the statement is read in, that is a line of the case's own, so the statement is
                 // taken apart again with each such relation kept as the line the runs place.
-                return whole instanceof Read.Stopped stopped && stopped.placedByTheRuns()
+                yield (whole instanceof Read.Stopped stopped && stopped.placedByTheRuns()
                         && several(behavior, comparison.left(), written, read, reads, authors,
                                 working, false, stopped)
                                 instanceof TheParts.Drawn(Read.Several lines)
-                        && lines.parts().stream().anyMatch(part -> !part.cases().isEmpty())
+                        && lines.parts().stream().anyMatch(part -> !part.cases().isEmpty()))
                         ? lines : whole;
             }
-        }
+        };
     }
 
     /**
