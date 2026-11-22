@@ -5,6 +5,8 @@ import souther.compiler.ACompiledModel;
 import souther.compiler.DocumentShape;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.partition.AComparisonRead;
+import souther.compiler.partition.Allowances;
+import souther.compiler.partition.CompositionBudget;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.types.ValueName;
 import tools.jackson.databind.JsonNode;
@@ -39,8 +41,17 @@ class AConditionStoppedAtAFigureIsToldWithWhatToDeclareTest {
             + " the condition: handed what it compares, the behavior reads it once, over its own"
             + " inputs";
 
+    /** The readings of a condition held to a figure a short model reaches. */
+    private static final Allowances HELD = Allowances.DECLARED
+            .with(CompositionBudget.READINGS_OF_ONE_CONDITION, 8)
+            .with(CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION, 16);
+
     /** How many choices the value compared is made through, one after another. */
-    private static final int CHOICES = 9;
+    private static final int CHOICES = 4;
+
+    /** More elements than are read on one by one. */
+    private static final String LONG_TABLE = IntStream.rangeClosed(1, 10)
+            .mapToObj(String::valueOf).collect(Collectors.joining(", "));
 
     /** A comparison of a value made by {@code chosen} again and again, each from the last. */
     private static String comparedAfter(String declared, String chosen) {
@@ -56,7 +67,7 @@ class AConditionStoppedAtAFigureIsToldWithWhatToDeclareTest {
     }
 
     private static Compilation measured(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
+        Compilation compilation = Compilation.ofSource(model, "Main").allowing(HELD);
         compilation.measure(new Adequacy.Asked(Adequacy.Level.OFF, false));
         return ACompiledModel.compiles(compilation);
     }
@@ -188,8 +199,6 @@ class AConditionStoppedAtAFigureIsToldWithWhatToDeclareTest {
         String steps = IntStream.range(0, CHOICES)
                 .mapToObj(i -> "    let n" + (i + 1) + " = kept(n" + i + ")\n")
                 .collect(Collectors.joining());
-        String table = IntStream.rangeClosed(1, 300).mapToObj(String::valueOf)
-                .collect(Collectors.joining(", "));
         Compilation compilation = measured("""
                 module m
 
@@ -198,7 +207,7 @@ class AConditionStoppedAtAFigureIsToldWithWhatToDeclareTest {
                 behavior paid : (n0: Int, m: Int) -> Bool
                 let paid (n0, m) = {
                 """ + steps + "    if n" + CHOICES + " == 0 then true"
-                + " else List.any((x) -> x == n0 && x + m >= 10, [" + table + "])\n}\n");
+                + " else List.any((x) -> x == n0 && x + m >= 10, [" + LONG_TABLE + "])\n}\n");
 
         assertEquals(List.of("kept"), told(compilation).helpers().stream()
                 .map(each -> each.helper().name()).toList());
@@ -249,21 +258,19 @@ class AConditionStoppedAtAFigureIsToldWithWhatToDeclareTest {
      *  with the same, and written as told it is read. */
     @Test
     void aConditionOnEachElementOfALongTableIsToldToBeWrittenInABehavior() {
-        String table = IntStream.rangeClosed(1, 300).mapToObj(String::valueOf)
-                .collect(Collectors.joining(", "));
         String body = """
                 behavior paid : (n: Int, m: Int) -> Bool
                 let paid (n, m) = List.any((x) -> %s, [%s])
                 """;
         Compilation inTheBody = measured("module m\n\n"
-                + body.formatted("x == n && x + m >= 10", table));
+                + body.formatted("x == n && x + m >= 10", LONG_TABLE));
         Compilation inABehavior = measured("""
                 module m
 
                 behavior matches : (x: Int, n: Int, m: Int) -> Bool
                 let matches (x, n, m) = x == n && x + m >= 10
 
-                """ + body.formatted("matches(x, n, m)", table));
+                """ + body.formatted("matches(x, n, m)", LONG_TABLE));
 
         assertTrue(stopped(inTheBody, "paid") > 0, "the model stops a condition at a figure");
         assertTrue(page(inTheBody).contains(WRITTEN_IN_A_BEHAVIOR), page(inTheBody));

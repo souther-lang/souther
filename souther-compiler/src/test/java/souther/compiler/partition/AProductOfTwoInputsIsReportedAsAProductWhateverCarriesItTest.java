@@ -299,7 +299,7 @@ class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
                 behavior pick : (l: Line) -> Int
                 let pick (l) = if l.qty > 3 then 1 else 0
                 """.formatted(clause), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.OFF));
         ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
@@ -325,7 +325,8 @@ class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
     }
 
     private static List<PartitionEvidence.NotRead> notReadIn(String model, String behavior) {
-        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
+        Compilation compilation = ACompiledModel.measured(model,
+                Adequacy.Asked.reportOnly(Adequacy.Level.OFF));
         Map<String, PartitionEvidence> coverage =
                 compilation.db().ask(new Adequacy.Coverage("demo")).value();
         assertNotNull(coverage, () -> "the model under test compiles: " + model);

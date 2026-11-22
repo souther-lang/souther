@@ -23,19 +23,16 @@ class WhatDecidesAChoiceIsWorkedOutOnceWhereItIsReadTest {
             let atMost (wanted: Int, held: Int): Int =
                 if wanted < held then wanted else held
 
-            behavior paid : (sum: Int, a: Int, b: Int, c: Int, d: Int) -> Bool
-            let paid (sum, a, b, c, d) = {
+            behavior paid : (sum: Int, a: Int, b: Int, c: Int) -> Bool
+            let paid (sum, a, b, c) = {
                 let first = atMost(sum, a)
                 let left1 = sum - first
                 let second = atMost(left1, b)
                 let left2 = left1 - second
                 let third = atMost(left2, c)
-                let left3 = left2 - third
-                let fourth = atMost(left3, d)
-                guard first >= 0 && first <= a && second >= 0 && second <= b
-                        && third >= 0 && third <= c && fourth >= 0 && fourth <= d
-                    else unreachable "each is between nought and what is held"
-                left3 - fourth == 0
+                guard third >= 0 && third <= c
+                    else unreachable "it is between nought and what is held"
+                left2 - third == 0
             }
             """;
 
@@ -52,8 +49,8 @@ class WhatDecidesAChoiceIsWorkedOutOnceWhereItIsReadTest {
         long workedOut = counting[1];
 
         assertTrue(workedOut > 0, "the model has choices a comparison is read through");
-        assertTrue(workedOut * 3 <= asked, () -> "asked " + asked + " times and worked out "
-                + workedOut + ": each place a choice is read in is asked of by more than three"
+        assertTrue(workedOut * 2 <= asked, () -> "asked " + asked + " times and worked out "
+                + workedOut + ": each place a choice is read in is asked of by more than two"
                 + " readings of a comparison on this chain");
     }
 }

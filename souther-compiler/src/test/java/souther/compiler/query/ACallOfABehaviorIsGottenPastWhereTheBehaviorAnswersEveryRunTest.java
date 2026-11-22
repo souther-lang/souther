@@ -35,7 +35,7 @@ class ACallOfABehaviorIsGottenPastWhereTheBehaviorAnswersEveryRunTest {
 
     private static Compilation measured(String model) {
         Compilation compilation = Compilation.ofSource("module m\n" + model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
         return ACompiledModel.compiles(compilation);
     }
 
@@ -183,7 +183,7 @@ class ACallOfABehaviorIsGottenPastWhereTheBehaviorAnswersEveryRunTest {
                 let made (n) = if n < 10 then 1 else 20
                 """ + CALLER, "Main");
         compilation.choose(new Adequacy.Choice(null, "chosen"));
-        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
         ACompiledModel.compiles(compilation);
 
         String report = reportOf(compilation, "chosen");

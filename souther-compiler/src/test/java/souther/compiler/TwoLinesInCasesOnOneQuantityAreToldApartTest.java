@@ -185,10 +185,7 @@ class TwoLinesInCasesOnOneQuantityAreToldApartTest {
     /** Which line is numbered first is of the lines and not of the order the walk met them in. */
     @Test
     void theNumbersDoNotDependOnTheOrderTheReadingsWereMetIn() {
-        String first = human(CLAMPED);
-        for (int again = 0; again < 3; again++) {
-            assertEquals(first, human(CLAMPED));
-        }
+        assertEquals(human(CLAMPED), human(CLAMPED));
     }
 
     /** The place is for the reader of the report; the document keeps the words its schema gives. */

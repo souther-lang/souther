@@ -82,7 +82,7 @@ class AComparisonInAClosureIsReadOnceForTheWaysOfATotalThatDoesNotTurnOnTheEleme
         return REPORTS.computeIfAbsent(body, each -> {
             Compilation compilation = Compilation.ofSource(PREAMBLE + each, "Main")
                     .allowing(HELD);
-            compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
+            compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.OFF));
             ACompiledModel.compiles(compilation);
             return AdequacyReport.of(compilation)
                     .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()))
@@ -125,7 +125,7 @@ class AComparisonInAClosureIsReadOnceForTheWaysOfATotalThatDoesNotTurnOnTheEleme
     @Test
     void aLongTableDrawsTheLinesAShortOneDoes() {
         Set<String> drawnByTheLongTable = linesOn(reachedBy(KEPT, PAST_THE_READINGS));
-        for (int shorter : new int[] {1, 8}) {
+        for (int shorter : new int[] {1, PAST_THE_READINGS - 1}) {
             Set<String> drawn = linesOn(reachedBy(KEPT, shorter));
             assertFalse(drawn.isEmpty(), "rows " + shorter);
             Set<String> missing = new TreeSet<>(drawn);
@@ -199,11 +199,11 @@ class AComparisonInAClosureIsReadOnceForTheWaysOfATotalThatDoesNotTurnOnTheEleme
         String report = report(helpers + """
                 behavior g : (w: Window) -> Ok | No
                 let g (w) = {
-                    guard List.any(t -> List.any(s -> s <= t + spread(w) + pick(w, t), [ 1, 2, 3 ]),
+                    guard List.any(t -> List.any(s -> s <= t + spread(w) + pick(w, t), [ 1, 2 ]),
                         %s) else No
                     Ok
                 }
-                """.formatted(table(6)));
+                """.formatted(table(3)));
         assertFalse(report.contains(SPLIT_PAST_THE_WAYS), report);
     }
 

@@ -3,6 +3,8 @@ package souther.compiler.query;
 import org.junit.jupiter.api.Test;
 import souther.compiler.ACompiledModel;
 import souther.compiler.partition.AComparisonRead;
+import souther.compiler.partition.Allowances;
+import souther.compiler.partition.CompositionBudget;
 import souther.compiler.types.ModelOccurrence;
 
 import java.util.List;
@@ -17,9 +19,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * a condition nobody asked about adds none.
  *
  * <p>A case of {@code n} cases is read in {@code n + 1} ways, and an {@code if} in three, so what
- * each helper comes to is read off the model.
+ * each helper comes to is read off the model. A condition is left with 32 readings at most, and is
+ * told of before it is read past 64.
  */
 class WhatIsDeclaredIsNeededByTheConditionsItIsToldOfTest {
+
+    private static final Allowances HELD = Allowances.DECLARED
+            .with(CompositionBudget.READINGS_OF_ONE_CONDITION, 32)
+            .with(CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION, 64);
 
     private static String match(String name, int cases) {
         return "data " + name + " = " + IntStream.rangeClosed(1, cases)
@@ -37,49 +44,61 @@ class WhatIsDeclaredIsNeededByTheConditionsItIsToldOfTest {
         return compilation.db().ask(new Adequacy.ComparisonsRead("m", "paid")).value();
     }
 
+    private static WhatToDeclare toldAhead(List<AComparisonRead> read) {
+        return HELD.over(() -> ConditionsReadThroughTooManyChoices.told(read));
+    }
+
+    private static WhatToDeclare toldOf(Set<ModelOccurrence> conditions,
+                                        List<AComparisonRead> read) {
+        return HELD.over(() -> WhatToDeclare.of(conditions, read));
+    }
+
     private static List<String> named(WhatToDeclare declare) {
         return declare.helpers().stream().map(each -> each.helper().name()).toList();
     }
 
-    /** Three choices that come to 27 readings beside two that come to 400: the two are what is
+    private static List<ModelOccurrence> throughTwoChoices(List<AComparisonRead> read) {
+        return read.stream().filter(one -> one.through().size() == 2)
+                .map(AComparisonRead::copy).toList();
+    }
+
+    /** Three choices that come to 27 readings beside two that come to 36: the two are what is
      *  declared, however many choices the other helper holds. */
     @Test
     void theHelperNamedTakesOutTheMostReadingsAndNotTheMostChoices() {
         List<AComparisonRead> read = read("""
                 let several (a: Int, b: Int, c: Int): Int =
                     (if a < 0 then 1 else 2) + (if b < 0 then 1 else 2) + (if c < 0 then 1 else 2)
-                """ + match("K", 19) + """
+                """ + match("K", 5) + """
                 let two (k: K, p: K): Int = ofK(k) + ofK(p)
                 behavior paid : (a: Int, b: Int, c: Int, k: K, p: K) -> Bool
                 let paid (a, b, c, k, p) = several(a, b, c) + two(k, p) == 0
                 """);
 
-        assertEquals(List.of("two"), named(ConditionsReadThroughTooManyChoices.told(read)));
+        assertEquals(List.of("two"), named(toldAhead(read)));
     }
 
-    /** Helpers that come to 5, 6 and 225 readings: without the last, the first two are 30. Without
-     *  the first two, the last is 225, which is as few as is asked of too, and is two helpers. */
+    /** Helpers that come to 3, 4 and 25 readings: without the last, the first two are 12. Without
+     *  the first two, the last is 25, which is as few as is asked of too, and is two helpers. */
     @Test
     void forOneConditionTheHelpersNamedAreTheFewest() {
-        List<AComparisonRead> read = read(match("K", 4) + match("L", 5) + match("M", 14) + """
+        List<AComparisonRead> read = read(match("K", 2) + match("L", 3) + match("M", 4) + """
                 let two (m: M, o: M): Int = ofM(m) + ofM(o)
                 behavior paid : (k: K, l: L, m: M, o: M) -> Bool
                 let paid (k, l, m, o) = ofK(k) + ofL(l) + two(m, o) == 0
                 """);
 
-        assertEquals(List.of("two"), named(ConditionsReadThroughTooManyChoices.told(read)));
+        assertEquals(List.of("two"), named(toldAhead(read)));
     }
 
     /** One condition is brought down by either of two helpers and another by one of them alone:
      *  the one they share is what is declared. */
     @Test
     void aHelperAnotherConditionNeedsIsNotNamedBesideOneThatIsNotNeeded() {
-        List<AComparisonRead> read = read(match("K", 29) + match("L", 29) + """
+        WhatToDeclare declare = toldAhead(read(match("K", 8) + match("L", 8) + """
                 behavior paid : (k: K, l: L, o: L) -> Bool
                 let paid (k, l, o) = ofK(k) + ofL(l) == 0 || ofL(l) + ofL(o) == 1
-                """);
-
-        WhatToDeclare declare = ConditionsReadThroughTooManyChoices.told(read);
+                """));
 
         assertEquals(2, declare.conditions());
         assertEquals(List.of("ofL"), named(declare));
@@ -89,31 +108,28 @@ class WhatIsDeclaredIsNeededByTheConditionsItIsToldOfTest {
     /** Asked of one condition, nothing written in the other is named. */
     @Test
     void aConditionNotAskedOfNamesNothing() {
-        List<AComparisonRead> read = read(match("K", 29) + match("L", 29) + """
+        List<AComparisonRead> read = read(match("K", 8) + match("L", 8) + """
                 behavior paid : (k: K, p: K, l: L, o: L) -> Bool
                 let paid (k, p, l, o) = ofK(k) + ofK(p) == 0 || ofL(l) + ofL(o) == 1
                 """);
-        assertEquals(2, ConditionsReadThroughTooManyChoices.told(read).helpers().size());
-        List<ModelOccurrence> each = read.stream().filter(one -> one.through().size() == 2)
-                .map(AComparisonRead::copy).toList();
+        assertEquals(2, toldAhead(read).helpers().size());
+        List<ModelOccurrence> each = throughTwoChoices(read);
         assertEquals(2, each.size());
 
-        assertEquals(List.of("ofK"), named(WhatToDeclare.of(Set.of(each.get(0)), read)));
-        assertEquals(List.of("ofL"), named(WhatToDeclare.of(Set.of(each.get(1)), read)));
+        assertEquals(List.of("ofK"), named(toldOf(Set.of(each.get(0)), read)));
+        assertEquals(List.of("ofL"), named(toldOf(Set.of(each.get(1)), read)));
     }
 
     /** A condition that comes to no more than is made in all, and to more than one way down makes,
      *  is told of nothing before the reading; once it stopped, it is told what to declare. */
     @Test
     void aConditionThatStoppedIsToldWhatToDeclareHoweverFewItsReadings() {
-        List<AComparisonRead> read = read(match("K", 17) + """
+        List<AComparisonRead> read = read(match("K", 6) + """
                 behavior paid : (k: K, p: K) -> Bool
                 let paid (k, p) = ofK(k) + ofK(p) == 0
                 """);
-        Set<ModelOccurrence> stopped = read.stream().filter(one -> one.through().size() == 2)
-                .map(AComparisonRead::copy).collect(Collectors.toSet());
 
-        assertEquals(WhatToDeclare.NOTHING, ConditionsReadThroughTooManyChoices.told(read));
-        assertEquals(List.of("ofK"), named(WhatToDeclare.of(stopped, read)));
+        assertEquals(WhatToDeclare.NOTHING, toldAhead(read));
+        assertEquals(List.of("ofK"), named(toldOf(Set.copyOf(throughTwoChoices(read)), read)));
     }
 }

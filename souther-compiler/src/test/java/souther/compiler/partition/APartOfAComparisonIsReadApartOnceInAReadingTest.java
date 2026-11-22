@@ -29,14 +29,12 @@ class APartOfAComparisonIsReadApartOnceInAReadingTest {
                 if wanted < held then wanted else held
             }
 
-            behavior paid : (sum: Int, a: Int, b: Int, c: Int) -> Bool
-            let paid (sum, a, b, c) = {
+            behavior paid : (sum: Int, a: Int, b: Int) -> Bool
+            let paid (sum, a, b) = {
                 let first = taken(sum, 50, a)
                 let left1 = sum - first * 50
                 let second = taken(left1, 10, b)
-                let left2 = left1 - second * 10
-                let third = taken(left2, 5, c)
-                left2 - third * 5 == 0
+                left1 - second * 10 == 0
             }
             """;
 

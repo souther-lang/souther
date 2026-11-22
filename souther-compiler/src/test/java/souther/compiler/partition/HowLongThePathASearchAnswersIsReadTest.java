@@ -637,11 +637,13 @@ class HowLongThePathASearchAnswersIsReadTest {
             """;
 
     private static String humanReportOf(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        ACompiledModel.compiles(compilation);
-        return AdequacyReport.of(compilation)
-                .humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+        return humanOf(measuredModel(source));
+    }
+
+    /** What the rules are read to, with no row looked for. */
+    private static String humanReadingOf(String source) {
+        return humanOf(ACompiledModel.measured(source,
+                Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS)));
     }
 
     /** What the case a behavior answers holds in a field is a number a run of the call works out:
@@ -649,7 +651,7 @@ class HowLongThePathASearchAnswersIsReadTest {
      *  draws the caller a line, and a row is placed on it by what its run worked out. */
     @Test
     void whatTheCaseABehaviorAnswersHoldsIsANumberARunOfTheCallWorksOut() {
-        String human = humanReportOf(BEHAVIOR_OF_A_LINE.formatted(SEARCH,
+        String human = humanReadingOf(BEHAVIOR_OF_A_LINE.formatted(SEARCH,
                 "Found { steps = steps }"));
         String ofH = human.substring(human.indexOf("  h "));
         assertFalse(NotRead.in(ofH), human);
@@ -663,7 +665,7 @@ class HowLongThePathASearchAnswersIsReadTest {
      *  row. */
     @Test
     void aCaseABehaviorBuildsInMoreThanOnePlaceIsNotReadThroughItsBody() {
-        String human = humanReportOf(BEHAVIOR_OF_A_LINE.formatted(SEARCH, """
+        String human = humanReadingOf(BEHAVIOR_OF_A_LINE.formatted(SEARCH, """
                 if List.length(steps) > 5 then Found { steps = [] } else Found { steps = steps }"""));
         String ofH = human.substring(human.indexOf("  h "));
         assertFalse(ofH.contains("read as h/List.length({line"), human);
