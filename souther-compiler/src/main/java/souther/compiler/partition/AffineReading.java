@@ -3363,6 +3363,62 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
     static UndividedByARelation.Working workingOfWhatDecides(Core choice, InputReads at,
                                                              InputReading ofTheInput,
                                                              WhatTheAnalysisAnswersFor answersFor) {
+        long[] counting = DECIDED;
+        if (counting != null) {
+            counting[0]++;
+        }
+        WhatDecidingWorksOut kept = ofTheInput.derived(WhatDecidingWorksOut.class,
+                _ -> new WhatDecidingWorksOut());
+        WhatWasTold.ReadAsNoNumber.OneWorking asked = new WhatWasTold.ReadAsNoNumber.OneWorking(
+                Core.withoutStanding(choice), at);
+        UndividedByARelation.Working before = kept.of(asked, answersFor.saidOnItsWays());
+        if (before != null) {
+            return before;
+        }
+        Map<Core, Boolean> said = new IdentityHashMap<>();
+        UndividedByARelation.Working worked = workedOutDeciding(choice, at, ofTheInput,
+                answersFor.sayingOnItsWays(held -> said.computeIfAbsent(held,
+                        answersFor.saidOnItsWays()::test)));
+        kept.keep(asked, said, worked);
+        return worked;
+    }
+
+    /**
+     * What deciding each choice of one input works out, where it was read, kept with what it
+     * turned on beside the choice: of each expression it asked the analysis whether its stop is
+     * said on its ways ({@link WhatTheAnalysisAnswersFor#saidOnItsWays}), what the analysis
+     * answered. A reading given the same answers works out the same, whichever rule reads it and
+     * whichever comparison is read through the choice; one given another answer reads it again.
+     * Asked by readings on several threads.
+     */
+    private static final class WhatDecidingWorksOut {
+
+        private final KeptByWhatItAsked<WhatWasTold.ReadAsNoNumber.OneWorking, Core,
+                UndividedByARelation.Working> kept = new KeptByWhatItAsked<>();
+
+        UndividedByARelation.Working of(WhatWasTold.ReadAsNoNumber.OneWorking asked,
+                                        Predicate<Core> saidOnItsWays) {
+            return kept.of(asked, saidOnItsWays);
+        }
+
+        void keep(WhatWasTold.ReadAsNoNumber.OneWorking asked, Map<Core, Boolean> said,
+                  UndividedByARelation.Working worked) {
+            kept.keep(asked, said, worked);
+        }
+    }
+
+    /** Where a test counts how many times what deciding a choice works out was asked for, and
+     *  how many of those were worked out; null everywhere else. */
+    static long[] DECIDED;
+
+    /** What deciding {@code choice} works out, worked out ({@link #workingOfWhatDecides}). */
+    private static UndividedByARelation.Working workedOutDeciding(
+            Core choice, InputReads at, InputReading ofTheInput,
+            WhatTheAnalysisAnswersFor answersFor) {
+        long[] counting = DECIDED;
+        if (counting != null) {
+            counting[1]++;
+        }
         UndividedByARelation.Working together = new UndividedByARelation.Working(List.of(),
                 WhatARelationLeavesUndivided.Told.EVERY);
         // An attempt decides by building, and what it works out is the values of the fields: the
@@ -3557,6 +3613,14 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         static final WhatTheAnalysisAnswersFor NOTHING = new WhatTheAnalysisAnswersFor(_ -> false,
                 _ -> null, _ -> null, (_, _) -> null, _ -> null, _ -> false, _ -> false,
                 (_, _) -> null);
+
+        /** The same, with {@code said} answering whether an expression's stop is said on its
+         *  ways. */
+        WhatTheAnalysisAnswersFor sayingOnItsWays(Predicate<Core> said) {
+            return new WhatTheAnalysisAnswersFor(readAgain, readByTheFormOf,
+                    dividendBesideTheRows, boundAs, landsInAMonth, said, saidOnItsArms,
+                    monthsWorkedOut);
+        }
 
         WhatTheAnalysisAnswersFor {
             Objects.requireNonNull(readAgain);

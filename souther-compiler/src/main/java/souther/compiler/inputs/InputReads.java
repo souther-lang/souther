@@ -276,6 +276,10 @@ public final class InputReads {
         private int asHash;
         /** {@link #hashCode}, nought where it has not been worked out. */
         private int hash;
+        /** The last other chain this one was found equal to, null where none was: kept so the
+         *  same pair is not compared down its length again ({@link #equals}). Every field equality
+         *  reads is final, so a chain found equal stays so. */
+        private Taken sameAs;
 
         Taken(Core node, TakenAs as, Taken older) {
             this(node, as, 0, older);
@@ -360,7 +364,18 @@ public final class InputReads {
             if (hash != 0 && that.hash != 0 && hash != that.hash) {
                 return false;
             }
-            return as.equals(that.as) && Objects.equals(older, that.older);
+            // The chain below first, and the pair kept once it is found the same: what a node is
+            // taken as is a value read where the chain below already stood, so comparing it comes
+            // to the same pair of chains again. Asked afresh there, a chain of two copies costs
+            // twice as much for each taking in it.
+            if (sameAs == that || that.sameAs == this) {
+                return true;
+            }
+            if (Objects.equals(older, that.older) && as.equals(that.as)) {
+                sameAs = that;
+                return true;
+            }
+            return false;
         }
 
         @Override
