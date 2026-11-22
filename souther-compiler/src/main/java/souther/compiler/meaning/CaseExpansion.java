@@ -290,7 +290,7 @@ public record CaseExpansion(Which which, String line, String cutAt, CameTo cameT
          */
         public static List<ValueName.Helper> calledInside(ModelOccurrence at) {
             return at.lineage() instanceof ExpansionLineage.Expansion copy
-                    ? helpersOut(copy.within()) : List.of();
+                    ? helpersAround(copy) : List.of();
         }
     }
 
@@ -301,6 +301,12 @@ public record CaseExpansion(Which which, String line, String cutAt, CameTo cameT
      */
     public static List<ValueName.Helper> writtenInside(ModelOccurrence at) {
         return helpersOut(at.lineage());
+    }
+
+    /** The helpers the call {@code copy} was made by is written inside, the nearest first, out to
+     *  the behavior's own body. */
+    public static List<ValueName.Helper> helpersAround(ExpansionLineage.Expansion copy) {
+        return helpersOut(copy.within());
     }
 
     /** The helpers {@code from} is a copy of and is inside, innermost first. */

@@ -12,6 +12,7 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.Text;
 import souther.compiler.numeric.ValueTransformation;
+import souther.compiler.observe.Figure;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.semantics.StringContainment;
 import souther.compiler.semantics.TakenArguments;
@@ -26,6 +27,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -2181,6 +2183,32 @@ public sealed interface Proposition {
                 yield false;
             }
             case Always _, Unread _, Truth _, InCases _, Present _, InTheStrings _,
+                 SameValue _, StringInside _, LastToHold _, Carried _ -> false;
+        };
+    }
+
+    /** The figures of this compiler's work the parts of {@code stated} nothing read stopped at,
+     *  each once, each part asked once however many ways there are down to it. */
+    public static Set<Figure> figuresStoppedAtIn(Proposition stated) {
+        Set<Figure> out = new LinkedHashSet<>();
+        StatementReading.<Boolean>over((part, again) -> figuresAt(part, again, out)).read(stated);
+        return Collections.unmodifiableSet(out);
+    }
+
+    /** Whether some part of {@code stated} stopped at a figure, with each put into {@code into}. */
+    private static Boolean figuresAt(Proposition stated, StatementReading<Boolean> again,
+                                     Set<Figure> into) {
+        return switch (stated) {
+            case Unread unread -> unread.why().figure().map(into::add).isPresent();
+            case All _, Any _, OnAnApplication _, SoManyHold _, Some _, SomeReachable _,
+                 WhereItAnswers _, OfTheWays _ -> {
+                boolean stopped = false;
+                for (Proposition part : stated.partsHeld()) {
+                    stopped |= again.read(part);
+                }
+                yield stopped;
+            }
+            case Always _, Compared _, Truth _, InCases _, Present _, InTheStrings _,
                  SameValue _, StringInside _, LastToHold _, Carried _ -> false;
         };
     }

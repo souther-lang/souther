@@ -16,14 +16,17 @@ import java.util.Objects;
  * body has on which applications, before any of that is paid for, reads this. A construct here
  * may state nothing the measurement draws a line from: what it states is not read.
  *
- * @param copy the copy of the model the construct stands in
- * @param on   the applications of the closures it stands in, as the walk said them
+ * @param copy    the copy of the model the construct stands in
+ * @param on      the applications of the closures it stands in, as the walk said them
+ * @param through the choices the values it is about are made through, as they are written
  */
-public record AComparisonRead(ModelOccurrence copy, AppliedOn on) {
+public record AComparisonRead(ModelOccurrence copy, AppliedOn on,
+                              List<AChoiceReadThrough> through) {
 
     public AComparisonRead {
         Objects.requireNonNull(copy, "a construct stands in some copy of the model");
         Objects.requireNonNull(on, "inside some closures or none, said or not");
+        through = List.copyOf(through);
     }
 
     /**

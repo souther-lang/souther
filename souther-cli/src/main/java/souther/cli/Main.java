@@ -30,6 +30,7 @@ import souther.compiler.meta.ModuleMetadata;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.ConditionsReadThroughTooManyChoices;
 import souther.compiler.query.HelpersReadOnApplicationsAroundThem;
 import souther.compiler.types.ValueName;
 import souther.compiler.report.AdequacyReport;
@@ -711,14 +712,36 @@ public final class Main {
             List<String> readBy = new ArrayList<>();
             said.applications().forEach((reader, times) -> readBy.add(
                     Messages.get("cli.examples.helper.ahead.read", locale, reader, times)));
-            List<ValueName.Helper> inside = said.calledInside();
-            String calledInside = inside.isEmpty() ? ""
-                    : Messages.get("cli.examples.helper.ahead.inside", locale,
-                            String.join(", ", inside.stream()
-                                    .map(each -> "`" + each.name() + "`").toList()));
             err.println(Messages.get("cli.examples.helper.ahead", locale, said.helper().name(),
-                    String.join(", ", readBy), calledInside));
+                    String.join(", ", readBy), calledInside(said.calledInside(), locale)));
         }
+        ConditionsReadThroughTooManyChoices.toldOf(compilation)
+                .forEach(said -> toldOfChoices(said, locale));
+    }
+
+    /** The conditions of one behavior whose values are made through more choices than one
+     *  condition is read on, and what to declare as a behavior so that they are not. */
+    private void toldOfChoices(ConditionsReadThroughTooManyChoices.Said said, Locale locale) {
+        ConditionsReadThroughTooManyChoices.Told told = said.told();
+        StringBuilder suggested = new StringBuilder();
+        told.helpers().forEach(each -> suggested.append(Messages.get(
+                "cli.examples.choices.ahead.declare", locale, each.helper().name(),
+                each.conditions(), calledInside(each.calledInside(), locale))));
+        if (told.beside() > 0) {
+            suggested.append(Messages.get("cli.examples.choices.ahead.beside", locale,
+                    told.beside()));
+        }
+        err.println(Messages.get("cli.examples.choices.ahead", locale,
+                said.module() + "." + said.behavior(), told.conditions(),
+                ConditionsReadThroughTooManyChoices.most(), suggested));
+    }
+
+    /** That the calls of a helper are written inside {@code inside}, which they move out of. */
+    private static String calledInside(List<ValueName.Helper> inside, Locale locale) {
+        return inside.isEmpty() ? ""
+                : Messages.get("cli.examples.helper.ahead.inside", locale,
+                        String.join(", ", inside.stream()
+                                .map(each -> "`" + each.name() + "`").toList()));
     }
 
     /**

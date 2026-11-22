@@ -811,6 +811,12 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             // The reading of what a body decides. The figure is what the reading of the ways will
             // hold apart, and where it will not, the rules are none of the body's rather than some
             // of them -- so what is carried out is the figure itself.
+            // What a condition is told of for before anything reads it. Neither stops anything:
+            // the reading stops at its own figure and says so.
+            Map.entry("souther.compiler.query.ConditionsReadThroughTooManyChoices#most()I",
+                    "how many readings a condition's choices may come to before it is told of"),
+            Map.entry("souther.compiler.query.ConditionsReadThroughTooManyChoices#left()I",
+                    "how many a condition is left with by the helpers it is told to declare"),
             Map.entry("souther.compiler.partition.Pullback#readings()I",
                     "how many readings of one condition the reading of what it means makes"),
             Map.entry("souther.compiler.partition.AggregateRelation#fewestAt("

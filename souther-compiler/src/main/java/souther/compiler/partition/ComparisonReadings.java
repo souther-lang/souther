@@ -641,12 +641,15 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      *
      * @param occurrence the construct, in the copy the walk met it in
      * @param applying   the applications of the closures it stands in, every one of them
+     * @param through    the choices the values it is about are made through
      */
-    record AConstructMet(ConstructOccurrence occurrence, ClosureApplications applying) {
+    record AConstructMet(ConstructOccurrence occurrence, ClosureApplications applying,
+                         List<AChoiceReadThrough> through) {
 
         AConstructMet {
             Objects.requireNonNull(occurrence, "a construct the walk met");
             Objects.requireNonNull(applying, "inside some closures, or none");
+            through = List.copyOf(through);
         }
     }
 
@@ -2002,7 +2005,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         if (in.metOnly().isPresent()) {
             ConstructOccurrence written = mayState(e);
             if (written != null && BoundaryPolicy.refuses(live).isEmpty()) {
-                in.metOnly().get().add(new AConstructMet(in.context().of(written), applying));
+                in.metOnly().get().add(new AConstructMet(in.context().of(written), applying,
+                        ChoicesAConditionIsReadThrough.of(e, reads, in.read())));
             }
             stated = null;
         } else {

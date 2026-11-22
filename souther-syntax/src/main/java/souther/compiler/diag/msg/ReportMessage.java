@@ -688,6 +688,16 @@ public sealed interface ReportMessage extends Message {
     record CostlyReading(String rule, String line, String cutAt, String arms, String calls,
                          String helpers) implements ReportMessage, Prose {}
 
+    record ConditionsStoppedAtAFigure(int conditions, String figures, String suggested)
+            implements ReportMessage, Prose {}
+
+    record DeclaredAsABehaviorItIsOneAnswer(String helper, int conditions, int calls,
+                                            Message inside) implements ReportMessage, Prose {}
+
+    record TheChoicesBesideTheCondition(int conditions) implements ReportMessage, Prose {}
+
+    record WrittenInABehaviorItIsReadOnce() implements ReportMessage, Prose {}
+
     record PositionNotRead(String at, Message why, Message stopped)
             implements ReportMessage, Prose {}
 

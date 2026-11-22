@@ -200,14 +200,15 @@ class EveryQuestionThisCompilerDeclaresIsReachedOrOutsideABatchRunTest {
     private static Set<String> workedOutWhatIsReached() {
         Set<String> out = new TreeSet<>();
         for (ConformanceCorpus corpus : ConformanceCorpus.all()) {
-            // Analysing a corpus and writing the report, which is `souther examples`; offering an
-            // author the rows nothing covers, which is `souther examples --generate`; and asking a
-            // compilation what a module declares, which is what the command line reads to narrow
-            // what it is about to do to one behavior. One analysis asked all three: what is kept is
-            // every question any of them put, and a question one of them put is in the store
-            // whichever of them came first.
+            // Analysing a corpus and writing the report, which is `souther examples`; what that
+            // command says before it measures; offering an author the rows nothing covers, which
+            // is `souther examples --generate`; and asking a compilation what a module declares,
+            // which is what the command line reads to narrow what it is about to do to one
+            // behavior. One analysis asked all four: what is kept is every question any of them
+            // put, and a question one of them put is in the store whichever of them came first.
             ConformanceCorpus.Analysed analysed = corpus.analyse();
             Compilation compilation = analysed.answered();
+            ConditionsReadThroughTooManyChoices.toldOf(compilation);
             GeneratedRows.of(compilation, null, null,
                     new SourceRendering(corpus.names(), compilation.texts())).textInEnglish();
             compilation.modules().forEach(compilation::declaredBehaviors);
