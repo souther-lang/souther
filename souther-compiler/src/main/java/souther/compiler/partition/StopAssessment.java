@@ -23,7 +23,6 @@ import souther.compiler.numeric.Rel;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
@@ -251,14 +250,10 @@ final class StopAssessment {
         // function of what it works out, the way to it and whether a row arrives, so a place that
         // says the same as one before it is judged once.
         places = distinctPlaces(places);
-        // And what a way leaves is a function of the way alone, read once for each way.
-        Map<List<OnTheWay>, Optional<WhatAWayLeavesOfAValue>> leaving = new HashMap<>();
         for (Place place : places) {
             UndividedByARelation.Working working = place.worked().stops().operations();
             WhatAWayLeavesOfAValue left = place.aRowArrives()
-                    ? leaving.computeIfAbsent(place.way(), way -> Optional.ofNullable(
-                            WhatAWayLeavesOfAValue.along(read, way))).orElse(null)
-                    : null;
+                    ? WhatAWayLeavesOfAValue.along(read, place.way()) : null;
             if (left != null && working.aStopUntold()
                     && working.leavesUntoldBeyond(each.quotients())) {
                 out.add(new Judgement.Unresolved(null, WhyAStopIsNotShown.NO_OPERATION_TOLD));

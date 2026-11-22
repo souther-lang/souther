@@ -71,7 +71,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.TreeSet;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -595,6 +594,17 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
     }
 
     /**
+     * A part of a comparison asked to be read apart from the rest: where it stands, what is held
+     * aside as it is read (null for nothing, and told apart by which it is), and whether a product
+     * of two numbers is a stop in it.
+     */
+    private record PartAsked(ReadThere part, StoppedValues aside, boolean productsStop) {}
+
+    /** What a part read apart came to, the numbers it named and what it told, each its own until
+     *  a reading takes it. */
+    private record PartReadApart(Attempt attempt, Set<NumericTerm> named, WhatWasTold told) {}
+
+    /**
      * The same, holding aside the value of {@code stoppedAt} where it is not null: the expression a
      * reading stopped at stands for an atom no operation is told over, so that the rest of the
      * comparison is read for what it works out.
@@ -884,15 +894,11 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                         && told.readByATerm(read.binding())) {
                     return true;
                 }
-                Set<NumericTerm> namedApart = new LinkedHashSet<>();
                 ElementsMet.Mark metBefore = met.mark();
-                WhatWasTold toldApart = told.apart();
-                if (toldBy(Attempt.ofAPart(AffineForms.outcome(part.value(), part.at(),
-                        reading(ofTheInput, namedApart, met, toldApart, stoppedAt))))
-                        && toldApart.operationsOverTheStopValue.isEmpty()
-                        && !toldApart.aStopUntold) {
-                    named.addAll(namedApart);
-                    told.absorb(toldApart);
+                PartReadApart read = readApart(part, stoppedAt, told.productsStop);
+                if (toldBy(read.attempt()) && read.told().operationsOverTheStopValue.isEmpty()
+                        && !read.told().aStopUntold) {
+                    take(read);
                     return true;
                 }
                 met.rewind(metBefore);
@@ -902,8 +908,42 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             /** Whether {@code part} reads here as a form, its operations then told, or as where
              *  every run working it out aborts. */
             private boolean readAsAForm(Denotation part) {
-                return toldBy(tried(apart -> Attempt.ofAPart(
-                        AffineForms.outcome(part.value(), part.at(), apart))));
+                ElementsMet.Mark metBefore = met.mark();
+                PartReadApart read = readApart(part, null, told.productsStop);
+                if (read.attempt() instanceof Attempt.Form) {
+                    take(read);
+                } else {
+                    met.rewind(metBefore);
+                }
+                return toldBy(read.attempt());
+            }
+
+            /**
+             * {@code part} read apart from the rest of what is read here, starting from the
+             * elements this has met and leaving them as that reading did; what it names and tells
+             * is its own until it is taken ({@link #take}). Read once for each way of reading it:
+             * with what is held aside where {@code aside}, and with a product a stop or a number
+             * of its own ({@link WhatWasTold#partApart}).
+             */
+            private PartReadApart readApart(Denotation part, StoppedValues aside,
+                                            boolean productsStop) {
+                return told.partApart(new PartAsked(
+                        new ReadThere(Core.withoutStanding(part.value()), part.at()), aside,
+                        productsStop), met, () -> {
+                            WhatWasTold apart = told.apart();
+                            apart.productsStop = productsStop;
+                            Set<NumericTerm> namedApart = new LinkedHashSet<>();
+                            return new PartReadApart(Attempt.ofAPart(AffineForms.outcome(
+                                    part.value(), part.at(), reading(ofTheInput, namedApart, met,
+                                            apart, aside, null, saidOnTheirWays))),
+                                    namedApart, apart);
+                        });
+            }
+
+            /** What {@code read} named and told is named and told here. */
+            private void take(PartReadApart read) {
+                named.addAll(read.named());
+                told.absorb(read.told());
             }
 
             /**
@@ -1232,9 +1272,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             /** Whether what {@code value} works out is told here for where a run stops: it reads
              *  as a number whose operations are told, or as where every run aborts. */
             private boolean toldWhereItStops(Denotation value) {
-                return told.tellingOnce(value, each -> worksOutAsANumber(each.value(), each.at(),
-                        new IdentityHashMap<>()), ofTheInput.derived(
-                        WhatWasTold.ReadAsNoNumber.class, _ -> new WhatWasTold.ReadAsNoNumber()));
+                return worksOutAsANumber(value.value(), value.at(), new IdentityHashMap<>());
             }
 
             /**
@@ -1287,20 +1325,16 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 if (!holdsNoChoice(e, choiceFree)) {
                     return false;
                 }
-                WhatWasTold apart = told.apart();
-                apart.productsStop = false;
                 ElementsMet.Mark metBefore = met.mark();
-                Attempt read = Attempt.ofAPart(AffineForms.outcome(e, at,
-                        reading(ofTheInput, new LinkedHashSet<>(), met, apart, null, null,
-                                saidOnTheirWays)));
+                PartReadApart read = readApart(new Denotation(e, at), null, false);
                 met.rewind(metBefore);
-                if (read instanceof Attempt.Form
-                        && (!apart.operations.isEmpty() || apart.aStopUntold)) {
+                if (read.attempt() instanceof Attempt.Form
+                        && (!read.told().operations.isEmpty() || read.told().aStopUntold)) {
                     // An operation told again is the same operation to where a run stops
                     // ({@link UndividedByARelation.IntOperation#sameOperationAs}).
-                    told.leftToTheWitness(apart);
+                    told.leftToTheWitness(read.told());
                 }
-                return toldBy(read);
+                return toldBy(read.attempt());
             }
 
             /** Whether nothing in {@code e} is a choice between arms, each node asked once. */
@@ -2807,26 +2841,33 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          *  it told when it kept it ({@link #kept}): it is told nothing more. */
         private boolean keptElsewhere;
 
-        /** What reading values as numbers to tell their stops has met, shared with every reading
-         *  tried apart from this one ({@link #tellingOnce}). */
-        private final Telling telling;
+        /** The parts read apart, shared with every reading tried apart from this one
+         *  ({@link #partApart}). */
+        private final PartsReadApart parts;
 
         WhatWasTold() {
-            this(new int[2], new Telling(new ArrayList<>(), new int[] {Integer.MAX_VALUE}));
+            this(new int[2], new PartsReadApart());
         }
 
-        private WhatWasTold(int[] elementsRead, Telling telling) {
+        private WhatWasTold(int[] elementsRead, PartsReadApart parts) {
             this.elementsRead = elementsRead;
-            this.telling = telling;
+            this.parts = parts;
         }
 
-        /**
-         * What reading values as numbers to tell their stops has met in one reading and those
-         * tried apart from it: the values being told now, outermost first ({@code being}), and
-         * the shallowest of them a value was refused for being told already since the value now
-         * innermost began ({@code shallowestRefused}, past the end where none was).
-         */
-        private record Telling(List<ReadAsNoNumber.OneWorking> being, int[] shallowestRefused) {}
+        /** What the parts read apart in one reading, and in those tried apart from it, came to,
+         *  and the parts being read apart now. */
+        private static final class PartsReadApart {
+
+            /** A part read, and how that left the elements met. */
+            private record Kept(PartReadApart read, ElementsMet.Footprint left) {}
+
+            private final Map<PartAsked, Kept> kept = new HashMap<>();
+            /** The parts being read now, outermost first. */
+            private final List<PartAsked> being = new ArrayList<>();
+            /** The shallowest of {@link #being} a part was refused for being read already, since
+             *  the part now innermost began; past the end where none was. */
+            private int shallowestRefused = Integer.MAX_VALUE;
+        }
 
         /**
          * Whether an operation at {@code node} is told here, among the groups kept for where a
@@ -2844,77 +2885,55 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         }
 
         /**
-         * {@code tell} asked of {@code value}, unless it is already being told: a reading of a
-         * value as a number may pass over that value itself, and its owner then asks for it to be
-         * told again. Then it is not, and what it works out is left as nothing here tells it.
+         * What reading the part {@code asked} apart comes to, read once in this reading and those
+         * tried apart from it, whoever of them asks: a part that several readings each read for
+         * themselves is read by each reading inside each of those, and a chain of values each
+         * made of the last is then read as many times as there are ways down it.
          *
-         * <p>A value that read as no number is not read again by any reading of the input
-         * ({@code readAsNone}): telling it adds nothing, so taking that answer from another
-         * reading leaves nothing of that reading's in this one, and a value it would have told
-         * is then said untold, never passed over in silence. Not where it read as none because a
-         * value told outside it, begun before it, was refused inside it: that answer is one of
-         * the moment. A refusal of the value itself, or of one begun inside it, is its own.
+         * <p>Taken again only where reading it again would be the same reading: the elements it
+         * asked of stand as they did ({@link ElementsMet#agrees}), it asked the figure that counts
+         * elements nothing, and no part begun before it was refused inside it for being read
+         * already. A part already being read is refused, since a reading may pass over the value
+         * it reads, whose owner then asks for it to be read again: then nothing here tells it. A
+         * refusal of the part itself, or of one begun inside it, is the part's own.
+         *
+         * <p>What was told is told nothing more once it is read, so it is taken by as many
+         * readings as ask for it.
          */
-        boolean tellingOnce(Denotation value, Predicate<Denotation> tell,
-                            ReadAsNoNumber readAsNone) {
-            ReadAsNoNumber.OneWorking one = new ReadAsNoNumber.OneWorking(
-                    Core.withoutStanding(value.value()), value.at());
-            if (readAsNone.holds(one)) {
-                return false;
+        PartReadApart partApart(PartAsked asked, ElementsMet met, Supplier<PartReadApart> read) {
+            long[] counting = PARTS;
+            if (counting != null) {
+                counting[0]++;
             }
-            List<ReadAsNoNumber.OneWorking> being = telling.being();
-            int[] shallowest = telling.shallowestRefused();
-            int already = being.indexOf(one);
+            PartsReadApart.Kept kept = parts.kept.get(asked);
+            if (kept != null && met.agrees(kept.left())) {
+                met.takes(kept.left());
+                return kept.read();
+            }
+            int already = parts.being.indexOf(asked);
             if (already >= 0) {
-                shallowest[0] = Math.min(shallowest[0], already);
-                return false;
+                parts.shallowestRefused = Math.min(parts.shallowestRefused, already);
+                return new PartReadApart(new Attempt.NotApplicable(), Set.of(), apart());
             }
-            int depth = being.size();
-            int outside = shallowest[0];
-            shallowest[0] = Integer.MAX_VALUE;
-            being.add(one);
-            boolean told;
-            try {
-                told = tell.test(value);
+            int depth = parts.being.size();
+            int refusedOutside = parts.shallowestRefused;
+            int figureAsked = askedOfTheFigure();
+            parts.shallowestRefused = Integer.MAX_VALUE;
+            if (counting != null) {
+                counting[1]++;
+            }
+            parts.being.add(asked);
+            try (ElementsMet.Noting noting = met.noting()) {
+                PartReadApart made = read.get();
+                ElementsMet.Footprint left = noting.ended();
+                if (left != null && parts.shallowestRefused >= depth
+                        && figureAsked == askedOfTheFigure()) {
+                    parts.kept.put(asked, new PartsReadApart.Kept(made, left));
+                }
+                return made;
             } finally {
-                being.removeLast();
-            }
-            if (!told && shallowest[0] >= depth) {
-                readAsNone.add(one);
-            }
-            shallowest[0] = Math.min(outside, shallowest[0]);
-            return told;
-        }
-
-        /** The values of one input that read as no number when read to tell their stops
-         *  ({@link #tellingOnce}), each a node with what its names were read in; asked by
-         *  readings on several threads. */
-        static final class ReadAsNoNumber {
-
-            private final Set<OneWorking> values = ConcurrentHashMap.newKeySet();
-
-            /** One working out of a node, told apart by which node and by what its names were
-             *  read in. */
-            record OneWorking(Core node, InputReads at) {
-
-                @Override
-                public boolean equals(Object other) {
-                    return other instanceof OneWorking that && node == that.node
-                            && at.equals(that.at);
-                }
-
-                @Override
-                public int hashCode() {
-                    return 31 * System.identityHashCode(node) + at.hashCode();
-                }
-            }
-
-            boolean holds(OneWorking one) {
-                return values.contains(one);
-            }
-
-            void add(OneWorking one) {
-                values.add(one);
+                parts.being.removeLast();
+                parts.shallowestRefused = Math.min(refusedOutside, parts.shallowestRefused);
             }
         }
 
@@ -2934,7 +2953,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         /** Nothing told yet, for a part of the comparison read apart: what it reads element by
          *  element is counted with what this reading has. */
         WhatWasTold apart() {
-            WhatWasTold apart = new WhatWasTold(elementsRead, telling);
+            WhatWasTold apart = new WhatWasTold(elementsRead, parts);
             apart.productsStop = productsStop;
             return apart;
         }
@@ -3367,10 +3386,10 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         if (counting != null) {
             counting[0]++;
         }
-        WhatDecidingWorksOut kept = ofTheInput.derived(WhatDecidingWorksOut.class,
-                _ -> new WhatDecidingWorksOut());
-        WhatWasTold.ReadAsNoNumber.OneWorking asked = new WhatWasTold.ReadAsNoNumber.OneWorking(
-                Core.withoutStanding(choice), at);
+        KeptByWhatItAsked<ReadThere, Core, UndividedByARelation.Working> kept =
+                ofTheInput.derived(WhatDecidingWorksOut.class,
+                        _ -> new WhatDecidingWorksOut(new KeptByWhatItAsked<>())).kept();
+        ReadThere asked = new ReadThere(Core.withoutStanding(choice), at);
         UndividedByARelation.Working before = kept.of(asked, answersFor.saidOnItsWays());
         if (before != null) {
             return before;
@@ -3391,21 +3410,27 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
      * whichever comparison is read through the choice; one given another answer reads it again.
      * Asked by readings on several threads.
      */
-    private static final class WhatDecidingWorksOut {
+    private record WhatDecidingWorksOut(
+            KeptByWhatItAsked<ReadThere, Core, UndividedByARelation.Working> kept) {}
 
-        private final KeptByWhatItAsked<WhatWasTold.ReadAsNoNumber.OneWorking, Core,
-                UndividedByARelation.Working> kept = new KeptByWhatItAsked<>();
+    /** A node read where it is, told apart by which node it is and by what its names were read
+     *  in. */
+    private record ReadThere(Core node, InputReads at) {
 
-        UndividedByARelation.Working of(WhatWasTold.ReadAsNoNumber.OneWorking asked,
-                                        Predicate<Core> saidOnItsWays) {
-            return kept.of(asked, saidOnItsWays);
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof ReadThere that && node == that.node && at.equals(that.at);
         }
 
-        void keep(WhatWasTold.ReadAsNoNumber.OneWorking asked, Map<Core, Boolean> said,
-                  UndividedByARelation.Working worked) {
-            kept.keep(asked, said, worked);
+        @Override
+        public int hashCode() {
+            return 31 * System.identityHashCode(node) + at.hashCode();
         }
     }
+
+    /** Where a test counts how many times a part was asked to be read apart, and how many of
+     *  those were read; null everywhere else. */
+    static long[] PARTS;
 
     /** Where a test counts how many times what deciding a choice works out was asked for, and
      *  how many of those were worked out; null everywhere else. */
