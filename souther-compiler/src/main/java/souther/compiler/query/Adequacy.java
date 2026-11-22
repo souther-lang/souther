@@ -1742,6 +1742,13 @@ public final class Adequacy {
      */
     static BodyReading bodyReading(
             Db db, String module, Bodies.Elaborated checked, String behavior) {
+        // A behavior this build measures none of has its body here and unread. The lines its
+        // declarations and its clauses draw are still read, which is what a behavior that is
+        // measured shares with it; what its own rules add is the measurement nobody asked for.
+        if (!chosen(db, module, behavior) && givenABody(
+                db.ask(new Bodies.Implementation(module)).value(), behavior)) {
+            return new souther.compiler.partition.BodyReading.NotInElaboration();
+        }
         if (checked != null && checked.behaviorBodies().containsKey(behavior)) {
             return new souther.compiler.partition.BodyReading.Read(
                     checked.behaviorBodies().get(behavior),
