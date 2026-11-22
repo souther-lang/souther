@@ -2686,53 +2686,30 @@ public final class Generator {
         // A position at a time, composed when it is reached: the rows composed for it are
         // handed over as candidates, so the runs that put them to the rewrite are counted and
         // shared with the other ways of looking as theirs are.
-        return new Iterator<>() {
-
-            private int moved;
-
-            private Iterator<GeneratedRow> composedForIt = Collections.emptyIterator();
-
-            @Override
-            public boolean hasNext() {
-                while (!composedForIt.hasNext() && moved < order.size()) {
-                    composedForIt = composedWith(order.get(moved++));
-                }
-                return composedForIt.hasNext();
+        return NearbyValues.flat(order.iterator(), position -> {
+            if (!looking.scope().moves(subject.parameters().get(position))) {
+                return Collections.emptyIterator();
             }
-
-            @Override
-            public GeneratedRow next() {
-                if (!hasNext()) {
-                    throw new NoSuchElementException();
+            Map<String, Written> kept = new LinkedHashMap<>();
+            for (int p = 0; p < written.size(); p++) {
+                if (p != position) {
+                    String parameter = subject.parameters().get(p);
+                    kept.put(parameter, new Written(List.of(new WrittenWay(written.get(p),
+                            Map.of(TermPath.of(parameter), written.get(p)))), false));
                 }
-                return composedForIt.next();
             }
-
-            private Iterator<GeneratedRow> composedWith(int position) {
-                if (!looking.scope().moves(subject.parameters().get(position))) {
-                    return Collections.emptyIterator();
-                }
-                Map<String, Written> kept = new LinkedHashMap<>();
-                for (int p = 0; p < written.size(); p++) {
-                    if (p != position) {
-                        String parameter = subject.parameters().get(p);
-                        kept.put(parameter, new Written(List.of(new WrittenWay(written.get(p),
-                                Map.of(TermPath.of(parameter), written.get(p)))), false));
-                    }
-                }
-                List<GeneratedRow> rows = new ArrayList<>();
-                looking.tookFromComposing(() -> composed(axes, composes(axes.axes()),
-                        HeldTogether.Asked.NOTHING, check, kept,
-                        atMost(MOST_REPAIRS, () -> looking.composingStopped(
-                                        List.of(WorkFigure.CANDIDATES_A_REPAIR_BUILDS
-                                                .at(MOST_REPAIRS))),
-                                inputs -> {
-                                    rows.add(new GeneratedRow(purposes, inputs, answers));
-                                    return Acceptance.PASSED;
-                                }), looking.scope()));
-                return rows.iterator();
-            }
-        };
+            List<GeneratedRow> rows = new ArrayList<>();
+            looking.tookFromComposing(() -> composed(axes, composes(axes.axes()),
+                    HeldTogether.Asked.NOTHING, check, kept,
+                    atMost(MOST_REPAIRS, () -> looking.composingStopped(
+                                    List.of(WorkFigure.CANDIDATES_A_REPAIR_BUILDS
+                                            .at(MOST_REPAIRS))),
+                            inputs -> {
+                                rows.add(new GeneratedRow(purposes, inputs, answers));
+                                return Acceptance.PASSED;
+                            }), looking.scope()));
+            return rows.iterator();
+        });
     }
 
     /**
@@ -3527,28 +3504,7 @@ public final class Generator {
     /** The candidates of {@code count} rows one after the other, each made when it is reached. */
     private static Iterator<GeneratedRow> inOrder(int count,
                                                   IntFunction<Iterator<GeneratedRow>> each) {
-        return new Iterator<>() {
-
-            private int at;
-
-            private Iterator<GeneratedRow> current = Collections.emptyIterator();
-
-            @Override
-            public boolean hasNext() {
-                while (!current.hasNext() && at < count) {
-                    current = each.apply(at++);
-                }
-                return current.hasNext();
-            }
-
-            @Override
-            public GeneratedRow next() {
-                if (!hasNext()) {
-                    throw new NoSuchElementException();
-                }
-                return current.next();
-            }
-        };
+        return NearbyValues.flat(IntStream.range(0, count).iterator(), each::apply);
     }
 
     /**
