@@ -5202,8 +5202,7 @@ public final class Adequacy {
             InputDomain input = inputs == null ? null : inputs.get(behavior);
             return Answer.of(body != null && input != null && reading != null
                     && GuardThresholds.answersEveryRun(body, readingOf(db, input, reading),
-                            checked.elementBindings()
-                                    .getOrDefault(behavior, ElementBindings.NONE)));
+                            ElementBindings.of(body, reading.newtypes())));
         }
 
         @Override

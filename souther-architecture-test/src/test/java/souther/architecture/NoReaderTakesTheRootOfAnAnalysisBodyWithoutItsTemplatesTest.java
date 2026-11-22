@@ -31,39 +31,47 @@ class NoReaderTakesTheRootOfAnAnalysisBodyWithoutItsTemplatesTest {
     private static final String THE_ROOT = "souther/compiler/check/AnalysisBody#core";
 
     /** Who takes the root, and what it does about the templates beside it. */
-    private static final Map<String, String> TAKES_THE_ROOT = Map.of(
-            "souther/compiler/check/ElementBindings",
-            "reads the bindings of the root and of every template, and holds what a name given a"
-                    + " build is",
-            "souther/compiler/partition/ComparisonReadings",
-            "reads the root, and then each template once under what every build of it has in common",
-            "souther/compiler/partition/PredicateReadings",
-            "reads the root, and then each template once, live where any build of it is",
-            "souther/compiler/partition/MeaningsOfABodyReading",
-            "reads the root alone: it files what a condition states for a reader of the tree that"
-                    + " runs, and that tree builds a value by calling it, so no condition such a"
-                    + " reader asks is inside a template",
-            "souther/compiler/partition/StopPastTheRepresentation",
-            "reads the root, and then each template once: an operation a build works out stops a"
-                    + " run where the value is built as one the root works out does",
-            "souther/compiler/partition/DecisionReading",
-            "reads the root, and answers a build by what its template does; what is inside a template"
-                    + " is no way of the body, since a value takes no input",
-            "souther/compiler/reading/KeptElements",
-            "reads the root alone: it looks for a call of the behavior's own body, and the tree that"
-                    + " runs builds a value by calling it, so a call whose expansion is met there is"
-                    + " never one inside a template",
-            "souther/compiler/query/CallExampleSeeds",
-            "reads the root alone: it looks for the calls the body makes of other behaviors, and a"
-                    + " call inside a template is not looked for, so it seeds no row",
-            "souther/compiler/query/CalledBehaviors",
-            "reads the root alone, as CallExampleSeeds does so that the two never disagree about"
-                    + " what a body calls: a call inside a template is not looked for, so the"
-                    + " behavior it calls is not one the body is handed rows of first",
-            "souther/compiler/query/Adequacy$BodyAtACall",
-            "hands the root on to the reading of a call that enters the body, with the bindings of"
-                    + " the root and of every template, so a name a build gives is what it holds"
-                    + " there too");
+    private static final Map<String, String> TAKES_THE_ROOT = Map.ofEntries(
+            Map.entry("souther/compiler/check/ElementBindings",
+                    "reads the bindings of the root and of every template, and holds what a name"
+                            + " given a build is"),
+            Map.entry("souther/compiler/partition/ComparisonReadings",
+                    "reads the root, and then each template once under what every build of it has"
+                            + " in common"),
+            Map.entry("souther/compiler/partition/PredicateReadings",
+                    "reads the root, and then each template once, live where any build of it is"),
+            Map.entry("souther/compiler/partition/MeaningsOfABodyReading",
+                    "reads the root alone: it files what a condition states for a reader of the"
+                            + " tree that runs, and that tree builds a value by calling it, so no"
+                            + " condition such a reader asks is inside a template"),
+            Map.entry("souther/compiler/partition/GuardThresholds",
+                    "asks whether working the root out ends a run, and of each build met what its"
+                            + " definition does; a build with no definition held is not shown to"
+                            + " end none"),
+            Map.entry("souther/compiler/partition/StopPastTheRepresentation",
+                    "reads the root, and then each template once: an operation a build works out"
+                            + " stops a run where the value is built as one the root works out"
+                            + " does"),
+            Map.entry("souther/compiler/partition/DecisionReading",
+                    "reads the root, and answers a build by what its template does; what is inside"
+                            + " a template is no way of the body, since a value takes no input"),
+            Map.entry("souther/compiler/reading/KeptElements",
+                    "reads the root alone: it looks for a call of the behavior's own body, and the"
+                            + " tree that runs builds a value by calling it, so a call whose"
+                            + " expansion is met there is never one inside a template"),
+            Map.entry("souther/compiler/query/CallExampleSeeds",
+                    "reads the root alone: it looks for the calls the body makes of other"
+                            + " behaviors, and a call inside a template is not looked for, so it"
+                            + " seeds no row"),
+            Map.entry("souther/compiler/query/CalledBehaviors",
+                    "reads the root alone, as CallExampleSeeds does so that the two never disagree"
+                            + " about what a body calls: a call inside a template is not looked"
+                            + " for, so the behavior it calls is not one the body is handed rows of"
+                            + " first"),
+            Map.entry("souther/compiler/query/Adequacy$BodyAtACall",
+                    "hands the root on to the reading of a call that enters the body, with the"
+                            + " bindings of the root and of every template, so a name a build gives"
+                            + " is what it holds there too"));
 
     @Test
     void everyReaderThatTakesTheRootHasSaidWhatItDoesAboutTheTemplates() {

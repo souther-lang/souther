@@ -278,11 +278,16 @@ public final class GuardThresholds {
     /**
      * Whether working out the body {@code states}, over whatever its inputs may hold, is shown to
      * end no run: what a caller is told of it ({@link
-     * souther.compiler.check.BehaviorAnswers#answersEveryRun}).
+     * souther.compiler.check.BehaviorAnswers#answersEveryRun}). Asked by the numbers its operations
+     * lie within: a sum of inputs declared within a range ends no run, and one of any {@code Int}
+     * may.
+     *
+     * @param elements the bindings of {@code states}, which hold what each value it builds is
+     *                 defined as
      */
     public static boolean answersEveryRun(AnalysisBody states, InputReading read,
                                           ElementBindings elements) {
-        return OneReading.over(() -> WorkedOutToReachIt.of(read).endsNoRun(
+        return OneReading.over(() -> WorkedOutToReachIt.of(read).endsNoRunWhereItWasPassedOver(
                 new Denotation(states.core(), namesOf(read, elements))));
     }
 

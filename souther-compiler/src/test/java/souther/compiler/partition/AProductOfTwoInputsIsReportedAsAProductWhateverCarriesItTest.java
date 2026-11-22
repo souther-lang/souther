@@ -89,7 +89,8 @@ class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
     /**
      * A behavior the comparison calls is no carrier of the product: what its body multiplies is
      * its own account, at its own positions, and its caller compares a number the call works out,
-     * which the caller's runs place.
+     * which the caller's runs place. The product of any numbers may be past what an `Int` holds,
+     * so the behavior is not shown to answer every run, and its caller says that of the stop.
      */
     @Test
     void aProductWrittenInABehaviorTheComparisonCallsIsThatBehaviorsToSay() {
@@ -100,7 +101,8 @@ class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
                 behavior f : (xs: List<A>) -> Bool
                 let f (xs) = List.length(List.filter(i -> amount(i) >= 1, xs)) >= 1
                 """;
-        assertEquals(List.of("xs[*]: RULE_MEASURED_ON_ITS_RUNS"), reasonsOf(model, "f"));
+        assertEquals(List.of("xs[*]: EVALUATION_STOPS_NOT_FULLY_READ",
+                "xs[*]: RULE_MEASURED_ON_ITS_RUNS"), reasonsOf(model, "f"));
         assertEquals(List.of("a.p: NON_AFFINE_PRODUCT", "a.q: NON_AFFINE_PRODUCT"),
                 reasonsOf(model, "amount"));
     }

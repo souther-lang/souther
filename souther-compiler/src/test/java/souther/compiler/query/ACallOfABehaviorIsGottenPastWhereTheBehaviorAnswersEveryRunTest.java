@@ -99,6 +99,45 @@ class ACallOfABehaviorIsGottenPastWhereTheBehaviorAnswersEveryRunTest {
         assertFalse(answersEveryRun(handedAConstant, "chosen"));
     }
 
+    /** A value the body builds is asked by its definition, which is run where it is built. */
+    @Test
+    void aValueTheBodyReadsIsAskedByItsDefinition() {
+        Compilation compilation = measured("""
+                let limit: Int = {
+                    let half = 3
+                    half + half
+                }
+                behavior made : (n: Int) -> Int
+                let made (n) = if n < 3 then limit else n
+                let never: Int = {
+                    let nought = limit - 6
+                    Int.floorMod(100, nought)
+                }
+                behavior mayStop : (n: Int) -> Int
+                let mayStop (n) = if n < 3 then never else n
+                """);
+
+        assertTrue(answersEveryRun(compilation, "made"));
+        assertFalse(answersEveryRun(compilation, "mayStop"));
+    }
+
+    /** A sum past what an `Int` holds ends the run, and one its inputs are declared within does
+     *  not: a range the author declares is what shows it. */
+    @Test
+    void anOperationIsAskedByTheNumbersItsInputsAreDeclaredWithin() {
+        Compilation compilation = measured("""
+                data Small = Int
+                    invariant value >= 0 && value <= 1000
+                behavior ofAny : (a: Int, b: Int) -> Int
+                let ofAny (a, b) = a + b
+                behavior ofSmall : (a: Small, b: Small) -> Int
+                let ofSmall (a, b) = a.value + b.value
+                """);
+
+        assertFalse(answersEveryRun(compilation, "ofAny"));
+        assertTrue(answersEveryRun(compilation, "ofSmall"));
+    }
+
     /** One with no body in the model is not known to answer, called or injected. */
     @Test
     void aBehaviorWithNoBodyIsNotKnownToAnswer() {
