@@ -368,7 +368,7 @@ public final class InputReads {
             // taken as is a value read where the chain below already stood, so comparing it comes
             // to the same pair of chains again. Asked afresh there, a chain of two copies costs
             // twice as much for each taking in it.
-            if (sameAs == that || that.sameAs == this) {
+            if (sameAs == that) {
                 return true;
             }
             if (Objects.equals(older, that.older) && as.equals(that.as)) {

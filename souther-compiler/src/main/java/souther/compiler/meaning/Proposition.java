@@ -2187,19 +2187,22 @@ public sealed interface Proposition {
         };
     }
 
-    /** The figures of this compiler's work the parts of {@code stated} nothing read stopped at,
-     *  each once, each part asked once however many ways there are down to it. */
-    public static Set<Figure> figuresStoppedAtIn(Proposition stated) {
+    /** The figures counting how many times a condition is read that the parts of {@code stated}
+     *  nothing read stopped at, each once, each part asked once however many ways there are down
+     *  to it. */
+    public static Set<Figure> figuresOfReadingsIn(Proposition stated) {
         Set<Figure> out = new LinkedHashSet<>();
         StatementReading.<Boolean>over((part, again) -> figuresAt(part, again, out)).read(stated);
         return Collections.unmodifiableSet(out);
     }
 
-    /** Whether some part of {@code stated} stopped at a figure, with each put into {@code into}. */
+    /** Whether some part of {@code stated} stopped at such a figure, with each put into
+     *  {@code into}. */
     private static Boolean figuresAt(Proposition stated, StatementReading<Boolean> again,
                                      Set<Figure> into) {
         return switch (stated) {
-            case Unread unread -> unread.why().figure().map(into::add).isPresent();
+            case Unread unread -> unread.why().countsReadings()
+                    && unread.why().figure().map(into::add).isPresent();
             case All _, Any _, OnAnApplication _, SoManyHold _, Some _, SomeReachable _,
                  WhereItAnswers _, OfTheWays _ -> {
                 boolean stopped = false;

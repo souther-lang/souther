@@ -12,8 +12,8 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * The comparisons of one behavior's body some part of which was read no further at a figure of
- * this compiler's work, and which figures those were.
+ * The comparisons of one behavior's body some part of which was read no further at a figure that
+ * counts how many times a condition is read, and which figures those were.
  *
  * <p>Read off what each comparison states ({@link MeaningsOfABody}), whose parts nothing read say
  * the figure they stopped at: what stopped, whichever reader meets it. A comparison told of in
@@ -70,7 +70,7 @@ public record ConditionsStoppedAtAFigure(String name, String behavior)
                                Set<Figure> figures) {
         body.stated().forEach((site, meaning) -> {
             if (site.part() == MeaningsOfABody.Part.Asked.ITSELF) {
-                Set<Figure> met = Proposition.figuresStoppedAtIn(meaning.states());
+                Set<Figure> met = Proposition.figuresOfReadingsIn(meaning.states());
                 if (!met.isEmpty()) {
                     conditions.add(site.construct());
                     figures.addAll(met);

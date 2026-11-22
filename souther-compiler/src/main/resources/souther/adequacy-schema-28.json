@@ -3843,7 +3843,7 @@
         },
         "conditionsStoppedAtAFigure": {
           "type": "object",
-          "description": "The comparisons of the body some part of which was read no further at a figure of this compiler's, and what an author declares as a behavior so that they are read. Once for the body, whichever measures met them: what a measure leaves unread because of one is said where that measure says it. Absent where nothing stopped so.",
+          "description": "The comparisons of the body some part of which was read no further at a figure that counts how many times a condition is read, and what an author declares as a behavior so that they are read. Once for the body, whichever measures met them: what a measure leaves unread because of one is said where that measure says it. Absent where nothing stopped so.",
           "required": [
             "conditions",
             "figures",

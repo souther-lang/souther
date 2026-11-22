@@ -100,6 +100,17 @@ public sealed interface WhyUnread {
         };
     }
 
+    /**
+     * Whether the part stopped at a figure that counts how many times its condition is read. What
+     * takes a condition out of those is what a behavior does: its answer is one value, and a
+     * condition written in one is read once over its own inputs. A figure on how large a statement
+     * comes to is one on what is written, wherever it is written.
+     */
+    default boolean countsReadings() {
+        return this instanceof MoreReadingsThanAreMade
+                || this instanceof MoreTotalReadingsThanAreMade;
+    }
+
     /** What a part of a condition is about stands at no position of the input. */
     record AtNoPosition(Place what) implements WhyUnread {
 
