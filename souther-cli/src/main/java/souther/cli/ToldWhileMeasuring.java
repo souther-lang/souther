@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -38,6 +39,8 @@ final class ToldWhileMeasuring implements AutoCloseable {
                 thread.setDaemon(true);
                 return thread;
             });
+    /** The telling that is due each second, once the measurement has begun. */
+    private ScheduledFuture<?> telling;
     private Map<String, List<String>> measured = Map.of();
     private boolean saidWhat;
     private long timesSaidWhere;
@@ -52,7 +55,7 @@ final class ToldWhileMeasuring implements AutoCloseable {
     void begin(Compilation compilation) {
         listenTo(compilation);
         long began = System.nanoTime();
-        clock.scheduleAtFixedRate(
+        telling = clock.scheduleAtFixedRate(
                 () -> after(TimeUnit.NANOSECONDS.toSeconds(System.nanoTime() - began)),
                 1, 1, TimeUnit.SECONDS);
     }
@@ -105,6 +108,9 @@ final class ToldWhileMeasuring implements AutoCloseable {
 
     @Override
     public void close() {
+        if (telling != null) {
+            telling.cancel(false);
+        }
         clock.shutdownNow();
     }
 }
