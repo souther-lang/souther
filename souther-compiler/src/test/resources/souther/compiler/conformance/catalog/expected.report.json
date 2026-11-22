@@ -7841,6 +7841,21 @@
           "lowered" : 0
         },
         "reason" : "rule_relating_two_values"
+      }, {
+        "kind" : "rule_stop_not_shown",
+        "disposition" : "reported",
+        "subject" : "comparison@2:85:39",
+        "ruleId" : {
+          "kind" : "comparison",
+          "declaredIn" : "conformance.shipping",
+          "definition" : "高額割増",
+          "behavior" : "出荷する",
+          "ordinal" : 1,
+          "lowered" : 0
+        },
+        "unresolved" : [ {
+          "reason" : "no_operation_told"
+        } ]
       } ]
     }, {
       "name" : "送料を出す",

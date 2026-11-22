@@ -9,11 +9,13 @@ import java.util.Optional;
 /**
  * What a reader of a body asks of the bodies beside it: the body of each recursive helper as a
  * call of it is read ({@link ARecursion}), with the parameters standing for what the call handed,
- * and which constructions are shown to hold where they are made.
+ * whether a behavior called answers every run, and which constructions are shown to hold where
+ * they are made.
  *
  * <p>A recursive helper is the one helper a call in an analysed body is left standing for: every
  * other helper was expanded where it was called. A call of a behavior is a value a run works out,
- * and no body of one is read where the call stands.
+ * and no body of one is read where the call stands. What its caller is told of the body is whether
+ * it answers whatever it is handed, which is asked of the behavior over its own inputs.
  *
  * <p>Empty where there is no such body: a helper whose parameters declare no types.
  */
@@ -25,6 +27,11 @@ public interface BehaviorAnswers {
         @Override
         public Optional<ARecursion> recursionOf(ValueName.Helper recursion) {
             return Optional.empty();
+        }
+
+        @Override
+        public boolean answersEveryRun(ValueName.Behavior behavior) {
+            return false;
         }
 
         @Override
@@ -41,6 +48,14 @@ public interface BehaviorAnswers {
     /** The body of the recursive helper {@code recursion} as a call of it is read, with what it
      *  walks, where it has one. */
     Optional<ARecursion> recursionOf(ValueName.Helper recursion);
+
+    /**
+     * Whether working out the body of {@code behavior}, over whatever its inputs may hold, is shown
+     * to end no run, so that a caller's run gets past a call of it. False where there is no body to
+     * ask, one injected from outside the model included: that it was not shown to answer is not
+     * that it was shown to stop.
+     */
+    boolean answersEveryRun(ValueName.Behavior behavior);
 
     /**
      * Whether the construction written at {@code construction} in {@code module} is in a value the

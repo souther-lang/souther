@@ -275,6 +275,17 @@ public final class GuardThresholds {
         return List.copyOf(out);
     }
 
+    /**
+     * Whether working out the body {@code states}, over whatever its inputs may hold, is shown to
+     * end no run: what a caller is told of it ({@link
+     * souther.compiler.check.BehaviorAnswers#answersEveryRun}).
+     */
+    public static boolean answersEveryRun(AnalysisBody states, InputReading read,
+                                          ElementBindings elements) {
+        return OneReading.over(() -> WorkedOutToReachIt.of(read).endsNoRun(
+                new Denotation(states.core(), namesOf(read, elements))));
+    }
+
     /** The walk of the body's comparisons, over the names {@code read} reads. */
     private static ComparisonReadings comparisonsOf(String behavior, AnalysisBody states,
                                                     InputReading read, ElementBindings elements,

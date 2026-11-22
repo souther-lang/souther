@@ -2156,6 +2156,12 @@ public final class Shapes {
             }
 
             @Override
+            public boolean answersEveryRun(ValueName.Behavior behavior) {
+                return Boolean.TRUE.equals(db.ask(new Adequacy.AnswersEveryRun(behavior.module(),
+                        behavior.name())).value());
+            }
+
+            @Override
             public boolean builtWhereItsModuleIsBuilt(String module, SourcePos construction) {
                 Answer<Set<SourcePos>> built = db.ask(new Output.BuiltValues(module));
                 return built.present() && built.value().contains(construction);

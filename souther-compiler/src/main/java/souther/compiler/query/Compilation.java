@@ -366,16 +366,11 @@ public final class Compilation {
         // What the invariant check found, said where the rules it is about are written now. The
         // bodies were checked without asking that, so this is where it is asked.
         db.ask(new Bodies.InvariantWarnings(module));
-        // Said of the whole module or not at all: a branch no behavior reaches is dead, and one
-        // that the behaviors asked about do not reach may be reached by another. So a build that
-        // measures some behaviors only does not ask.
-        if (!Adequacy.choiceOf(db).narrows()) {
-            // A defect in the model rather than a gap in its rows, so it is asked whether or not
-            // this build wanted a coverage report.
-            db.ask(new Adequacy.DeadBranches(module));
-            // Costs nothing unless the build asked to be told.
-            db.ask(new Adequacy.Warnings(module));
-        }
+        // A defect in the model rather than a gap in its rows, so it is asked whether or not this
+        // build wanted a coverage report.
+        db.ask(new Adequacy.DeadBranches(module));
+        // Costs nothing unless the build asked to be told.
+        db.ask(new Adequacy.Warnings(module));
     }
 
     /**

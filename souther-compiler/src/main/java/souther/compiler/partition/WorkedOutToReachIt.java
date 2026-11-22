@@ -583,12 +583,12 @@ final class WorkedOutToReachIt {
         if (stopsOnlyOnAnOperandThatIsNotNought(value)) {
             return true;
         }
-        // A behavior called answers what it declares. Whether a run of it stops is asked of the
-        // behavior over its own inputs and said in its own account, and is no part of what the
-        // caller's body works out.
+        // Whether a run stops in a behavior called is asked of the behavior over its own inputs,
+        // whatever this call hands it and however the caller comes by it: no body of one is read
+        // here.
         if (AnOperationApplied.of(written) instanceof AnOperationApplied applied
-                && applied.operation() instanceof ValueName.Behavior) {
-            return true;
+                && applied.operation() instanceof ValueName.Behavior behavior) {
+            return read.rules().declarations().answers().answersEveryRun(behavior);
         }
         if (!closuresApart) {
             return WhatARunMayEndFor.itself(written).endsNone()

@@ -2070,6 +2070,17 @@ public final class Adequacy {
             // that went through an arm this reading had proven nothing reaches settles it: what
             // happened happened, the proof was wrong rather than the row, and warning about it
             // would be a false report about a model the rows have already shown is fine.
+            // A proof is all a run can take back, so where none is made the rows are not read, nor
+            // the places below gone through: nothing proven unreachable anywhere is nothing to
+            // say, which is most modules.
+            Answer<Map<String, PathReachability.Answers>> proven = db.ask(new PathReached(name));
+            if (!proven.present()) {
+                return Answer.absent();
+            }
+            if (proven.value().values().stream()
+                    .allMatch(PathReachability.Answers::provesNothingUnreached)) {
+                return Answer.of(true, List.of());
+            }
             Answer<Map<String, souther.compiler.check.PathReachability.Answers.AsRun>> arrives =
                     db.ask(new Arrived(name));
             if (!arrives.present()) {
@@ -2080,24 +2091,24 @@ public final class Adequacy {
             // unreachable there while another call takes that arm: the arm is the author's, and
             // telling them to take it out because one call never goes there is telling them to
             // take out what another call needs. Said once however many calls left it dead.
-            // Nothing proven unreachable anywhere is nothing to say, which is most modules: asked
-            // first, so the places below are gone through only where there is a proof to weigh.
-            if (arrives.value().values().stream()
-                    .allMatch(asRun -> asRun.answers().provesNothingUnreached())) {
-                return Answer.of(true, List.of());
-            }
-            // Every place each arm stands is the plan's: what the reading found about some of them
-            // is not a list of all of them, and a place it said nothing about is not dead.
+            // Every place each arm stands is the plan's, in every behavior the module declares:
+            // what the reading found about some of them is not a list of all of them, and a place
+            // it said nothing about is not dead. A behavior the reading holds no answer for — one
+            // this build does not measure, one whose input it could not read — proves nothing of
+            // the arms it stands them in.
             Answer<Bodies.Elaborated> checked = db.ask(new Bodies.Observable(name));
-            if (!checked.present()) {
+            CheckSurface declared = db.ask(new Shapes.CheckSurface(name)).value();
+            if (!checked.present() || declared == null) {
                 return Answer.absent();
             }
             CoverageSites.Plan plan = checked.value().plan();
             Map<CoverageSites.AsWritten, Dead> dead = new LinkedHashMap<>();
             Set<CoverageSites.AsWritten> taken = new HashSet<>();
             Map<CoverageSites.AsWritten, SourceOutcome.Arm> outcomes = new LinkedHashMap<>();
-            arrives.value().forEach((behavior, asRun) -> {
-                for (CoverageSites.ArmSite site : plan.arms(behavior)) {
+            for (Hir.BehaviorDef behavior : declared.behaviors()) {
+                PathReachability.Answers.AsRun asRun =
+                        arrives.value().getOrDefault(behavior.name(), NOTHING_PROVEN);
+                for (CoverageSites.ArmSite site : plan.arms(behavior.name())) {
                     ControlPlace.Arm arm = site.place();
                     // Only the forks this module's own source wrote. A call into another module
                     // splices that module's forks in here, and an argument this call site hands
@@ -2124,7 +2135,7 @@ public final class Adequacy {
                         taken.add(written);
                     }
                 }
-            });
+            }
             taken.forEach(dead::remove);
             // An arm inside one nothing enters at every place it stands is said with that arm,
             // which is the one an author takes out.
@@ -5162,6 +5173,42 @@ public final class Adequacy {
         public Answer<List<TiltOfADerivedValue>> compute(Db db) {
             LineReadings readings = db.ask(new Readings(name, behavior)).value();
             return readings == null ? Answer.absent() : Answer.of(readings.tilts());
+        }
+    }
+
+    /**
+     * Whether a behavior is shown to answer every run of its body, whatever its inputs hold: what
+     * its callers are told of it ({@link souther.compiler.check.BehaviorAnswers#answersEveryRun}).
+     *
+     * <p>Asked of the body over the behavior's own inputs, once, and of nothing a caller hands it,
+     * so it is the behavior's and not the call's. Asked whether or not the build measures the
+     * behavior, since a caller that is measured reads it: no line of the body is drawn for it. No
+     * where there is no body here to ask. A behavior that reaches itself is refused as that, and is
+     * told of nothing.
+     */
+    public record AnswersEveryRun(String name, String behavior) implements Key<Boolean> {
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Boolean> compute(Db db) {
+            Bodies.Elaborated checked = db.ask(new Bodies.Observable(name)).value();
+            Map<String, InputDomain> inputs = db.ask(new Inputs(name)).value();
+            RuleReadingSource reading = Shapes.ruleReading(db, name).value();
+            AnalysisBody body = checked == null ? null : checked.analysisBodies().get(behavior);
+            InputDomain input = inputs == null ? null : inputs.get(behavior);
+            return Answer.of(body != null && input != null && reading != null
+                    && GuardThresholds.answersEveryRun(body, readingOf(db, input, reading),
+                            checked.elementBindings()
+                                    .getOrDefault(behavior, ElementBindings.NONE)));
+        }
+
+        @Override
+        public Answer<Boolean> onCycle(List<Key<?>> cycle) {
+            return Answer.of(false);
         }
     }
 
