@@ -919,6 +919,18 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.meaning.CasesOfALineAsked#pastTheSteps("
                             + "Ljava/util/List;)V",
                     "out of steps, naming them and the cases left nobody took apart"),
+            Map.entry("souther.compiler.partition.WhatStopsMeasuring#reading("
+                            + "Lsouther/compiler/meaning/Proposition;)V",
+                    "whether the reading of a condition stopped at it, which is what measuring the"
+                            + " body is said to run into"),
+            Map.entry("souther.compiler.partition.WhatStopsMeasuring#drawing("
+                            + "Lsouther/compiler/partition/BoundaryPolicy$Standing;)V",
+                    "whether the lines of a statement have more cases than it is asked questions,"
+                            + " which is what measuring the body is said to run into"),
+            Map.entry("souther.compiler.partition.WhatStopsMeasuring#casesAtMost("
+                            + "Lsouther/compiler/partition/ComparisonAssessment;)J",
+                    "how many cases a line counts for at most, which is as many as it is taken"
+                            + " apart into: past it none is asked"),
             Map.entry("souther.compiler.meaning.CasesOfALineAsked#moreWaysThanAreTakenApart("
                             + "Lsouther/compiler/meaning/DecidingCase;)V",
                     "more ways of choosing than are taken apart, naming the figure and the ones"

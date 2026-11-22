@@ -2,11 +2,12 @@ package souther.compiler.partition;
 
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.core.Core;
+import souther.compiler.observe.Figure;
 
 /**
  * What one elaboration holds of one behavior's body.
  *
- * <p>Three answers, because an absent body is two different facts and a reader of the tree alone
+ * <p>Three answers, the third for one of two reasons, because an absent body is two different facts and a reader of the tree alone
  * cannot tell them apart. A behavior the model gives no body to has nothing to read and a reading
  * of it is complete at once; one the model gives a body to and this elaboration has none of was
  * never read, and what its rules say is unknown rather than nothing. Answered with a tree or a
@@ -40,6 +41,13 @@ public sealed interface BodyReading {
     record NoBody() implements BodyReading {}
 
     /**
+     * The model gives it a body and nothing read it, for one of two reasons: what a measure of the
+     * behavior is short of is the reading, whichever it is, and which it is says what a reader is
+     * told.
+     */
+    sealed interface Unread extends BodyReading {}
+
+    /**
      * The model gives it a body and this elaboration has none, or the build measures other
      * behaviors only and reads none of this one.
      *
@@ -49,5 +57,13 @@ public sealed interface BodyReading {
      * its clauses give is still there to be had, and what its own rules add to that is unknown. A
      * measure over it is short of a reading rather than short of nothing.
      */
-    record NotInElaboration() implements BodyReading {}
+    record NotInElaboration() implements Unread {}
+
+    /**
+     * The elaboration holds it, and the author is told what to change so that measuring it runs
+     * into no figure: it is left unread for the change.
+     *
+     * @param figure the figure measuring it as written runs into
+     */
+    record ToBeChangedFirst(Figure figure) implements Unread {}
 }

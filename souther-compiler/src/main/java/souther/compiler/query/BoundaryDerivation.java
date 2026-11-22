@@ -146,7 +146,7 @@ public final class BoundaryDerivation {
                 // What it went without: the reading of the body, and whatever the readings that
                 // were made found beside it. Those are theirs to name and are not about the body.
                 WeakeningSet without = WeakeningSet.of(
-                        new Weakening.BodyNotInEvaluation(unread.behavior()))
+                        Weakening.ofABodyNotRead(unread.behavior(), unread.why()))
                         .union(PartitionDerivation.weakening(unread.besides()))
                         .union(weightsNotDecided);
                 yield at.isEmpty()

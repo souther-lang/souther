@@ -226,6 +226,9 @@ class EveryQuestionThisCompilerDeclaresIsReachedOrOutsideABatchRunTest {
         into(readingWhatIsPublished(), out);
         // And over a model stating a rule this compiler cannot carry whole, which is the third.
         into(readingARuleThisCannotCarry(), out);
+        // And over a model whose author is told what to change, which `souther examples` leaves
+        // where measuring it runs into a figure.
+        into(leavingWhatIsToBeChanged(), out);
         // And over a model with a mistake in it, which is what a compile reports on.
         into(readingAModelWithAMistakeInIt(), out);
         return out;
@@ -235,6 +238,29 @@ class EveryQuestionThisCompilerDeclaresIsReachedOrOutsideABatchRunTest {
      *  whichever level it is measured. */
     private static List<String> refusalsOf(Compilation compilation) {
         return compilation.errors().stream().map(each -> each.diagnostic().code()).toList();
+    }
+
+    /**
+     * Measuring a model whose author is told of a helper to declare, as {@code souther examples}
+     * does.
+     *
+     * <p><b>A world and not a stimulus.</b> What measuring a behavior runs into is asked only of
+     * one a change is told for, and no source of the corpus is told of one.
+     */
+    private static Compilation leavingWhatIsToBeChanged() {
+        Compilation compilation = Compilation.ofSource("""
+                module told
+
+                let fits (n: Int): Bool = n >= 3
+
+                behavior asked : (a: Int, b: Int) -> Bool
+                let asked (a, b) = List.any(n -> fits(n), [ a, b ])
+                """, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.leaveWhatIsToBeChanged();
+        ACompiledModel.compiles(compilation);
+        AdequacyReport.of(compilation);
+        return compilation;
     }
 
     /**

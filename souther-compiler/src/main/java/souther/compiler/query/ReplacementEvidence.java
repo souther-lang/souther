@@ -9,6 +9,7 @@ import souther.compiler.observe.RunSensitivity;
 import souther.compiler.publish.CanonicalSelection;
 import souther.compiler.publish.PublicationOrders;
 import souther.compiler.observe.RowIdentity;
+import souther.compiler.partition.BodyReading;
 import souther.compiler.partition.Replacement;
 import souther.compiler.partition.ReplacementDisposition;
 import souther.compiler.partition.ReplacementOwed;
@@ -498,12 +499,11 @@ public record ReplacementEvidence(Measure<ReplacementEvidence.Summary> measured)
         return new ReplacementEvidence(new Measurement.NotMeasured<>(why));
     }
 
-    /** The model says this behavior writes a body and the image the run was measured in does not
-     *  carry it. */
-    public static ReplacementEvidence bodyNotInEvaluation(String behavior) {
+    /** The model says this behavior writes a body and nothing read it, for {@code why}. */
+    public static ReplacementEvidence bodyNotRead(String behavior, BodyReading.Unread why) {
         return new ReplacementEvidence(new Measurement.FailedToMeasure<>(
                 BodyWasNotRead.BODY_WAS_NOT_READ,
-                WeakeningSet.of(new Weakening.BodyNotInEvaluation(behavior))));
+                WeakeningSet.of(Weakening.ofABodyNotRead(behavior, why))));
     }
 
     /** The rows ran without the classes that carry the rewrites. */

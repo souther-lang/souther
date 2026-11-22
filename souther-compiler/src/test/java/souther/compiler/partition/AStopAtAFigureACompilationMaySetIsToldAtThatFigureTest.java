@@ -72,6 +72,14 @@ class AStopAtAFigureACompilationMaySetIsToldAtThatFigureTest {
             // before it went, thirty in all, which is more than a figure of fourteen readings.
             CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION, new Stopping(
                     ACaseChainIsReadNoFurtherInAllThanOneConditionIsReadTest.model(5), 14),
+            // The first of three thresholds found, asked in more cases than one question.
+            CompositionBudget.QUESTIONS_A_STATEMENT_IS_ASKED, new Stopping("""
+                    module demo exposing (g)
+
+                    behavior g : (x: Int, y: Int) -> Bool
+                    let g (x, y) =
+                        Option.withDefault(0, List.find(t -> x > t && y > t, [1, 2, 3])) > 1
+                    """, 1),
             // The same statement, with one step to work out where each line decides in: it is
             // read in more than that, so every line is cut off.
             CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN, new Stopping("""

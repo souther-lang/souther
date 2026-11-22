@@ -296,7 +296,7 @@ class AWayAProofLeftUndecidedIsSaidWithItsFigureTest {
                 b.rulePlaces(), b.partPlaces(), readings, b.ruleSettlements(),
                 b.reachShownWrong(), b.combinationReadings(), b.unobserved(), b.rowPlaces(),
                 b.weights(), b.rewritePlaces(), stops, b.helpersCalledOnEachElement(),
-                b.stoppedAtAFigure());
+                b.stoppedAtAFigure(), b.leftToBeChanged());
     }
 
     private static DecisionReading readUnderTheOtherRules(Compilation bodies) {

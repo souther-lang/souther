@@ -124,7 +124,9 @@ A build may also run the compiler as the `SoutherProcessor` annotation processor
 souther examples businesstrip.sou
 ```
 
-It answers on the positions of an input — which classes the behavior's own rules divide it into, and which of them no row stands in — on the boundary values those rules place, on the rules of the body and which of them a row goes through, and on the invariants of the types the behavior reaches, which are owed a row wherever such a value is constructed. What nothing covers is marked `!`, and `--strict` exits non-zero over exactly those, which is the form a build takes.
+It answers on the positions of an input — which classes the behavior's own rules divide it into, and which of them no row stands in — on the boundary values those rules place, on the rules of the body and which of them a row goes through, and on the invariants of the types the behavior reaches, which are owed a row wherever such a value is constructed. What nothing covers is marked `!`, and `--strict` exits non-zero over those, which is the form a build takes.
+
+Where a behavior is written so that measuring it would stop at a limit of the compiler, and the compiler can say what to change, the report says that instead of measuring it. `--strict` refuses such a behavior too, and `--to-the-end` measures it as it is written.
 
 An adequacy line closes the report. It is not a grade: where the report could not settle a question it says `undetermined` and lists what each open position is waiting on, separating what a wider search would decide from what only a new row can. A limit of the compiler is never reported as an answer about the model.
 

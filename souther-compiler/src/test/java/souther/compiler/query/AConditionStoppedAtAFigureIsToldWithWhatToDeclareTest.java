@@ -151,7 +151,7 @@ class AConditionStoppedAtAFigureIsToldWithWhatToDeclareTest {
                                 b.ruleSettlements(), b.reachShownWrong(),
                                 b.combinationReadings(), b.unobserved(), b.rowPlaces(),
                                 b.weights(), b.rewritePlaces(), b.wayStops(),
-                                b.helpersCalledOnEachElement(), stopped)),
+                                b.helpersCalledOnEachElement(), stopped, b.leftToBeChanged())),
                         module.declarations(), module.owedByDeclarations(), module.apart())));
     }
 

@@ -228,6 +228,19 @@ final class Coverages {
     }
 
     /**
+     * The figure measuring {@code behavior}'s body runs into, read against the same input and body
+     * as {@link #partitioningOf} ({@link GuardThresholds#whatStopsMeasuring}); empty where there is
+     * no body to read.
+     */
+    static Optional<Figure> whatStopsMeasuring(Hir.SpecBehavior behavior, InputReading read,
+                                               BodyReading reading) {
+        return reading instanceof BodyReading.Read it && it.analysis() != null
+                ? GuardThresholds.whatStopsMeasuring(behavior.name(), it.analysis(), read,
+                        ElementBindings.of(it.analysis(), read.rules().newtypes()))
+                : Optional.empty();
+    }
+
+    /**
      * The positions one behavior is measured at, with what its own comparisons divide them into.
      *
      * <p>Asked here rather than worked out again wherever it is needed. What a report says is not
@@ -349,9 +362,9 @@ final class Coverages {
                          souther.compiler.partition.BodyReading.NoBody _ ->
                             new souther.compiler.partition.MeasureClosure
                                     .Drawing.FromTheReading();
-                    case souther.compiler.partition.BodyReading.NotInElaboration _ ->
+                    case BodyReading.Unread why ->
                             new souther.compiler.partition.MeasureClosure
-                                    .Drawing.NoneWasMade(behavior.name());
+                                    .Drawing.NoneWasMade(behavior.name(), why);
                 },
                 // And the case each arm of a `match` is, which positions what decides a fork may
                 // turn on, and which forks are within one application of the closures around

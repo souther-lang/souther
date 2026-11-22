@@ -455,6 +455,7 @@ final class IndexEdges {
         names(out, Bodies.Spec.class, "behavior");
         names(out, Bodies.StandingRecursionsOfBody.class, "fn");
         names(out, Bodies.Stated.class, "behavior");
+        names(out, ToBeChangedFirst.class, "behavior");
         names(out, Bodies.WrittenIntoBody.class, "fn");
         names(out, Machines.OfDeclaration.class, "named");
         names(out, Names.CasesListedBy.class, "named");

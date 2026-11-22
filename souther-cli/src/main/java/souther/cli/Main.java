@@ -570,6 +570,7 @@ public final class Main {
         String behavior = null;
         boolean strict = false;
         boolean generate = false;
+        boolean toTheEnd = false;
         // The report is this command's whole output, so everything is measured and nothing is said
         // twice: what the warnings would say, the report says in one place. Neither half of what a
         // compile asks for is a choice here — the measurement is the command, and what the report
@@ -586,6 +587,7 @@ public final class Main {
                 case "--behavior" -> behavior = CanonicalNames.name(args[++i]);   // a name from outside
                 case "--generate" -> generate = true;
                 case "--strict" -> strict = true;
+                case "--to-the-end" -> toTheEnd = true;
                 default -> sources.add(environment.path(args[i]));
             }
         }
@@ -617,9 +619,16 @@ public final class Main {
             // it costs nothing of the measurement. Said once, which is why it is not said below.
             String chosenModule = module;
             String chosenBehavior = behavior;
+            boolean leaving = !toTheEnd;
             Compilation compilation = Compiler.analyzed(read, path, warnings, measure,
                     environment.today(), new Adequacy.Choice(module, behavior),
                     early -> {
+                        // A behavior whose author is told what to change, and which is dear to
+                        // measure as it is written, is left for the change: whoever reads the
+                        // notice below acts on it and measures again.
+                        if (leaving) {
+                            early.leaveWhatIsToBeChanged();
+                        }
                         // Before the notice, whose own walk of the bodies an author waits for too.
                         told.begin(early);
                         toldBeforeTheMeasurement(early, chosenModule, chosenBehavior,
@@ -675,6 +684,13 @@ public final class Main {
                     (render.json() ? err : out).print(rows);
                 }
             }
+            // Beside the document and not in it, since how this command measures them all the same
+            // is a fact about the command.
+            List<String> left = report.leftToBeChanged();
+            if (!left.isEmpty()) {
+                err.println(Messages.get("cli.examples.left", render.locale(),
+                        "`" + String.join("`, `", left) + "`"));
+            }
             // The report is written either way; whether the command succeeded is a separate answer,
             // and an error is an error whatever could still be said about the rows.
             if (!errors.isEmpty()) {
@@ -693,6 +709,13 @@ public final class Main {
                                 ? "cli.examples.strict.refused.json"
                                 : "cli.examples.strict.refused",
                         render.locale(), report.adequacyGaps().size()));
+                return 1;
+            }
+            // And what nobody looked at. A behavior left to be changed may be one whose rows this
+            // would refuse over, so leaving it is no way past the refusal.
+            if (strict && !left.isEmpty()) {
+                err.println(Messages.get("cli.examples.strict.left", render.locale(),
+                        left.size()));
                 return 1;
             }
             return 0;

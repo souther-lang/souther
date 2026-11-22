@@ -49,6 +49,7 @@ import souther.compiler.meaning.AuthoredPointMapping;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.WhereAnApplicationIsMade;
 import souther.compiler.meaning.WhyUnread;
+import souther.compiler.observe.Figure;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Place;
@@ -260,6 +261,21 @@ public final class GuardThresholds {
         }
         return OneReading.over(() -> appliedOn(ComparisonReadings.metOf(behavior, states, read,
                 namesOf(read, elements), witnesses)));
+    }
+
+    /**
+     * The figure measuring the body runs into, as reading its constructs shows before any line of
+     * it is asked where it decides or searched ({@link WhatStopsMeasuring}); empty where it is
+     * shown to run into none.
+     */
+    public static Optional<Figure> whatStopsMeasuring(String behavior, AnalysisBody states,
+                                                      InputReading read,
+                                                      ElementBindings elements) {
+        if (states == null) {
+            return Optional.empty();
+        }
+        return OneReading.over(() -> ComparisonReadings.whatStopsMeasuring(behavior, states, read,
+                namesOf(read, elements)));
     }
 
     /** Each of {@code met} that is a construct of the model, with every application of the

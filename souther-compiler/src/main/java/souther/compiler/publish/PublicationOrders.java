@@ -539,6 +539,7 @@ public final class PublicationOrders {
                 WeakeningWord.A_WEIGHT_NOT_DECIDED,
                 WeakeningWord.A_READING_NOT_TIED_TO_ITS_LINE,
                 WeakeningWord.BODY_NOT_IN_EVALUATION,
+                WeakeningWord.BEHAVIOR_TO_BE_CHANGED_FIRST,
                 WeakeningWord.BEHAVIOR_INPUT_NOT_READ,
                 WeakeningWord.BEHAVIOR_BOUNDARY_NOT_DERIVED,
                 WeakeningWord.RULE_UNREAD,
