@@ -23,6 +23,7 @@ import souther.compiler.numeric.Rel;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
@@ -234,10 +235,16 @@ final class StopAssessment {
             out.add(new Judgement.Unresolved(null, WhyAStopIsNotShown.ON_ROWS_OF_THE_STATEMENT));
         }
         List<LinearForm<NumericTerm>> divisors = divisorsOf(each, read);
+        // What a way leaves is a function of the way, and a comparison written over names that
+        // stand for other expressions has the places of every one of them: many places, most of
+        // them on a way another is on. Read once for each way and not once for each place.
+        Map<List<OnTheWay>, Optional<WhatAWayLeavesOfAValue>> leaving = new HashMap<>();
         for (Place place : places) {
             UndividedByARelation.Working working = place.worked().stops().operations();
             WhatAWayLeavesOfAValue left = place.aRowArrives()
-                    ? WhatAWayLeavesOfAValue.along(read, place.way()) : null;
+                    ? leaving.computeIfAbsent(place.way(), way -> Optional.ofNullable(
+                            WhatAWayLeavesOfAValue.along(read, way))).orElse(null)
+                    : null;
             if (left != null && working.aStopUntold()
                     && working.leavesUntoldBeyond(each.quotients())) {
                 out.add(new Judgement.Unresolved(null, WhyAStopIsNotShown.NO_OPERATION_TOLD));
