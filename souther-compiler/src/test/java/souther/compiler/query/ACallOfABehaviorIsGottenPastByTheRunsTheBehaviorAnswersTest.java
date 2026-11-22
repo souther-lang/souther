@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 import souther.compiler.ACompiledModel;
+import souther.compiler.check.BehaviorAnswers.RunsAnswered;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.report.AdequacyReport;
 
@@ -11,14 +12,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Whether a run stops in a behavior called is asked of the behavior over its own inputs, and where
- * the behavior is not shown to answer every run, the caller's comparison over the call is not said
- * to be read to the end.
+ * the behavior is not shown to answer every run of a row, the caller's comparison over the call is
+ * not said to be read to the end.
  *
  * <p>No body of a behavior is read where a call of it stands, so a stop in one is nothing a caller
- * reads; it is said by what the behavior answers of itself ({@link Adequacy.AnswersEveryRun}). The
- * caller's account is settled where the answer is yes, and left open where it is not.
+ * reads; it is said by what the behavior answers of itself ({@link Adequacy.RunsAnsweredBy}). A
+ * body that stops only past what the representation holds answers the runs of rows and is not
+ * shown to answer every run there is: the two are told apart, since a proof of the second is not
+ * made of the first.
  */
-class ACallOfABehaviorIsGottenPastWhereTheBehaviorAnswersEveryRunTest {
+class ACallOfABehaviorIsGottenPastByTheRunsTheBehaviorAnswersTest {
 
     private static final String NOT_RESOLVED = "stop not resolved";
 
@@ -44,8 +47,37 @@ class ACallOfABehaviorIsGottenPastWhereTheBehaviorAnswersEveryRunTest {
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
+    private static RunsAnswered runsAnswered(Compilation compilation, String behavior) {
+        return compilation.db().ask(new Adequacy.RunsAnsweredBy("m", behavior)).value();
+    }
+
     private static boolean answersEveryRun(Compilation compilation, String behavior) {
-        return compilation.db().ask(new Adequacy.AnswersEveryRun("m", behavior)).value();
+        return runsAnswered(compilation, behavior) == RunsAnswered.EVERY_ONE;
+    }
+
+    /** A text and a list made one longer stop where the representation does: every run of a row
+     *  is answered and not every run there is, in the body that makes it and in one that calls
+     *  it. The caller's comparison is read, as it is beside the operation itself. */
+    @Test
+    void whereOnlyTheRepresentationStopsItTheRunsOfRowsAreAnsweredAndNotEveryRun() {
+        Compilation compilation = measured("""
+                behavior text : (s: String) -> String
+                let text (s) = s ++ "x"
+                behavior list : (xs: List<Int>) -> List<Int>
+                let list (xs) = xs ++ [1]
+                behavior through : (s: String) -> String
+                let through (s) = text(s)
+                data Out = Low | High
+                behavior chosen : (xs: List<Int>) -> Out
+                let chosen (xs) = if List.length(list(xs)) >= 3 then Low else High
+                """);
+
+        for (String behavior : new String[] {"text", "list", "through"}) {
+            assertEquals(RunsAnswered.ALL_BUT_PAST_THE_REPRESENTATION,
+                    runsAnswered(compilation, behavior), behavior);
+        }
+        assertFalse(reportOf(compilation, "chosen").contains(NOT_RESOLVED));
+        assertTrue(reportOf(compilation, "list").contains("a run stops only where"));
     }
 
     @Test
