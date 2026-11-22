@@ -2900,7 +2900,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          * <p>What was told is told nothing more once it is read, so it is taken by as many
          * readings as ask for it.
          */
-        PartReadApart partApart(PartAsked asked, ElementsMet met, Supplier<PartReadApart> read) {
+        private PartReadApart partApart(PartAsked asked, ElementsMet met,
+                                        Supplier<PartReadApart> read) {
             long[] counting = PARTS;
             if (counting != null) {
                 counting[0]++;
