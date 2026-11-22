@@ -13,6 +13,7 @@ import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.meaning.MeaningsOfABody;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.WhyUnread;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -30,12 +31,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * What a run entering an arm of a fork that chooses by no condition states: an attempt's arms by the
  * clauses of the invariant it checks, and a {@code match}'s by which case what it matches is — where
- * that is a value a helper or a behavior called by name answers, by the conditions under which that
- * body answers the case.
+ * that is a value a helper answers, by the conditions under which the helper's body answers the
+ * case.
  *
  * <p>Held against the same conditions written out as an {@code if}, which is read by the rules for
  * comparing numbers and joining truths alone: the two coming to one proposition is what says the arm
  * states what chooses it, nothing added and nothing dropped.
+ *
+ * <p>Where what is matched is the answer of a behavior called by name, the conditions are that
+ * behavior's own account and no part of the caller's: the arm states which case the call answered,
+ * which a run works out, and nothing over the input.
  */
 class AnArmARunEntersStatesWhatChoosesItTest {
 
@@ -126,29 +131,56 @@ class AnArmARunEntersStatesWhatChoosesItTest {
         assertEquals(stated("n <= 5"), arms.get(new MeaningsOfABody.Part.OfACase(1)));
     }
 
-    /** The behavior's body is read where the call stands, its parameter standing for what the call
-     *  handed. */
+    /**
+     * What a behavior answers is a value a run works out, and the conditions its body answers a
+     * case under are that behavior's own account. An arm of the caller's states that the call
+     * answered its case and none of the cases before it, each of them a part the caller reads
+     * nothing of, and nothing about {@code n}.
+     */
     @Test
-    void anArmOfAMatchOnABehaviorsAnswerIsWhereItsBodyAnswersItsCaseOfWhatTheCallHanded() {
+    void anArmOfAMatchOnABehaviorsAnswerStatesWhichCaseTheCallAnsweredAndNothingOfTheInput() {
         Map<MeaningsOfABody.Part.Arm, Proposition> arms = arms(SIZED, null, """
                 match kind(n) with
                     | Big   -> 1
                     | Small -> 2""");
-        assertEquals(stated("n > 5"), arms.get(new MeaningsOfABody.Part.OfACase(0)));
-        assertEquals(stated("n <= 5"), arms.get(new MeaningsOfABody.Part.OfACase(1)));
+        assertStatesOnlyWhichCaseTheCallAnswered(arms);
     }
 
-    /** A call handing the behavior a value worked out of the input is read the same way: the
-     *  body's {@code m > 5} with {@code n + 1} for {@code m}. */
+    /** What the call handed the behavior is no part of what the arm states either: handed a value
+     *  worked out of the input, the arms state the same. */
     @Test
-    void aBehaviorHandedAValueWorkedOutOfTheInputAnswersItsCaseOfThatValue() {
+    void anArmOfAMatchOnABehaviorsAnswerStatesTheSameWhateverTheCallHanded() {
         Map<MeaningsOfABody.Part.Arm, Proposition> arms = arms(SIZED, null, """
                 match kind(n + 1) with
                     | Big   -> 1
                     | Small -> 2""");
-        assertEquals(stated("n > 4"), arms.get(new MeaningsOfABody.Part.OfACase(0)));
-        assertEquals(stated("n <= 4"), arms.get(new MeaningsOfABody.Part.OfACase(1)));
+        assertStatesOnlyWhichCaseTheCallAnswered(arms);
     }
+
+    /**
+     * The first arm of {@code arms} is the answer being its case, unread as the answer of a
+     * behavior whose body the caller does not read; the second is that denied and the answer being
+     * its own case, unread the same way.
+     */
+    private static void assertStatesOnlyWhichCaseTheCallAnswered(
+            Map<MeaningsOfABody.Part.Arm, Proposition> arms) {
+        Proposition.Unread big = assertInstanceOf(Proposition.Unread.class,
+                arms.get(new MeaningsOfABody.Part.OfACase(0)));
+        assertEquals(ANSWER_NOT_READ, big.why());
+        assertTrue(big.holds(), big::toString);
+
+        Proposition.All small = assertInstanceOf(Proposition.All.class,
+                arms.get(new MeaningsOfABody.Part.OfACase(1)));
+        assertEquals(2, small.parts().size(), small::toString);
+        assertEquals(big.denied(), small.parts().get(0));
+        Proposition.Unread itsOwn = assertInstanceOf(Proposition.Unread.class,
+                small.parts().get(1));
+        assertEquals(ANSWER_NOT_READ, itsOwn.why());
+        assertTrue(itsOwn.holds(), itsOwn::toString);
+        assertEquals(big.where(), itsOwn.where(), "both are parts of the one match");
+    }
+
+    private static final WhyUnread ANSWER_NOT_READ = new WhyUnread.WhatACalledBehaviorAnswers();
 
     private static final String SIZED = """
             data Big

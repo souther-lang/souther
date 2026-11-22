@@ -92,7 +92,8 @@ public sealed interface WhyUnread {
                  TwoElementsOfOneContainer _, NoLawFor _, NoWordsFor _, NotProvedOfItsBody _,
                  NoFormOfWhatItAnswers _, ANumberOfWhatAnOperationAnswers _,
                  ADateMovedByMonths _, APartOfADateMovedByMonths _,
-                 CodePointsOfWhatAnOperationAnswers _, AClauseOfAnInvariant _, AnInvariantNotReached _, InACalledBody _,
+                 CodePointsOfWhatAnOperationAnswers _, AClauseOfAnInvariant _,
+                 AnInvariantNotReached _, WhatACalledBehaviorAnswers _,
                  WhatARecursiveHelperAnswers _, SeveralValuesNotGoneInto _,
                  CopiesStateDifferentThings _, NotMetByTheReading _,
                  WhichElementARunStopsAt _ -> Optional.empty();
@@ -302,33 +303,11 @@ public sealed interface WhyUnread {
     record AnInvariantNotReached() implements WhyUnread {}
 
     /**
-     * What a behavior called by name answers turns, in its body read where the call stands, on
-     * something a call is not the place to say anything about.
+     * What a behavior called by name answers. The call is a value a run works out, as what a
+     * recursive helper answers is: what the behavior's body states is the behavior's own account,
+     * and no part of what its caller's body states of the input.
      */
-    record InACalledBody(What what) implements WhyUnread {
-
-        public InACalledBody {
-            Objects.requireNonNull(what, "the body turns on something");
-        }
-
-        /** What the called body's answer turns on, that the call cannot say. */
-        public enum What {
-
-            /**
-             * What one of its own dependencies answers. A row stands in the caller's dependencies
-             * and not the called behavior's, and which answer it is was named by an evaluation in
-             * that body, which each call makes afresh.
-             */
-            WHAT_ITS_DEPENDENCY_ANSWERS,
-
-            /** The behavior itself, reached again while its own answer is being read. */
-            ITSELF,
-
-            /** Nothing: the body of the behavior was not read, or it is called with some other
-             *  number of values than it takes. */
-            AN_ANSWER_NOT_READ
-        }
-    }
+    record WhatACalledBehaviorAnswers() implements WhyUnread {}
 
     /**
      * What a helper answers where the helper calls itself, so its body is not one expression to read

@@ -26,9 +26,7 @@ class WhatAReportNumbersIsAnAnswerOfItsOwnTest {
     private static final String SOURCE = """
             module m
 
-            behavior clamp : (n: Int) -> Int
-
-            let clamp (n) = if n > 50 then 50 else n
+            let clamp (n: Int): Int = if n > 50 then 50 else n
 
             behavior full : (n: Int) -> Bool
 

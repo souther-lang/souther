@@ -490,6 +490,10 @@ final class Pullback {
     /** Whether the comparisons being read are the parts of a quotient's statement, which work out
      *  a product the quotient does not. */
     private final Scoped<Boolean> restatingAQuotient = state.setting(Compared.BY_VALUE, false);
+    /** Whether a call a run works out stands as the value it answers ({@link Quantity.OfACall}):
+     *  under the last rule for a comparison only ({@link #ofBoundValues}), so that every rule
+     *  reading the call over the input, and every way into it, is asked first. */
+    private final Scoped<Boolean> callsStandAsValues = state.setting(Compared.BY_VALUE, false);
     /**
      * The candidates being tried, innermost on top. Everything a candidate says of the rows of what
      * it concludes is said into the one on top, so that what a candidate set aside said is said
@@ -1440,8 +1444,7 @@ final class Pullback {
                         : new ALawRead(applied, e, reads).aStringInALanguage(),
                 () -> byALaw(applied, e, AnswerAspect.TRUTH, reads, new Denotation(e, reads)),
                 () -> acrossAWalk(e, AnswerAspect.TRUTH, reads),
-                () -> acrossARecursion(e, AnswerAspect.TRUTH, reads),
-                () -> inTheCalledBody(e, itself, reads)));
+                () -> acrossARecursion(e, AnswerAspect.TRUTH, reads)));
         return taken != null ? taken
                 : unread(e, reads, unreadAs(applied, AnswerAspect.TRUTH, reads));
     }
@@ -3789,7 +3792,6 @@ final class Pullback {
                 () -> byALaw(applied, e, AnswerAspect.EMPTINESS, reads, asked),
                 () -> acrossAWalk(e, AnswerAspect.EMPTINESS, reads),
                 () -> acrossARecursion(e, AnswerAspect.EMPTINESS, reads),
-                () -> inTheCalledBody(e, new Asked.OnASide(AnswerAspect.EMPTINESS), reads),
                 () -> {
                     DecisionSubject held = reads.pathOf(e, read.rules().newtypes())
                             instanceof ValuesAt.At(TermPath at)
@@ -3823,7 +3825,6 @@ final class Pullback {
                         ? leaf(new Derivation.UnderOneOfItsOwnKeys(), e, reads) : null,
                 () -> acrossAWalk(e, AnswerAspect.PRESENCE, reads),
                 () -> acrossARecursion(e, AnswerAspect.PRESENCE, reads),
-                () -> inTheCalledBody(e, new Asked.OnASide(AnswerAspect.PRESENCE), reads),
                 () -> {
                     DecisionSubject subject = reads.pathOf(e, read.rules().newtypes())
                             instanceof ValuesAt.At(TermPath at)
@@ -4192,8 +4193,8 @@ final class Pullback {
      * Which case {@code value} is, where it stands: written in arms where it is chosen by them, and
      * at each arm what that arm answers.
      *
-     * <p>The one reading of it, for a body's answer and for the value a {@code match} chooses its
-     * arm by alike.
+     * <p>The one reading of it, for the value a {@code match} chooses its arm by and for what each
+     * arm of a choice that value is answers.
      *
      * @param nowhere what the value is, as the place it stands at no position, where it is made of
      *                nothing followed back to the input
@@ -4221,7 +4222,7 @@ final class Pullback {
         if (answer != null) {
             return new WhichCase.AtAnAnswer(answer);
         }
-        WhichCase called = calledFor(value, nowhere);
+        WhichCase called = calledFor(value);
         // Made of nothing followed back to the input: what an operation answers, or a value the
         // source works out.
         return called != null ? called : new WhichCase.Unread(
@@ -4245,13 +4246,10 @@ final class Pullback {
 
     /**
      * What {@code value} answers where it is a call of a behavior that is no dependency the row
-     * stands in: the case its body answers, read where the call stands with the parameters standing
-     * for what the call handed ({@link #intoACall}) — or null where it is no such call.
-     *
-     * @param nowhere what the value is, as the place it stands at no position, where what the body
-     *                answers is made of nothing followed back to the input
+     * stands in: a value a run works out, whose case is not read where the call stands
+     * ({@link #whatABehaviorAnswers}) — or null where it is no such call.
      */
-    private WhichCase calledFor(Denotation value, WhyUnread.AtNoPosition.Place nowhere) {
+    private WhichCase calledFor(Denotation value) {
         Denotation stands = value.at().standing(value.value(), read.rules().symbols(),
                 read.rules().newtypes());
         if (!(AnOperationApplied.of(Core.withoutStanding(stands.value()))
@@ -4259,26 +4257,7 @@ final class Pullback {
                 || stands.at().standsIn(behavior)) {
             return null;
         }
-        Inside.ACall called = intoACall(stands);
-        return called == null
-                ? new WhichCase.Unread(whatABehaviorAnswers(behavior, stands.at()))
-                : throughTheBody(behavior, answered(called.body(), nowhere));
-    }
-
-    /** {@code answered}, read off the body of {@code behavior} where a call stands, with each arm
-     *  reached as the body reaches it ({@link Derivation.ABehaviorsBody}). */
-    private static WhichCase throughTheBody(ValueName.Behavior behavior,
-                                                           WhichCase answered) {
-        return switch (answered) {
-            case WhichCase.Written _, WhichCase.Unread _,
-                 WhichCase.AtAnInput _, WhichCase.AtAnAnswer _ ->
-                    answered;
-            case WhichCase.ByItsArms(var arms) ->
-                    new WhichCase.ByItsArms(arms.stream().map(arm ->
-                            new WhichCase.Arm(
-                                    new Derivation.ABehaviorsBody(behavior, arm.reached()),
-                                    throughTheBody(behavior, arm.answers()))).toList());
-        };
+        return new WhichCase.Unread(whatABehaviorAnswers(behavior, stands.at()));
     }
 
     /**
@@ -5559,11 +5538,6 @@ final class Pullback {
         if (!(AnOperationApplied.of(Core.withoutStanding(made.value()))
                 instanceof AnOperationApplied applied
                 && applied.operation() instanceof ValueName.Stdlib operation)) {
-            Sized ofTheAnswer = sizeOfAFieldOfACallsAnswer(Core.withoutStanding(made.value()),
-                    made.at());
-            if (ofTheAnswer != null) {
-                return ofTheAnswer;
-            }
             return new Sized.NotSized(
                     new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT));
         }
@@ -6917,9 +6891,7 @@ final class Pullback {
                     read.rules().newtypes());
             return firstThatReadsIt(List.of(
                     () -> on.meeting(made, container, some),
-                    () -> on.everyElementMeets(made, container, some),
-                    () -> inTheCalledBody(made.value(), new Asked.SomeElement(this, some),
-                            made.at())));
+                    () -> on.everyElementMeets(made, container, some)));
         }
 
         /**
@@ -8192,9 +8164,8 @@ final class Pullback {
                 return inEachArm;
             }
             LinearForm<LawNumber<DeclaredArgument>> form = compared.form();
-            // An argument chosen by cases is compared on each of them, and one a behavior's call
-            // answers through its body, as a comparison the source wrote is
-            // ({@link #throughWhatItStopsAt}).
+            // An argument chosen by cases is compared on each of them, as a comparison the source
+            // wrote is ({@link #throughWhatItStopsAt}).
             List<Weighed> numbers = new ArrayList<>();
             Map<LawNumber<DeclaredArgument>, ExactRatio> others = new LinkedHashMap<>();
             form.coefs().forEach((number, by) -> {
@@ -9589,8 +9560,10 @@ final class Pullback {
         if (wayIn.isPresent()) {
             return null;
         }
-        return overQuantities(ASide.of(left), ASide.of(right),
-                comparison.claim().statedRelation());
+        try (Restore _ = callsStandAsValues.set(true)) {
+            return overQuantities(ASide.of(left), ASide.of(right),
+                    comparison.claim().statedRelation());
+        }
     }
 
     /**
@@ -12527,10 +12500,9 @@ final class Pullback {
     private record WalkOfAPart(SeededWalk walk, InputReads at) {}
 
     /**
-     * The walk of the part {@code node} takes of what a walk from a seed ends with — or of what a
-     * call of a behavior whose body is one answers — where that part is a walk of its own
-     * ({@link SeededWalk#ofThePart}), a field of a record and a component of a tuple alike. Null
-     * where {@code node} takes no such part.
+     * The walk of the part {@code node} takes of what a walk from a seed ends with, where that part
+     * is a walk of its own ({@link SeededWalk#ofThePart}), a field of a record and a component of a
+     * tuple alike. Null where {@code node} takes no such part.
      */
     private WalkOfAPart aPartOfAWalk(Core node, InputReads at) {
         SeededWalk.Taken taken = SeededWalk.Part.taken(node);
@@ -12539,11 +12511,6 @@ final class Pullback {
         }
         Denotation whole = at.standing(taken.whole(), read.rules().symbols(),
                 read.rules().newtypes());
-        Inside.ACall called = intoACall(whole);
-        if (called != null) {
-            whole = called.body().at().standing(called.body().value(), read.rules().symbols(),
-                    read.rules().newtypes());
-        }
         SeededWalk walk = SeededWalk.of(whole.value(), blocksAt(whole));
         InputReads walkAt = whole.at();
         // A part of a part is a part of the walk of the outer one.
@@ -12899,8 +12866,11 @@ final class Pullback {
                         && DefaultBoundOperationFacts.get().takenAs(measure)
                                 instanceof TakenAs.HowManyItHolds
                         && measured.args().size() == 1) {
+                    // Where its law says nothing of what it was handed, it is still a number a
+                    // run may work out, which is asked below.
                     return sizeOf(measured.args().getFirst(), at)
-                            instanceof Sized.AsAForm(LinearForm<Quantity> form) ? form : null;
+                            instanceof Sized.AsAForm(LinearForm<Quantity> form) ? form
+                            : whatACallAnswersOnARun(node, Core.withoutStanding(node), at);
                 }
                 // What a container the body wrote out adds up to, element by element.
                 LinearForm<Quantity> total = totalOfWrittenOut(node, at);
@@ -12967,7 +12937,7 @@ final class Pullback {
                     return LinearForm.atom(new DecisionAtom.OfAnAnswer(answered));
                 }
                 if (!(under instanceof Core.Read name)) {
-                    return null;
+                    return whatACallAnswersOnARun(node, under, at);
                 }
                 // A binding whose value turns on which application this is holds another value on
                 // the next, and its name would name them alike.
@@ -12998,8 +12968,8 @@ final class Pullback {
                     // is a number for each case and not one the body bound.
                     case ReadMeaning.Through(Denotation denotes)
                             when Choice.of(underItsAccesses(denotes).value()) != null -> null;
-                    // And so does one given a value worked out from such a choice, or from what a
-                    // behavior's call answers: the reading reads it on each arm, or in the body.
+                    // And so does one given a value worked out from such a choice: the reading
+                    // reads it on each arm.
                     case ReadMeaning.Through _ when inside != null && aWayInAt(inside) != null ->
                             null;
                     // A name for one value the source wrote out stands for that value, which no
@@ -13023,6 +12993,31 @@ final class Pullback {
                             name.binding(), steps, node.type(), Optional.empty(),
                             readOffAContainer(name, steps, at)));
                 };
+            }
+
+            /**
+             * The whole number {@code under}, a call some source wrote, answers on a run, where
+             * a run works it out and no reading does ({@link GuardThresholds#isWorkedOutByARun})
+             * — or null where it is no such call, or its value turns on which application this
+             * is. One value, as a name bound to the call would stand for: a comparison over it
+             * is the same statement whether or not the body named it.
+             */
+            private LinearForm<Quantity> whatACallAnswersOnARun(Core node, Core under,
+                                                              InputReads at) {
+                ConstructOccurrence call = switch (Core.withoutStanding(under)) {
+                    case Core.Call made -> made.occurrence();
+                    case Core.PreservedCall kept -> kept.occurrence();
+                    default -> null;
+                };
+                if (!callsStandAsValues.get() || call == null
+                        || call.equals(ConstructOccurrence.unwritten())
+                        || !Type.INT.equals(node.type())
+                        || !GuardThresholds.isWorkedOutByARun(under, at, read)
+                        || at.turnsOnAnApplication(under)) {
+                    return null;
+                }
+                return LinearForm.atom(new Quantity.OfACall(call, node.type(),
+                        Optional.of(noRuleFor(under, at))));
             }
 
             @Override
@@ -13672,15 +13667,14 @@ final class Pullback {
      * A comparison whose arithmetic stops at a value a reading can go into, read through it — or
      * null where its arithmetic stops at none, or goes through.
      *
-     * <p>Two values are gone into. One chosen by cases is read as the choice: in each case, the same
-     * comparison read again with the choice standing for what that case answers. Wherever the choice
-     * stands in it — added to a number, under a field taken off what each case builds, as the
-     * argument of an operation — the comparison holds exactly where it holds of the answer of the
-     * case taken, which is {@link #ofAChoice}'s rule for a choice standing anywhere and not only as
-     * a whole side. And a call of a behavior no row stands in is read as its body, with the
-     * parameters standing for what the call handed ({@link Derivation.ABehaviorsBody}). Each reading
-     * is every rule for a comparison again, so a case comes out as a cut on the input where its
-     * answer is one.
+     * <p>A value chosen by cases is read as the choice: in each case, the same comparison read again
+     * with the choice standing for what that case answers. Wherever the choice stands in it — added
+     * to a number, under a field taken off what each case builds, as the argument of an operation —
+     * the comparison holds exactly where it holds of the answer of the case taken, which is
+     * {@link #ofAChoice}'s rule for a choice standing anywhere and not only as a whole side. Each
+     * reading is every rule for a comparison again, so a case comes out as a cut on the input where
+     * its answer is one. A call of a behavior no row stands in is no value gone into: it is a value
+     * a run works out ({@link #whatABehaviorAnswers}), and the arithmetic stops at it.
      *
      * <p>A value is gone into once: read again with it taken, the arithmetic goes through it, and
      * where it stops next is another such value or none at all.
@@ -13796,9 +13790,6 @@ final class Pullback {
         /** A value chosen by cases, standing as {@code chosen}. */
         record AChoice(Denotation chosen) implements Inside {}
 
-        /** A call of {@code behavior}, whose body a reading enters as {@code body}. */
-        record ACall(Core call, ValueName.Behavior behavior, Denotation body) implements Inside {}
-
         /**
          * A walk from {@code seed} over elements written out whose step is {@code step}, an
          * {@code if} that keeps what the walk carried on one side and answers a value of the
@@ -13837,7 +13828,7 @@ final class Pullback {
     /**
      * {@code again} read through {@code inside}, handed what puts a reading there
      * ({@link InputReads#taking}): once for each arm of a choice, as the choice, each arm where a
-     * run takes it; once in the body of a behavior a call names.
+     * run takes it.
      *
      * @param reads where the reading being split stands, which counts the readings it is one of
      * @param at    where what is read again is a part of a larger condition, or null
@@ -13896,9 +13887,6 @@ final class Pullback {
                                 fork == null ? null : fork.value(),
                                 fork == null ? null : fork.at())));
             }
-            case Inside.ACall(Core call, ValueName.Behavior behavior, Denotation body) ->
-                    new Derivation.ABehaviorsBody(behavior,
-                            again.apply(on -> on.taking(call, body, 1)));
             // The walk ends with the value of the last application whose condition holds, or with
             // the seed where none does. Read from the seed out: what the walk ends with after an
             // element is this step's answer for it where the condition selects it, and what it
@@ -14142,7 +14130,6 @@ final class Pullback {
                     case null -> true;
                     case Inside.AChoice(Denotation chosen) ->
                             number.at().taken(chosen.value()) != null;
-                    case Inside.ACall(Core call, var _, var _) -> number.at().taken(call) != null;
                     case Inside.AFiniteSelection(Core walk, var _, var _, var _, var _) ->
                             number.at().taken(walk) != null;
                     case Inside.ACallDefinedByCases(Core call, var _, var _, var _) ->
@@ -14231,9 +14218,8 @@ final class Pullback {
 
     /**
      * The first value a reading can go into at {@code value} or inside it — what it is chosen by
-     * cases, a behavior's call, a name standing for one of several values written out, or, failing
-     * those, one of them inside what an operation was handed or an operator works out — or null
-     * where there is none.
+     * cases, a name standing for one of several values written out, or, failing those, one of them
+     * inside what an operation was handed or an operator works out — or null where there is none.
      *
      * <p>Wherever inside: a size of a container one of whose parts is chosen by cases is the size
      * of what the case taken answers, however deep the choice stands, and the reading reads it on
@@ -14252,10 +14238,6 @@ final class Pullback {
         Denotation chosen = chosenAt(value);
         if (chosen != null) {
             return new Inside.AChoice(chosen);
-        }
-        Inside.ACall called = intoACall(value);
-        if (called != null) {
-            return called;
         }
         Inside.AFiniteSelection selected = intoAFiniteSelection(value);
         if (selected != null) {
@@ -14577,26 +14559,6 @@ final class Pullback {
     }
 
     /**
-     * {@code value}, where it is a call of a behavior no row stands in, entered: the behavior's body
-     * read with its parameters standing for what the call handed ({@link InputReads#calling}) — or
-     * null where it is no such call, or the body is not read there: it has none, or it is entered
-     * already on the way here.
-     */
-    private Inside.ACall intoACall(Denotation value) {
-        Core e = Core.withoutStanding(value.value());
-        if (!(AnOperationApplied.of(e) instanceof AnOperationApplied applied
-                && applied.operation() instanceof ValueName.Behavior behavior)
-                || value.at().standsIn(behavior)) {
-            return null;
-        }
-        Optional<CalledBody> body = read.rules().declarations().answers().bodyOf(behavior);
-        InputReads inside = body.isEmpty() ? null : value.at().calling(behavior, body.get(),
-                applied.args(), read.rules().newtypes());
-        return inside == null ? null
-                : new Inside.ACall(e, behavior, new Denotation(body.get().body(), inside));
-    }
-
-    /**
      * {@code value}, where it is a walk from a seed over a container the body wrote out, whose step
      * is an {@code if} keeping what it carried on one side and answering a value of the element on
      * the other — or null where it is anything else.
@@ -14671,7 +14633,7 @@ final class Pullback {
      * it is the declaration's ({@link #endsNoRun(Denotation)}).
      */
     private boolean endsNoRun(Denotation value) {
-        return WorkedOutToReachIt.asking(read, this::endsNoRunInTheBodyOfACall).endsNoRun(value);
+        return WorkedOutToReachIt.asking(read).endsNoRun(value);
     }
 
     /**
@@ -14698,32 +14660,11 @@ final class Pullback {
         };
     }
 
-    /**
-     * Whether {@code value} is a call of a behavior whose body, read with its parameters standing
-     * for what the call handed, ends no run — which {@link WhatARunMayEndFor} leaves unknown of a
-     * helper, because it is not the helper's to say. What the call is handed is a part of it.
-     */
-    private boolean endsNoRunInTheBodyOfACall(Denotation value) {
-        Inside.ACall called = intoACall(value);
-        return called != null && endsNoRun(called.body());
-    }
-
 
     /** Whether {@code arm} is the name of what a walk carried. */
     private static boolean keeps(Core arm, BindingId carried) {
         return Core.withoutStanding(arm) instanceof Core.Read name
                 && name.binding().equals(carried);
-    }
-
-    /**
-     * How {@code e}, a call of a behavior no row stands in, answers {@code asked}, read off the
-     * behavior's body where the call stands — or null where it is no such call, or the body is not
-     * read there ({@link #intoACall}).
-     */
-    private Derivation inTheCalledBody(Core e, Asked asked, InputReads reads) {
-        Inside.ACall called = intoACall(new Denotation(e, reads));
-        return called == null ? null : new Derivation.ABehaviorsBody(called.behavior(),
-                observe(called.body().value(), asked, called.body().at()));
     }
 
     /**
@@ -14996,69 +14937,6 @@ final class Pullback {
             Sized searched = sizeOfASearch(helper, args, reads);
             return searched != null ? searched : sizeOfALine(helper, args, reads);
         }
-    }
-
-    /**
-     * How many {@code field} of {@code e} holds, where {@code e} is a field of what a call of a
-     * behavior answers and the behavior's body builds that case in one place only: how many what
-     * it builds there holds, read in the body with its parameters standing for what the call
-     * handed ({@link #intoACall}) — or null where it is not so.
-     *
-     * <p>One place, because the field is then the same value whichever run built it; a case built
-     * in two places holds a different number in each, which is no one number of the call.
-     */
-    private Sized sizeOfAFieldOfACallsAnswer(Core e, InputReads at) {
-        if (!(e instanceof Core.FieldAccess access)) {
-            return null;
-        }
-        Denotation target = at.standing(access.target(), read.rules().symbols(),
-                read.rules().newtypes());
-        Inside.ACall called = intoACall(target);
-        if (called == null) {
-            return null;
-        }
-        List<Denotation> built = new ArrayList<>();
-        if (!fieldsBuiltIn(called.body(), access.target().type(), access.field(), built)
-                || built.size() != 1) {
-            return null;
-        }
-        return sizeOf(built.getFirst().value(), built.getFirst().at());
-    }
-
-    /**
-     * What {@code field} is of each value of type {@code built} that {@code answer} builds, put
-     * into {@code out} — or false where some way the answer is made is not one that builds a value
-     * outright: a name, a call, anything not followed to a construction.
-     */
-    private boolean fieldsBuiltIn(Denotation answer, Type built, String field,
-                                  List<Denotation> out) {
-        Denotation chosen = chosenAt(answer);
-        if (chosen != null) {
-            List<Denotation> arms = new ArrayList<>();
-            for (Choice.Arm arm : Choice.of(Core.withoutStanding(chosen.value())).arms()) {
-                InputReads inside = chosen.at().choosing(arm.decidedBy(), read.rules().symbols(),
-                        read.rules().newtypes());
-                if (!fieldsBuiltIn(new Denotation(arm.answers(), inside), built, field, arms)) {
-                    return false;
-                }
-            }
-            out.addAll(arms);
-            return true;
-        }
-        Denotation stands = answer.at().standing(answer.value(), read.rules().symbols(),
-                read.rules().newtypes());
-        if (!(Core.withoutStanding(stands.value()) instanceof Core.Construct made)) {
-            return false;
-        }
-        if (!built.equals(made.type())) {
-            return true;
-        }
-        for (Core.FieldValue each : made.values()) {
-            if (each.field().equals(field)) {
-                out.add(new Denotation(each.value(), stands.at()));
-            }
-        }
-        return true;
     }
 
     /**
@@ -16997,9 +16875,9 @@ final class Pullback {
      * goes into — or null where the condition is no comparison, or its arithmetic stops at nothing
      * of the kind.
      *
-     * <p>A choice or a call: what the condition compares is then one of several values, and read
-     * as it stands the condition is each of them written out. Gone into first, it is one of them,
-     * which is a comparison the arms taken on the way can settle.
+     * <p>A choice: what the condition compares is then one of several values, and read as it stands
+     * the condition is each of them written out. Gone into first, it is one of them, which is a
+     * comparison the arms taken on the way can settle.
      */
     private Inside whereTheConditionStops(Core.If iff, InputReads where) {
         if (!(Core.withoutStanding(iff.cond()) instanceof Core.Binary compared)
@@ -17008,7 +16886,7 @@ final class Pullback {
         }
         Inside inside = aWayIn(List.of(new Denotation(compared.left(), where),
                 new Denotation(compared.right(), where)));
-        return inside instanceof Inside.AChoice || inside instanceof Inside.ACall ? inside : null;
+        return inside instanceof Inside.AChoice ? inside : null;
     }
 
     /**
@@ -17404,23 +17282,13 @@ final class Pullback {
      *
      * <p>A dependency's answer is the one a row stands in wherever the model writes the call
      * ({@link DecisionSubjects#anAnswer}), so one of them unread is a call no source wrote. Any other
-     * behavior's is read off its body where the call stands ({@link #intoACall}), and one that was
-     * not is one whose body was entered already on the way here — the behavior reached again while
-     * its own answer is being read — or one with no body read: inside a body a call entered, a
-     * dependency of that body, whose answer each call names afresh; anywhere, a behavior called with
-     * another number of values than it takes.
+     * behavior's is what a run works out: its body is the behavior's own account, and no part of
+     * what the caller's body states of the input.
      */
-    private WhyUnread whatABehaviorAnswers(ValueName.Behavior behavior, InputReads reads) {
-        if (reads.standsIn(behavior)) {
-            return new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT);
-        }
-        if (reads.entered(behavior)) {
-            return new WhyUnread.InACalledBody(WhyUnread.InACalledBody.What.ITSELF);
-        }
-        boolean hasABody = read.rules().declarations().answers().bodyOf(behavior).isPresent();
-        return new WhyUnread.InACalledBody(!hasABody && reads.insideACalledBody()
-                ? WhyUnread.InACalledBody.What.WHAT_ITS_DEPENDENCY_ANSWERS
-                : WhyUnread.InACalledBody.What.AN_ANSWER_NOT_READ);
+    private static WhyUnread whatABehaviorAnswers(ValueName.Behavior behavior, InputReads reads) {
+        return reads.standsIn(behavior)
+                ? new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT)
+                : new WhyUnread.WhatACalledBehaviorAnswers();
     }
 
     /** Whether the arithmetic stopped where a run aborts, so that no number is there to compare. */

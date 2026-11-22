@@ -108,6 +108,8 @@ class AMeasureIsIntroducedInOnePlaceTest {
             Map.entry("souther.compiler.query.InputCaseEvidence#none(I)Lsouther/compiler/query/InputCaseEvidence;", 1),
             Map.entry("souther.compiler.query.InputCaseEvidence#of(Ljava/lang/String;ILjava/util/Set;Ljava/util/Set;Lsouther/compiler/query/InputCaseEvidence$Cases;ZLsouther/compiler/query/WeakeningSet;)Lsouther/compiler/query/InputCaseEvidence;", 3),
             Map.entry("souther.compiler.query.BoundaryDerivation#noSubject()Lsouther/compiler/query/Measure;", 1),
+            // The lines of a behavior the build measures none of: not asked, and said so.
+            Map.entry("souther.compiler.query.BoundaryDerivation#notAsked()Lsouther/compiler/query/Measure;", 1),
             // One more than the partition beside it, because a reading of the lines answers two
             // questions: a reading that ran out and still could not hold a line against the lines
             // beside it is partial, which the partition has no counterpart of.

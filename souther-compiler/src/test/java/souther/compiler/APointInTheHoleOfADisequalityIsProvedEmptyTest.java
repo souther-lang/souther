@@ -3,11 +3,14 @@ package souther.compiler;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.ComparisonClaim;
+import souther.compiler.check.RuleRef;
+import souther.compiler.partition.AuthoredLine;
 import souther.compiler.partition.PointRole;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderObligationPointAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
+import souther.compiler.types.WrittenOwner;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -74,13 +77,11 @@ class APointInTheHoleOfADisequalityIsProvedEmptyTest {
                 | (60) -> 1
             """;
 
-    /** The hole reached through a callee: the first arm of {@code clamp} draws the line. */
-    private static final String THROUGH_A_CALLEE = """
+    /** The hole reached through a helper: the first arm of {@code clamp} draws the line. */
+    private static final String THROUGH_A_HELPER = """
             module m
 
-            behavior clamp : (n: Int) -> Int
-
-            let clamp (n) = if n > 50 then 50 else n
+            let clamp (n: Int): Int = if n > 50 then 50 else n
 
             behavior full : (n: Int) -> Bool
 
@@ -161,11 +162,15 @@ class APointInTheHoleOfADisequalityIsProvedEmptyTest {
     }
 
     @Test
-    void theOffPointOfALineReadThroughACalleeIsOneNoRowCanStandAtWhileItsGapIsStillOwed() {
+    void theOffPointOfALineReadThroughAHelperIsOneNoRowCanStandAtWhileItsGapIsStillOwed() {
         assertEquals(List.of("ON Unmet", "OFF Refuted", "IN Unmet"),
-                pointsOf(THROUGH_A_CALLEE, "full", ComparisonClaim.Cut.class),
+                pointsOf(THROUGH_A_HELPER, "full", "full", ComparisonClaim.Cut.class),
                 "the first arm of clamp draws the line; 50 is outside the case it decides in, and"
                         + " 51 and the values past it are a gap no row fills");
+        assertEquals(List.of("ON Unmet", "OFF Met", "IN Unmet"),
+                pointsOf(THROUGH_A_HELPER, "full", "clamp", ComparisonClaim.Cut.class),
+                "the helper's own comparison is another line of full, which decides in no case"
+                        + " of the equality: the row at 50 stands beside it");
     }
 
     /**
@@ -173,6 +178,12 @@ class APointInTheHoleOfADisequalityIsProvedEmptyTest {
      * role and what became of the obligation.
      */
     private static List<String> pointsOf(String model, String behavior,
+                                         Class<? extends ComparisonClaim> claim) {
+        return pointsOf(model, behavior, behavior, claim);
+    }
+
+    /** The same, of the line a comparison written in the body of {@code writtenIn} draws. */
+    private static List<String> pointsOf(String model, String behavior, String writtenIn,
                                          Class<? extends ComparisonClaim> claim) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
@@ -184,7 +195,11 @@ class APointInTheHoleOfADisequalityIsProvedEmptyTest {
                 continue;
             }
             for (BorderObligationPointAssessment point : each.account()) {
-                if (claim.isInstance(point.point().line().line().facts().claim())) {
+                AuthoredLine line = point.point().line().line();
+                if (claim.isInstance(line.facts().claim())
+                        && line.which().rule() instanceof RuleRef.Comparison written
+                        && written.origin().owner() instanceof WrittenOwner.Body body
+                        && body.definition().equals(writtenIn)) {
                     PointRole role = point.point().role();
                     out.add(role + " "
                             + point.item().disposition().getClass().getSimpleName());

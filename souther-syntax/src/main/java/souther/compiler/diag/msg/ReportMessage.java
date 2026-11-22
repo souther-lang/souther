@@ -1332,11 +1332,7 @@ public sealed interface ReportMessage extends Message {
 
     record AnInvariantNotReached() implements ReportMessage, Prose {}
 
-    record AnotherBehaviorTurningOnItsDependency() implements ReportMessage, Prose {}
-
-    record AnotherBehaviorReachingItself() implements ReportMessage, Prose {}
-
-    record AnotherBehaviorNotRead() implements ReportMessage, Prose {}
+    record WhatACalledBehaviorAnswers() implements ReportMessage, Prose {}
 
     record NoConditionHereSaysThat(String operation, String proposition)
             implements ReportMessage, Prose {}

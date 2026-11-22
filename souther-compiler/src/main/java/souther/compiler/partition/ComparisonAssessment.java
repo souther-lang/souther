@@ -1175,6 +1175,12 @@ sealed interface ComparisonAssessment {
                 return new Part(id, stopped, List.of(), Map.of(), CasesWorkedOut.SHOWN, expanded);
             }
 
+            /** This line as {@code placed}, the line a row's run places it on, in the cases it is
+             *  read in and with everything else it was told. */
+            Part placedByTheRunsAs(ComparisonAssessment placed) {
+                return new Part(id, placed, cases, comesOut, workedOut, expanded);
+            }
+
             /**
              * {@code line} where it comes to a line, read in {@code cases}; and with no case where
              * it does not.
@@ -1191,7 +1197,9 @@ sealed interface ComparisonAssessment {
              * whether or not a line is drawn over the declarations alone.
              */
             static boolean isReadInCases(ComparisonAssessment line) {
-                return isALine(line) || line instanceof AgainstAnotherValue;
+                return isALine(line) || line instanceof AgainstAnotherValue
+                        || (line instanceof Unread stopped
+                        && stopped.where() == WhereAReadingStopped.IN_WHAT_A_RUN_WORKS_OUT);
             }
 
             /**
@@ -2332,6 +2340,19 @@ sealed interface ComparisonAssessment {
     static ComparisonAssessment onItsRuns(String behavior, StatedComparison comparison,
                                           ModelOccurrence which, Citation at, Unread stopped,
                                           InputReading read, ComparisonWitnesses.AtAComparison witnesses) {
+        return onItsRuns(behavior, comparison, which, at, stopped, read, witnesses,
+                WrittenLine.THE_COMPARISON);
+    }
+
+    /**
+     * The same, where the comparison was read as {@code line} of its author's: the comparison
+     * itself, or what it comes to on an arm of a choice its definition writes. The line the runs
+     * place is that line of the author's, as one drawn on the input is.
+     */
+    static ComparisonAssessment onItsRuns(String behavior, StatedComparison comparison,
+                                          ModelOccurrence which, Citation at, Unread stopped,
+                                          InputReading read, ComparisonWitnesses.AtAComparison witnesses,
+                                          WrittenLine line) {
         if (comparison.reading() instanceof Core.BinaryReading.ExactNumbers
                 || !Type.INT.equals(comparison.left().type())
                 || !Type.INT.equals(comparison.right().type())) {
@@ -2349,8 +2370,8 @@ sealed interface ComparisonAssessment {
                 lengths, values, runs);
         Cutting cutting = new Cutting(apart, new Level.OfTheQuantity(ExactRatio.ZERO),
                 comparison.claim(), runs);
-        return onTheQuantity(at, cutting, new Cutting.Read.Cuts(cutting).authored(), read, false,
-                witnesses);
+        return onTheQuantity(at, cutting, new AuthoredPointMapping.Proven(line, cutting.claim(),
+                Derivation.AComparisonRead.Facing.NOTHING_WRITTEN, true), read, false, witnesses);
     }
 
     /**

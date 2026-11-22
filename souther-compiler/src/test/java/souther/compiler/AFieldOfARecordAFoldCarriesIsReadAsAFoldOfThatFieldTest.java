@@ -29,8 +29,7 @@ class AFieldOfARecordAFoldCarriesIsReadAsAFoldOfThatFieldTest {
 
             data State = { score: Int, misses: Int, zeros: Int }
 
-            behavior folded : (xs: List<Int>) -> State
-            let folded (xs) = List.fold((s, x) -> State {
+            %s = List.fold((s, x) -> State {
                     score = s.score + x,
                     misses = if x == 0 then s.misses + 1 else 0,
                     zeros = if x == 0 then s.zeros + 1 else s.zeros
@@ -38,6 +37,14 @@ class AFieldOfARecordAFoldCarriesIsReadAsAFoldOfThatFieldTest {
 
             behavior out : (xs: List<Int>) -> Bool
             """;
+
+    /** The walk as a helper, which is read where it is called. */
+    private static final String A_HELPER = "let folded (xs: List<Int>): State";
+
+    /** The walk as a behavior, whose body is its own account and not its caller's. */
+    private static final String A_BEHAVIOR = """
+            behavior folded : (xs: List<Int>) -> State
+            let folded (xs)""";
 
     private static String report(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
@@ -47,8 +54,14 @@ class AFieldOfARecordAFoldCarriesIsReadAsAFoldOfThatFieldTest {
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
+    /** What is said of {@code body}, which reaches the walk through the helper. */
     private static String out(String body) {
-        return report(STATE + "let out (xs) = " + body + "\n");
+        return report(STATE.formatted(A_HELPER) + "let out (xs) = " + body + "\n");
+    }
+
+    /** What is said of {@code body}, which reaches the walk through a call of the behavior. */
+    private static String calling(String body) {
+        return report(STATE.formatted(A_BEHAVIOR) + "let out (xs) = " + body + "\n");
     }
 
     private static String inline(String body) {
@@ -87,13 +100,32 @@ class AFieldOfARecordAFoldCarriesIsReadAsAFoldOfThatFieldTest {
         assertFalse(report.contains(ON_ITS_RUNS), report);
     }
 
-    /** A call of a behavior whose body is the walk is the walk. */
+    /** A call of a helper whose body is the walk is the walk. */
     @Test
-    void throughACallAFieldIsReadAsWritten() {
+    void throughAHelperAFieldIsReadAsWritten() {
         String score = out("folded(xs).score >= 10");
         assertTrue(score.contains("read as out/List.sum(xs): = 10"), score);
         String zeros = out("folded(xs).zeros >= 3");
         assertTrue(zeros.contains("#xs [xs[*] == 0]"), zeros);
+    }
+
+    /**
+     * A call of a behavior whose body is the walk is a value the call works out, and the walk is
+     * the behavior's own to account for: the field of what it answers is a number the caller's
+     * runs place its rows by, whichever field it is.
+     */
+    @Test
+    void aFieldOfWhatACalledBehaviorAnswersIsMeasuredOnItsRuns() {
+        String score = calling("folded(xs).score >= 10");
+        assertTrue(score.contains(ON_ITS_RUNS), score);
+        assertTrue(score.contains("read as out/folded(xs).score - 10: = 0"), score);
+        assertFalse(score.contains("List.sum(xs)"), score);
+        assertFalse(score.contains("not read: comparison"), score);
+        String zeros = calling("folded(xs).zeros >= 3");
+        assertTrue(zeros.contains(ON_ITS_RUNS), zeros);
+        assertTrue(zeros.contains("read as out/folded(xs).zeros - 3: = 0"), zeros);
+        assertFalse(zeros.contains("#xs [xs[*] == 0]"), zeros);
+        assertFalse(zeros.contains("not read: comparison"), zeros);
     }
 
     /** A streak is no fold any form says, field or not: its runs place the rows. */

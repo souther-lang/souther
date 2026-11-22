@@ -1433,10 +1433,11 @@ public final class Adequacy {
     }
 
     /**
-     * The body of one behavior as a call of it is read ({@link CalledBody}): the tree its analysis
-     * reads, the bindings its parameters arrive on in the order a call hands them, and what it binds
-     * to the elements of what — each read in its own module, where the declarations it names were
-     * written.
+     * The body of one behavior beside the bindings of its parameters ({@link CalledBody}): the tree
+     * its analysis reads, the bindings its parameters arrive on in the order a call hands them, and
+     * what it binds to the elements of what — each read in its own module, where the declarations it
+     * names were written. For a reader of which parameters the body reads
+     * ({@link #unreadParametersOf}); no reading of a call enters it.
      *
      * <p>Asked of the body as one behavior was checked and not as its module was: a module's check
      * judges what its bodies claim, which reads the conditions of a body calling this one, so an
@@ -5044,7 +5045,7 @@ public final class Adequacy {
             return answerEveryBehavior(prepared.value(),
                     behavior -> chosen(db, name, behavior.name())
                             ? linesReadIn(db, name, behavior, sigs.value(), readInputs, reading)
-                            : new Measurement.NotMeasured<>(NothingWasAsked.NOT_ASKED));
+                            : BoundaryDerivation.notAsked());
         }
     }
 

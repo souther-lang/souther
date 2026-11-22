@@ -7,25 +7,20 @@ import souther.compiler.types.ValueName;
 import java.util.Optional;
 
 /**
- * The body of each behavior, and of each recursive helper, as a call of it is read
- * ({@link CalledBody}), for a reader that reads what a call answers where the call stands, with the
- * parameters standing for what the call handed.
+ * What a reader of a body asks of the bodies beside it: the body of each recursive helper as a
+ * call of it is read ({@link ARecursion}), with the parameters standing for what the call handed,
+ * and which constructions are shown to hold where they are made.
  *
- * <p>A recursive helper is here beside the behaviors because it is the other thing a call in an
- * analysed body is left standing for: every other helper was expanded where it was called.
+ * <p>A recursive helper is the one helper a call in an analysed body is left standing for: every
+ * other helper was expanded where it was called. A call of a behavior is a value a run works out,
+ * and no body of one is read where the call stands.
  *
- * <p>Empty where there is no such body: a behavior with none to read, or one this compilation did
- * not read the input of, and a helper whose parameters declare no types.
+ * <p>Empty where there is no such body: a helper whose parameters declare no types.
  */
 public interface BehaviorAnswers {
 
-    /** No body of either — for a reading that reads no call to one. */
+    /** No body, and no construction shown to hold — for a reading that asks of neither. */
     BehaviorAnswers NONE = new BehaviorAnswers() {
-
-        @Override
-        public Optional<CalledBody> bodyOf(ValueName.Behavior behavior) {
-            return Optional.empty();
-        }
 
         @Override
         public Optional<ARecursion> recursionOf(ValueName.Helper recursion) {
@@ -42,9 +37,6 @@ public interface BehaviorAnswers {
             return false;
         }
     };
-
-    /** The body of {@code behavior} as a call of it is read, where it has one. */
-    Optional<CalledBody> bodyOf(ValueName.Behavior behavior);
 
     /** The body of the recursive helper {@code recursion} as a call of it is read, with what it
      *  walks, where it has one. */

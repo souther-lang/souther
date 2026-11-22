@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A comparison read back through a callee that branches on the quantity is drawn once per arm, and
+ * A comparison read back through a helper that branches on the quantity is drawn once per arm, and
  * two lines of it that a report would say in the same words under different points are told apart
  * by their place among the lines that share the words.
  */
@@ -27,9 +27,7 @@ class TwoLinesInCasesOnOneQuantityAreToldApartTest {
     private static final String CLAMPED = """
             module m
 
-            behavior clamp : (n: Int) -> Int
-
-            let clamp (n) = if n > 50 then 50 else n
+            let clamp (n: Int): Int = if n > 50 then 50 else n
 
             behavior full : (n: Int) -> Bool
 
@@ -67,7 +65,11 @@ class TwoLinesInCasesOnOneQuantityAreToldApartTest {
 
     @Test
     void thePointNoValueCanStandAtAndThePointOwedARowAreTwoLines() {
-        List<String> at51 = readingsOf(human(CLAMPED), "full/n: = 51 ");
+        // The helper's own comparison is a line of the caller too, said with where it was called
+        // from; the lines told apart here are those of the comparison the caller wrote.
+        List<String> at51 = readingsOf(human(CLAMPED), "full/n: = 51 ").stream()
+                .filter(line -> !line.contains(" in clamp@")).toList();
+        assertEquals(2, at51.size(), at51::toString);
         assertEquals(Set.of("(line 1 of 2)", "(line 2 of 2)"), at51.stream()
                 .map(line -> line.substring(line.indexOf('('))).collect(Collectors.toSet()),
                 at51::toString);
@@ -127,9 +129,7 @@ class TwoLinesInCasesOnOneQuantityAreToldApartTest {
         String human = human("""
                 module m
 
-                behavior pick : (a: Int, b: Int) -> Int
-
-                let pick (a, b) = if a > 50 then 50 else b
+                let pick (a: Int, b: Int): Int = if a > 50 then 50 else b
 
                 behavior full : (a: Int, b: Int) -> Bool
 

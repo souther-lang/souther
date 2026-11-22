@@ -14,9 +14,14 @@ import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.meaning.MeaningsOfABody;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.Quantity;
+import souther.compiler.meaning.Relation;
+import souther.compiler.meaning.WhyUnread;
+import souther.compiler.numeric.Rel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.types.WrittenOwner;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -34,9 +39,9 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
  *
  * <p>One behavior for each way the rules are put together. A value chosen by cases is read on each
  * case wherever it stands — added to a number, under a field of what each case builds, handed to an
- * operation, as what a container holds. A behavior a call names, and no row stands in, is read
- * through its body where the call stands, whether it answers a truth or a number, or is handed to
- * an operation as its closure. A dependency asked about a value the body works out is the answer a
+ * operation, as what a container holds. A helper a call names is read through its body where the
+ * call stands, whether it answers a truth or a number, or is handed to an operation as its
+ * closure. A dependency asked about a value the body works out is the answer a
  * row stands in, named by how the value was worked out. A value written out that reads names of
  * its own is read where it was written, and a name standing for one of several values written out
  * — what a walk answered over them, among others — is read on each of them. A match on an optional
@@ -46,6 +51,11 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
  *
  * <p>Each is read to the end, and a few say what they come to, so a reading that gave up on the way
  * and one that came out somewhere else are both told from the reading these hold.
+ *
+ * <p>A behavior a call names is not one of the rules put together: its body is its own account,
+ * which its own rows measure. A number it answers is a quantity the call names, and a comparison
+ * over it is read whole as a relation over that quantity. A truth it answers is where the
+ * caller's condition stops, and it says the call is why.
  */
 class WhatTheRulesComposeIsReadWholeTest {
 
@@ -57,14 +67,20 @@ class WhatTheRulesComposeIsReadWholeTest {
 
             let pick (o: Order): Int = if o.floor > 3 then 1 else 2
 
-            behavior big : (n: Int) -> Bool
-            let big (n) = n > 3
+            let big (n: Int): Bool = n > 3
 
-            behavior twice : (n: Int) -> Int
-            let twice (n) = n + n
+            let twice (n: Int): Int = n + n
 
-            behavior bigLine : (l: Line) -> Bool
-            let bigLine (l) = l.price > 3
+            let bigLine (l: Line): Bool = l.price > 3
+
+            behavior isBig : (n: Int) -> Bool
+            let isBig (n) = n > 3
+
+            behavior doubled : (n: Int) -> Int
+            let doubled (n) = n + n
+
+            behavior isBigLine : (l: Line) -> Bool
+            let isBigLine (l) = l.price > 3
 
             behavior known : (s: String) -> Bool
 
@@ -94,14 +110,23 @@ class WhatTheRulesComposeIsReadWholeTest {
             behavior howManyAChosenContainerHolds : (o: Order) -> Int
             let howManyAChosenContainerHolds (o) = if List.length(if o.floor > 3 then o.lines else []) > 2 then 1 else 2
 
+            behavior aHelpersTruth : (o: Order) -> Int
+            let aHelpersTruth (o) = if big(o.floor + 1) then 1 else 2
+
+            behavior aHelpersNumber : (o: Order) -> Int
+            let aHelpersNumber (o) = if twice(o.floor) > 4 then 1 else 2
+
+            behavior aHelperAsAClosure : (o: Order) -> Int
+            let aHelperAsAClosure (o) = if List.all(bigLine, o.lines) then 1 else 2
+
             behavior aBehaviorsTruth : (o: Order) -> Int
-            let aBehaviorsTruth (o) = if big(o.floor + 1) then 1 else 2
+            let aBehaviorsTruth (o) = if isBig(o.floor + 1) then 1 else 2
 
             behavior aBehaviorsNumber : (o: Order) -> Int
-            let aBehaviorsNumber (o) = if twice(o.floor) > 4 then 1 else 2
+            let aBehaviorsNumber (o) = if doubled(o.floor) > 4 then 1 else 2
 
             behavior aBehaviorAsAClosure : (o: Order) -> Int
-            let aBehaviorAsAClosure (o) = if List.all(bigLine, o.lines) then 1 else 2
+            let aBehaviorAsAClosure (o) = if List.all(isBigLine, o.lines) then 1 else 2
 
             behavior aDependencyAskedAboutAValueWorkedOut : (o: Order) -> Int
                 depends on known
@@ -125,8 +150,12 @@ class WhatTheRulesComposeIsReadWholeTest {
             let aWalkOverAPosition (o) = if List.any(y -> y > 3, List.map(l -> l.price, o.lines)) then 1 else 2
             """;
 
-    /** The behaviors the others call, which are read where they are called. */
-    private static final Set<String> CALLED = Set.of("big", "twice", "bigLine");
+    /** The behaviors the others call, whose bodies are their own account. */
+    private static final Set<String> CALLED = Set.of("isBig", "doubled", "isBigLine");
+
+    /** The behaviors whose condition is a truth a called behavior answers, which stop at the call. */
+    private static final Set<String> LEFT_TO_THE_CALLED =
+            Set.of("aBehaviorsTruth", "aBehaviorAsAClosure");
 
     /** What reading each behavior takes: its body, where its names are read, and its input. */
     private record Read(AnalysisBody body, InputReads reads, InputReading input,
@@ -158,8 +187,13 @@ class WhatTheRulesComposeIsReadWholeTest {
 
     @Test
     void everyConditionIsReadToTheEnd() {
-        assertEquals(14, READ.size(), "a behavior for each way the rules are put together");
+        assertEquals(15 + LEFT_TO_THE_CALLED.size(), READ.size(),
+                "a behavior for each way the rules are put together, and the two that stop at a"
+                        + " call");
         READ.forEach((behavior, read) -> {
+            if (LEFT_TO_THE_CALLED.contains(behavior)) {
+                return;
+            }
             assertFalse(read.meanings().stated().isEmpty(), () -> behavior + " has conditions");
             read.meanings().stated().forEach((site, meaning) -> assertEquals(List.of(),
                     Proposition.stopsIn(meaning.states()),
@@ -171,9 +205,9 @@ class WhatTheRulesComposeIsReadWholeTest {
     @Test
     void whatTheyComeTo() {
         assertEquals("Affine[form=LinearForm[constant=-2, coefs={o.floor=1}], proposition=GT]",
-                forkOf("aBehaviorsTruth"), "the body's n > 3 with o.floor + 1 for n");
+                forkOf("aHelpersTruth"), "the body's n > 3 with o.floor + 1 for n");
         assertEquals("Affine[form=LinearForm[constant=-4, coefs={o.floor=2}], proposition=GT]",
-                forkOf("aBehaviorsNumber"), "n + n, with o.floor for n, above 4");
+                forkOf("aHelpersNumber"), "n + n, with o.floor for n, above 4");
         assertEquals("all[Affine[form=LinearForm[constant=-2, coefs={List.length(o.lines)=1}],"
                         + " proposition=GT], Affine[form=LinearForm[constant=-3,"
                         + " coefs={o.floor=1}], proposition=GT]]",
@@ -195,8 +229,61 @@ class WhatTheRulesComposeIsReadWholeTest {
                 forkOf("aWalkOverAPosition"), "some line's price above 3");
     }
 
+    /**
+     * A number a called behavior answers is a quantity of its own, named by the call, and the
+     * comparison over it is the relation it was written as: read to the end, and about no
+     * position of the input.
+     */
+    @Test
+    void aComparisonOverWhatACalledBehaviorAnswersIsARelationOverTheCall() {
+        Proposition.Compared compared = assertInstanceOf(Proposition.Compared.class,
+                statedByTheForkOf("aBehaviorsNumber"));
+        Relation.Affine relation = assertInstanceOf(Relation.Affine.class, compared.relation());
+        assertEquals(Rel.GT, relation.proposition());
+        assertEquals(1, relation.form().coefs().size(), "the call, and nothing of doubled's body");
+        Quantity.OfACall call = assertInstanceOf(Quantity.OfACall.class,
+                relation.form().coefs().keySet().iterator().next());
+        assertEquals(new WrittenOwner.Body("m", "aBehaviorsNumber"),
+                call.call().origin().owner(), "the call the caller wrote");
+        assertEquals("Affine[form=LinearForm[constant=-4, coefs={call SourceConstructOrigin["
+                        + "owner=Body[module=m, definition=aBehaviorsNumber], ordinal=1,"
+                        + " lowered=0, kind=CALL]=1}], proposition=GT]",
+                compared.spelledOut(), "what doubled answers, above 4");
+    }
+
+    /**
+     * A truth a called behavior answers is nothing the caller states: the body that decides it is
+     * the behavior's own account, so the condition stops at the call and says that is why, as the
+     * fork itself and as what a walk asks of each element.
+     */
+    @Test
+    void aTruthACalledBehaviorAnswersIsLeftToThatBehavior() {
+        WhyUnread itsBodyIsItsOwn = new WhyUnread.WhatACalledBehaviorAnswers();
+        Proposition.Unread truth = assertInstanceOf(Proposition.Unread.class,
+                statedByTheForkOf("aBehaviorsTruth"));
+        assertEquals(itsBodyIsItsOwn, truth.why());
+        Proposition.Some closure = assertInstanceOf(Proposition.Some.class,
+                statedByTheForkOf("aBehaviorAsAClosure"));
+        assertEquals("no o.lines [!unread #0]", closure.spelledOut(),
+                "every line is one isBigLine answers true of, which is no line it does not");
+        assertEquals(itsBodyIsItsOwn, assertInstanceOf(Proposition.Unread.class,
+                closure.ofTheElement()).why());
+        for (String behavior : LEFT_TO_THE_CALLED) {
+            Read read = READ.get(behavior);
+            assertFalse(read.meanings().stated().isEmpty(), () -> behavior + " has conditions");
+            read.meanings().stated().forEach((site, meaning) -> assertEquals(
+                    List.of(itsBodyIsItsOwn), Proposition.stopsIn(meaning.states()),
+                    () -> behavior + " stops at the call and nowhere else"));
+        }
+    }
+
     /** What the condition of the fork {@code behavior}'s body is states, as a key. */
     private static String forkOf(String behavior) {
+        return statedByTheForkOf(behavior).spelledOut();
+    }
+
+    /** What the condition of the fork {@code behavior}'s body is states. */
+    private static Proposition statedByTheForkOf(String behavior) {
         Read read = READ.get(behavior);
         InputReads reads = read.reads();
         Core e = Core.withoutStanding(read.body().core());
@@ -206,6 +293,6 @@ class WhatTheRulesComposeIsReadWholeTest {
         }
         Core.If fork = assertInstanceOf(Core.If.class, e, behavior + " is one fork");
         return Pullback.ofATruth(fork.cond(), reads, read.input(), Optional.empty())
-                .proposition().spelledOut();
+                .proposition();
     }
 }

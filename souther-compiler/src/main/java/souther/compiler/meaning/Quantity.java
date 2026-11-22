@@ -20,6 +20,7 @@ import souther.compiler.semantics.ResultRange;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
@@ -62,7 +63,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
         Quantity.CodePointsOfAPiece, Quantity.RemainderOfADividend,
         Quantity.RemainderByAnInput, Quantity.ProductOfTwo, Quantity.WhatAnOperationAnswers,
         Quantity.HowManyCarried, Quantity.APieceOf, Quantity.ThePieceAt,
-        Quantity.IsAmongThePieces {
+        Quantity.IsAmongThePieces, Quantity.OfACall {
 
     /** Where the pieces a window holds begin, as a key spells it: nothing for the first. */
     private static String fromSpelled(int from) {
@@ -113,7 +114,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                 case HowManyCarried other -> equals(other);
                 case DecisionAtom.OfTheInput _, DecisionAtom.TakenOfAnAnswer _,
                      DecisionAtom.ComputedOverAnAnswer _,
-                     DecisionAtom.OfAnAnswer _, OfABinding _, CodePointsOfAPiece _,
+                     DecisionAtom.OfAnAnswer _, OfABinding _, OfACall _, CodePointsOfAPiece _,
                      RemainderOfADividend _, RemainderByAnInput _, ProductOfTwo _,
                      HowManyDifferent _, HowManyDifferentBelow _, HowManyDifferentAcross _,
                      TheKeptTotal _ -> false;
@@ -2467,6 +2468,52 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
             StringBuilder out = new StringBuilder(binding.toString());
             steps.forEach(each -> out.append('.').append(each));
             return out.toString();
+        }
+
+        @Override
+        public String toString() {
+            return spelled();
+        }
+    }
+
+    /**
+     * A number a call of the model answers on a run, where nothing here says what that number is
+     * in terms of the input: a behavior called, a walk from a seed, a recursion — or an operation
+     * over what one of them answered.
+     *
+     * <p>The same value as a name bound to that call would stand for ({@link OfABinding}), and
+     * read as that is: a value is one value whether or not the body gave it a name, so a
+     * comparison over one is the same statement written either way.
+     *
+     * <p>By the call and not by what it was handed. Which call of the model it is says which copy
+     * of the body wrote it, so two calls a helper's two copies make are two values, and one call
+     * read twice is one.
+     *
+     * @param call   which call of the model answers it
+     * @param type   what the call answers, which is how its numbers are spaced
+     * @param madeOf why what it answers is no number of the input, where the reading met it and
+     *               stopped
+     */
+    record OfACall(ConstructOccurrence call, Type type, Optional<WhyUnread> madeOf)
+            implements Quantity {
+
+        public OfACall {
+            if (call == null || type == null || madeOf == null) {
+                throw new IllegalArgumentException("a number a call answers is some call's, of"
+                        + " some type");
+            }
+        }
+
+        /** Whole where what the call answers is counted in whole numbers. */
+        @Override
+        public boolean wholeOnEveryRow(Predicate<NumericTerm> measuredWhole) {
+            return Carrier.ofPrimitive(type) instanceof Carrier carrier
+                    && carrier.countsInWholeNumbers();
+        }
+
+        @Override
+        public String spelled() {
+            return "call " + call;
         }
 
         @Override

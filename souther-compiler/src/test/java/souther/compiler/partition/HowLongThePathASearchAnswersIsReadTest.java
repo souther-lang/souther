@@ -652,19 +652,22 @@ class HowLongThePathASearchAnswersIsReadTest {
                 .humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
     }
 
-    /** The number is what the case a behavior answers holds in one field, wherever the behavior
-     *  that asks about it is. */
+    /** What the case a behavior answers holds in a field is a number a run of the call works out:
+     *  the body that built it is the called behavior's account, the comparison of its length
+     *  draws the caller a line, and a row is placed on it by what its run worked out. */
     @Test
-    void whatTheCaseABehaviorAnswersHoldsIsReadThroughTheBodyThatBuiltIt() {
+    void whatTheCaseABehaviorAnswersHoldsIsANumberARunOfTheCallWorksOut() {
         String human = humanReportOf(BEHAVIOR_OF_A_LINE.formatted(SEARCH,
                 "Found { steps = steps }"));
         String ofH = human.substring(human.indexOf("  h "));
         assertFalse(NotRead.in(ofH), human);
+        assertTrue(ofH.contains(WhyAPlaceIsUndividedIsSaid.of(
+                UndividedPosition.Reason.RULE_MEASURED_ON_ITS_RUNS)), human);
         assertTrue(ofH.contains("borders 1"), human);
     }
 
-    /** Built in two places, the case holds a different number in each, and that is no number of
-     *  the call: it is not read through the body, and what a run of the call works out places a
+    /** Built in two places, the case holds a different number in each, and the caller is told the
+     *  same: it is not read through the body, and what a run of the call works out places a
      *  row. */
     @Test
     void aCaseABehaviorBuildsInMoreThanOnePlaceIsNotReadThroughItsBody() {
@@ -676,8 +679,15 @@ class HowLongThePathASearchAnswersIsReadTest {
                 UndividedPosition.Reason.RULE_MEASURED_ON_ITS_RUNS)), human);
     }
 
+    /**
+     * The line to the submitter is searched for in the body of a behavior the approval chain
+     * calls, and that search is the called behavior's own account. To the caller the length of
+     * what the call answered is a number a run works out: its comparison with how many the role
+     * needs is a line the runs place, drawn once for each role, and a row stands at a point of
+     * it by what its run worked out.
+     */
     @Test
-    void theApprovalChainOfARoleIsReadAsTheLengthOfTheLineToTheSubmitter() {
+    void theApprovalChainOfARoleIsALineTheRunsPlaceForEachRole() {
         String model = """
                 module demo
 
@@ -761,27 +771,40 @@ class HowLongThePathASearchAnswersIsReadTest {
         String json = report.json(SourceRendering.namedByIdentity(SourceLayouts.NONE));
         String human = report.humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
         assertFalse(json.contains("rule_about_a_derived_value"), human);
-        assertTrue(json.contains("searched_line"), human);
+        assertFalse(json.contains("searched_line"), human);
+        assertTrue(json.contains("compared_on_a_run"), human);
         String ofTheChain = human.substring(human.indexOf("  approvalChainFor "));
         assertFalse(NotRead.in(ofTheChain), human);
+        assertTrue(ofTheChain.contains(WhyAPlaceIsUndividedIsSaid.of(
+                UndividedPosition.Reason.RULE_MEASURED_ON_ITS_RUNS)), human);
         assertTrue(ofTheChain.contains("borders 3"), human);
-        // Rows are offered for the points of every role's border, down to a line of five nodes
-        // for the role that needs three above the submitter, each holding the submitter only at
-        // its last node.
+        for (String role : List.of("SalesManager", "RegionalVp", "Cfo")) {
+            assertTrue(ofTheChain.contains("where role is " + role), human);
+        }
+        // The rows offered are composed without the search, which is the called behavior's: written
+        // back as examples they are run by the language, and what they reach is read.
         List<List<FixtureTemplate>> offeredRows = Adequacy.offeredFor(compilation.db(),
                         OfferingRequest.overTheModule("demo"))
                 .rowsByBehavior().getOrDefault("approvalChainFor", List.of()).stream()
                 .map(row -> row.inputs()).toList();
-        List<List<String>> offeredInputs = offeredRows.stream()
-                .map(row -> row.stream().map(FixtureTemplate::text).toList()).toList();
-        List<String> offered = offeredInputs.stream()
-                .map(inputs -> String.join(", ", inputs)).toList();
-        assertTrue(offered.stream().anyMatch(row ->
-                        row.split("reports = \\[RoleNode", -1).length >= 5
-                                && row.endsWith("Cfo")),
-                () -> "offered " + offered);
-        // Written back as examples the rows are run by the language, and what they reach is read.
-        StringBuilder written = new StringBuilder();
+        // Beside them, rows over the tree of the model toward the points of each role's line.
+        StringBuilder written = new StringBuilder("""
+                | "vp, one" : (acmeOrg, UserId("u-vp"), SalesManager)
+                    -> ApprovalChain { role = SalesManager, approvers = [ UserId("u-ceo") ] }
+                | "rep, two" : (acmeOrg, UserId("u-rep"), RegionalVp)
+                    -> ApprovalChain { role = RegionalVp
+                                     , approvers = [ UserId("u-mgr"), UserId("u-vp") ] }
+                | "mgr, two" : (acmeOrg, UserId("u-mgr"), RegionalVp)
+                    -> ApprovalChain { role = RegionalVp
+                                     , approvers = [ UserId("u-vp"), UserId("u-ceo") ] }
+                | "vp, two" : (acmeOrg, UserId("u-vp"), RegionalVp)
+                    -> NoAuthorityAbove { submitter = UserId("u-vp"), needed = 2, available = 1 }
+                | "rep, three" : (acmeOrg, UserId("u-rep"), Cfo)
+                    -> ApprovalChain { role = Cfo, approvers =
+                        [ UserId("u-mgr"), UserId("u-vp"), UserId("u-ceo") ] }
+                | "mgr, three" : (acmeOrg, UserId("u-mgr"), Cfo)
+                    -> NoAuthorityAbove { submitter = UserId("u-mgr"), needed = 3, available = 2 }
+            """);
         int named = 0;
         for (List<FixtureTemplate> row : offeredRows) {
             List<String> inputs = row.stream().map(FixtureTemplate::text).toList();
@@ -816,39 +839,46 @@ class HowLongThePathASearchAnswersIsReadTest {
                 .stream().filter(point -> point.owed() != null)
                 .filter(point -> roleOfALine(point) != null)
                 .toList();
-        // A row the language ran stands at the ON and OFF point of every role's border, and past
-        // the border of the role that has room for it. More points may come to be met, so these
-        // are a floor.
+        // Each line is at how many stand above the submitter less how many the role needs, and a
+        // row stands where its run worked that out: at the ON and OFF point of every role's line
+        // and past the line of the roles the tree has room for, by the rows over the tree; short
+        // of the line by more than one, by the rows offered, whose tree is the submitter alone.
+        // More points may come to be met, so these are a floor.
         Set<LinePoint> met = owed.stream().filter(point -> point.owed().hasRowWitness())
                 .map(HowLongThePathASearchAnswersIsReadTest::linePointOf)
                 .filter(Objects::nonNull).collect(Collectors.toSet());
         assertTrue(met.containsAll(Set.of(
-                        new LinePoint(PointRole.IN, "Cfo", ExactRatio.of(4)),
-                        new LinePoint(PointRole.OFF, "SalesManager", ExactRatio.of(1)),
-                        new LinePoint(PointRole.OFF, "RegionalVp", ExactRatio.of(2)),
-                        new LinePoint(PointRole.OFF, "Cfo", ExactRatio.of(3)),
-                        new LinePoint(PointRole.ON, "SalesManager", ExactRatio.of(2)),
-                        new LinePoint(PointRole.ON, "RegionalVp", ExactRatio.of(3)),
-                        new LinePoint(PointRole.ON, "Cfo", ExactRatio.of(4)))),
+                        new LinePoint(PointRole.IN, "SalesManager", ExactRatio.of(0)),
+                        new LinePoint(PointRole.IN, "RegionalVp", ExactRatio.of(0)),
+                        new LinePoint(PointRole.ON, "SalesManager", ExactRatio.of(0)),
+                        new LinePoint(PointRole.ON, "RegionalVp", ExactRatio.of(0)),
+                        new LinePoint(PointRole.ON, "Cfo", ExactRatio.of(0)),
+                        new LinePoint(PointRole.OFF, "SalesManager", ExactRatio.of(-1)),
+                        new LinePoint(PointRole.OFF, "RegionalVp", ExactRatio.of(-1)),
+                        new LinePoint(PointRole.OFF, "Cfo", ExactRatio.of(-1)),
+                        new LinePoint(PointRole.OUT, "RegionalVp", ExactRatio.of(-1)),
+                        new LinePoint(PointRole.OUT, "Cfo", ExactRatio.of(-1)))),
                 () -> "met " + met);
-        // Whatever is left owed is the line of no node, which the guard of chainTo keeps out of
-        // this branch. No row is there, and it may come to be proved unreachable, in which case
-        // nothing is left owed.
-        List<PointRole> unmet = owed.stream().filter(point -> !point.owed().hasRowWitness())
-                .map(BorderAssessment.Point::role).toList();
-        assertTrue(unmet.stream().allMatch(role -> role == PointRole.OUT),
-                () -> "left owed " + unmet);
+        // What is left owed is past the line of the role the tree has no room for, and short by
+        // more than one of the line of the role that needs one, where fewer than none would stand
+        // above the submitter.
+        Set<LinePoint> unmet = owed.stream().filter(point -> !point.owed().hasRowWitness())
+                .map(HowLongThePathASearchAnswersIsReadTest::linePointOf)
+                .filter(Objects::nonNull).collect(Collectors.toSet());
+        assertTrue(Set.of(new LinePoint(PointRole.IN, "Cfo", ExactRatio.of(0)),
+                        new LinePoint(PointRole.OUT, "SalesManager", ExactRatio.of(-1)))
+                .containsAll(unmet), () -> "left owed " + unmet);
     }
 
-    /** A point of a line the length of a search draws, by what makes it that one. */
-    private record LinePoint(PointRole role, String roleCase, ExactRatio length) {}
+    /** A point of a line a comparison of the line's length draws, by what makes it that one. */
+    private record LinePoint(PointRole role, String roleCase, ExactRatio at) {}
 
-    /** The point by its role, the role of the input its line is decided in and the length it is
-     *  anchored at; null where it is anchored at no length a row can be written at. */
+    /** The point by its role, the role of the input its line is decided in and the number it is
+     *  anchored at; null where it is anchored at no number a row can be written at. */
     private static LinePoint linePointOf(BorderAssessment.Point point) {
-        ExactRatio length = point.owed().criterion().anchor().asANumber();
-        return length == null ? null
-                : new LinePoint(point.role(), roleOfALine(point), length);
+        ExactRatio at = point.owed().criterion().anchor().asANumber();
+        return at == null ? null
+                : new LinePoint(point.role(), roleOfALine(point), at);
     }
 
     /**

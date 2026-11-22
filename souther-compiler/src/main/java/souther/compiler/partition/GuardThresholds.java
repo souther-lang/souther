@@ -933,9 +933,18 @@ public final class GuardThresholds {
         if (!(stopped.failure().why() instanceof AffineForms.Halt.NoRule<?, ?>)) {
             return WhereAReadingStopped.ELSEWHERE;
         }
-        return worksOutByACallOrAWalk(stopped.node(), stopped.at(), read, new HashSet<>())
-                && !readsAnAnswer(stopped.node(), stopped.at(), read, new HashSet<>())
+        return isWorkedOutByARun(stopped.node(), stopped.at(), read)
                 ? WhereAReadingStopped.IN_WHAT_A_RUN_WORKS_OUT : WhereAReadingStopped.ELSEWHERE;
+    }
+
+    /**
+     * Whether {@code e} is a number a run works out where no reading does: a call of a behavior
+     * or a walk from a seed works it out, anywhere in it or in what the names in it stand for,
+     * and none of it is what a dependency a row stands in answered.
+     */
+    static boolean isWorkedOutByARun(Core e, InputReads reads, InputReading read) {
+        return worksOutByACallOrAWalk(e, reads, read, new HashSet<>())
+                && !readsAnAnswer(e, reads, read, new HashSet<>());
     }
 
     /**

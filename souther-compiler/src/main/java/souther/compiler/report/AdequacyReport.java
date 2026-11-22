@@ -6889,12 +6889,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 };
             }
             case WhyUnread.AnInvariantNotReached _ -> new ReportMessage.AnInvariantNotReached();
-            case WhyUnread.InACalledBody(var what) -> switch (what) {
-                case WHAT_ITS_DEPENDENCY_ANSWERS ->
-                        new ReportMessage.AnotherBehaviorTurningOnItsDependency();
-                case ITSELF -> new ReportMessage.AnotherBehaviorReachingItself();
-                case AN_ANSWER_NOT_READ -> new ReportMessage.AnotherBehaviorNotRead();
-            };
+            case WhyUnread.WhatACalledBehaviorAnswers _ ->
+                    new ReportMessage.WhatACalledBehaviorAnswers();
             // Its own words: what the condition comes to is known, and it is the domain that has
             // no words for it.
             case WhyUnread.NoWordsFor(var operation, var _, var proposition) ->
@@ -7978,11 +7974,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 case A_FIELD_LEFT_OUT -> "clause_over_a_field_left_out";
             };
             case WhyUnread.AnInvariantNotReached _ -> "invariant_not_reached";
-            case WhyUnread.InACalledBody(var what) -> switch (what) {
-                case WHAT_ITS_DEPENDENCY_ANSWERS -> "called_body_asks_a_dependency";
-                case ITSELF -> "called_body_reaches_itself";
-                case AN_ANSWER_NOT_READ -> "called_body_not_read";
-            };
+            case WhyUnread.WhatACalledBehaviorAnswers _ -> "called_body_not_read";
             case WhyUnread.MoreReadingsThanAreMade _ -> "more_readings_than_are_made";
             case WhyUnread.MoreTotalReadingsThanAreMade _ -> "more_total_readings_than_are_made";
             case WhyUnread.MorePartsThanAreConcluded _ -> "more_parts_than_are_concluded";

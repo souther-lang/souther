@@ -32,7 +32,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * each way through it ({@link ADecisionIsDrawnOnWhatARowControlsTest}).
  *
  * <p>And only what the table names. A call to a behavior nothing stands in, or an operation of the
- * language, is no subject a row controls, and a condition over one is as unread as it was.
+ * language, is no subject a row controls. A condition over an operation is unread where it is
+ * read; one over what a called behavior answers is that behavior's to state, and the table takes
+ * neither up.
  */
 class AConditionOnWhatADependencyAnsweredIsTheDecisionTablesTest {
 
@@ -226,11 +228,13 @@ class AConditionOnWhatADependencyAnsweredIsTheDecisionTablesTest {
     }
 
     /**
-     * A behavior nothing stands in is not a dependency: a fork on its answer is read through its
-     * body, where the call stands, and comes to the truth of what the call handed it.
+     * A behavior nothing stands in is not a dependency, and its answer is no subject a row
+     * controls: the table does not take the fork on it up. The rule that decides the fork is
+     * written in the behavior called, which states it in its own account, so the fork states no
+     * rule of its own and leaves nothing unread at the position the call was handed.
      */
     @Test
-    void aCallNoRowStandsInIsReadThroughTheBodyItCalls() {
+    void aForkOnTheAnswerOfACallNoRowStandsInIsTheCalledBehaviorsToState() {
         AdequacyReport report = measured("""
                 module probe.d
                 behavior known : (flag: Bool) -> Bool
@@ -246,6 +250,7 @@ class AConditionOnWhatADependencyAnsweredIsTheDecisionTablesTest {
                 """);
 
         assertEquals(Set.of(), notReadAt(report));
+        assertEquals(AdequacyReport.AdequacyStatus.SATISFIED, report.adequacy());
     }
 
     /**

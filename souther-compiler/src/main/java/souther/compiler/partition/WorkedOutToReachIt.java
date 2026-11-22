@@ -7,7 +7,6 @@ import souther.compiler.check.BehaviorAnswers;
 import souther.compiler.check.BoundOperationFacts;
 import souther.compiler.check.CallArguments;
 import souther.compiler.check.DeclaredArgument;
-import souther.compiler.check.CalledBody;
 import souther.compiler.check.Choice;
 import souther.compiler.check.ClausesInOrder;
 import souther.compiler.check.DeclarationMeaning;
@@ -82,7 +81,7 @@ import java.util.function.Predicate;
  * <p>What a node itself may end a run for, apart from its parts and the names it reads, is
  * {@link WhatARunMayEndFor#itself}'s to say, but for a construction, whose invariant is the
  * declaration's ({@link #itselfEndsNoRun}). Where that leaves it unknown, {@code beyond} may know
- * more: a reading that knows a called behavior's body, or a rule that told the node elsewhere.
+ * more: a rule that told the node elsewhere.
  */
 final class WorkedOutToReachIt {
 
@@ -559,10 +558,9 @@ final class WorkedOutToReachIt {
         return new WorkedOutToReachIt(read, _ -> false, true);
     }
 
-    /** The same, each node asked with whatever it applies, and where this says it may end a run,
-     *  of {@code beyond}, which knows more of some nodes. */
-    static WorkedOutToReachIt asking(InputReading read, Predicate<Denotation> beyond) {
-        return new WorkedOutToReachIt(read, beyond, false);
+    /** The same, each node asked with whatever it applies. */
+    static WorkedOutToReachIt asking(InputReading read) {
+        return new WorkedOutToReachIt(read, _ -> false, false);
     }
 
     /**
@@ -583,6 +581,13 @@ final class WorkedOutToReachIt {
                     || aConstructionEndsNoRun(made, value.at());
         }
         if (stopsOnlyOnAnOperandThatIsNotNought(value)) {
+            return true;
+        }
+        // A behavior called answers what it declares. Whether a run of it stops is asked of the
+        // behavior over its own inputs and said in its own account, and is no part of what the
+        // caller's body works out.
+        if (AnOperationApplied.of(written) instanceof AnOperationApplied applied
+                && applied.operation() instanceof ValueName.Behavior) {
             return true;
         }
         if (!closuresApart) {
@@ -1267,16 +1272,6 @@ final class WorkedOutToReachIt {
                 parts.add(valuesItMayBe(new Denotation(fork.els(), value.at())));
                 yield allOf(parts);
             }
-            case Core.Call _ when AnOperationApplied.of(written) instanceof AnOperationApplied
-                    applied && applied.operation() instanceof ValueName.Behavior behavior
-                    && !value.at().standsIn(behavior) -> {
-                Optional<CalledBody> body =
-                        read.rules().declarations().answers().bodyOf(behavior);
-                InputReads inside = body.isEmpty() ? null : value.at().calling(behavior,
-                        body.get(), applied.args(), newtypes);
-                yield inside == null ? null
-                        : valuesItMayBe(new Denotation(body.get().body(), inside));
-            }
             case Core.PreservedCall _ -> {
                 Denotation met = value.at().denotes(written, symbols, newtypes);
                 SeededWalk walk = met == null ? null : SeededWalk.of(met.value(), closure ->
@@ -1708,17 +1703,6 @@ final class WorkedOutToReachIt {
                         ? FormRange.ofTheWholeNumbersIn(runs)
                         : written.type() == Type.INT ? heldToAnInt(whatItComesTo(value, arms))
                         : null);
-            }
-            // A behavior called comes to what its body does, read with what the call hands it.
-            case Core.Call _ when AnOperationApplied.of(written) instanceof AnOperationApplied
-                    applied && applied.operation() instanceof ValueName.Behavior behavior
-                    && !value.at().standsIn(behavior) -> {
-                Optional<CalledBody> body =
-                        read.rules().declarations().answers().bodyOf(behavior);
-                InputReads inside = body.isEmpty() ? null : value.at().calling(behavior,
-                        body.get(), applied.args(), newtypes);
-                yield inside == null ? null
-                        : originOf(new Denotation(body.get().body(), inside), arms);
             }
             // A run of names read off one value: a place where the whole run is one, and
             // otherwise read one name at a time.

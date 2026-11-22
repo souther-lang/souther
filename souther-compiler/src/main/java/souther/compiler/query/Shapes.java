@@ -6,7 +6,6 @@ import souther.compiler.check.ARecursion;
 import souther.compiler.check.BehaviorAnswers;
 import souther.compiler.check.ConstructionsShownToHold;
 import souther.compiler.core.Core;
-import souther.compiler.check.CalledBody;
 import souther.compiler.check.BehaviorBodies;
 import souther.compiler.check.Boundary;
 import souther.compiler.check.BoundaryConstraints;
@@ -2141,18 +2140,14 @@ public final class Shapes {
     }
 
     /**
-     * What any behavior's body answers, for a reader of a call to one.
+     * The body of any recursive helper, for a reader of a call to one, and which constructions are
+     * shown to hold where they are made.
      *
      * <p>One of these for the whole compilation, for the reason {@link #expandedClauses} gives. A
-     * reader taking one depends on the bodies of the behaviors it asks about and on nothing else.
+     * reader taking one depends on what it asks about and on nothing else.
      */
     public static BehaviorAnswers behaviorAnswers(Db db) {
         return new BehaviorAnswers() {
-
-            @Override
-            public Optional<CalledBody> bodyOf(ValueName.Behavior behavior) {
-                return Optional.ofNullable(db.ask(new Adequacy.BodyAtACall(behavior)).value());
-            }
 
             @Override
             public Optional<ARecursion> recursionOf(ValueName.Helper recursion) {

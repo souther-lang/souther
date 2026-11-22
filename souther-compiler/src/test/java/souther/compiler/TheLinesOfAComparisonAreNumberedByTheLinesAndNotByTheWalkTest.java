@@ -37,9 +37,7 @@ class TheLinesOfAComparisonAreNumberedByTheLinesAndNotByTheWalkTest {
     private static final String CLAMPED = """
             module m
 
-            behavior clamp : (n: Int) -> Int
-
-            let clamp (n) = if n > 50 then 50 else n
+            let clamp (n: Int): Int = if n > 50 then 50 else n
 
             behavior full : (n: Int) -> Bool
 
@@ -55,9 +53,7 @@ class TheLinesOfAComparisonAreNumberedByTheLinesAndNotByTheWalkTest {
     private static final String MANY_ARMS = """
             module m
 
-            behavior pick : (a: Int, b: Int) -> Int
-
-            let pick (a, b) = if a > 50 then 50 else if b > 20 then 20 else b
+            let pick (a: Int, b: Int): Int = if a > 50 then 50 else if b > 20 then 20 else b
 
             behavior full : (a: Int, b: Int) -> Bool
 

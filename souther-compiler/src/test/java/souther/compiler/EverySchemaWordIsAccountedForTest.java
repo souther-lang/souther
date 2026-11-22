@@ -584,11 +584,15 @@ class EverySchemaWordIsAccountedForTest {
             // the constants.
             new Vocabulary("status", List.of("$defs", "status"), STATUS_WORDS),
             // Why the meaning of a condition nothing read was not read, as the writer spells every
-            // reason there is, made of each case of what it carries.
+            // reason there is, made of each case of what it carries. Two words say what a body
+            // read at a call turned on, which nothing reads: a call of a behavior is a value a
+            // run works out, and `called_body_not_read` is the one word for what it answers.
+            // They are retired rather than gone, since reports of this version carry them.
             new Vocabulary("notRead[].reason, meaning_unread",
                     List.of("$defs", "conditionNotReadReason", "allOf", "0", "then",
                             "properties", "reason"),
-                    List.of(WhyUnread.class), meaningUnreadWords(), Set.of()),
+                    List.of(WhyUnread.class), meaningUnreadWords(),
+                    Set.of("called_body_asks_a_dependency", "called_body_reaches_itself")),
             // Which domain a condition nothing read was outside of, as the writer spells each
             // limit there is, so a limit added to the reading is one the schema is given a word
             // for. Two words name limits nothing meets any more, and a third is the one a limit

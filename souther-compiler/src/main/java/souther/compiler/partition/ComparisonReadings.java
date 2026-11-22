@@ -1944,14 +1944,26 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             String behavior, StatedComparison comparison, ConstructOccurrence stands,
             Citation where, ComparisonAssessment assessed, InputReading read,
             ComparisonWitnesses.AtAComparison witnesses) {
+        Optional<ModelOccurrence> which = ModelOccurrence.statedAt(stands);
+        if (which.isEmpty()) {
+            return assessed;
+        }
+        // Whole, or in each case the statement is read in: the line is the same number in every
+        // case, and which case a row is in tells its points apart.
+        if (assessed instanceof ComparisonAssessment.Several several) {
+            return several.eachPart(part -> List.of(
+                    part.line() instanceof ComparisonAssessment.Unread placed
+                            && placed.where() == WhereAReadingStopped.IN_WHAT_A_RUN_WORKS_OUT
+                    ? part.placedByTheRunsAs(ComparisonAssessment.onItsRuns(behavior, comparison,
+                            which.get(), where, placed, read, witnesses, part.id().line().line()))
+                    : part));
+        }
         if (!(assessed instanceof ComparisonAssessment.Unread unread)
                 || unread.where() != WhereAReadingStopped.IN_WHAT_A_RUN_WORKS_OUT) {
             return assessed;
         }
-        return ModelOccurrence.statedAt(stands)
-                .map(which -> ComparisonAssessment.onItsRuns(behavior, comparison, which, where,
-                        unread, read, witnesses))
-                .orElse(assessed);
+        return ComparisonAssessment.onItsRuns(behavior, comparison, which.get(), where, unread,
+                read, witnesses);
     }
 
     /**
@@ -3171,7 +3183,22 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         Core.forEachChild(written, child -> comparisonsIn(child, into));
     }
 
-    /** The {@code parts} that none of the three readers answers for. */
+    /**
+     * Whether {@code part} is what a behavior the body calls answers, itself or by a name given
+     * it: a call no row stands in. The rule that decides it is written in that behavior, which
+     * states it in its own account, so a fork over it states no rule of its own. What a
+     * dependency a row stands in answered is the decision table's, and is asked there.
+     */
+    private static boolean answeredByABehaviorCalled(Denotation part, InputReading read) {
+        Denotation stands = part.at().standing(part.value(), read.symbols(), read.newtypes());
+        return AnOperationApplied.of(Core.withoutStanding(stands.value()))
+                instanceof AnOperationApplied applied
+                && applied.operation() instanceof ValueName.Behavior behavior
+                && !stands.at().standsIn(behavior);
+    }
+
+    /** The {@code parts} that none of the readers answers for: a comparison of the model, a
+     *  position of the input, another fork, or a behavior the body calls. */
     private static List<Denotation> unowned(List<Denotation> parts,
                                             WhatAForkTests.ReadAsPieces pieces, Denotation atom,
                                             InputReading read, StatedHere here) {
@@ -3185,6 +3212,9 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         List<Denotation> left = new ArrayList<>();
         for (Denotation part : parts) {
             if (writtenByADeclaration(part.value())) {
+                continue;
+            }
+            if (answeredByABehaviorCalled(part, read)) {
                 continue;
             }
             if (piecesAreTheirs && pieces.containers().stream()
