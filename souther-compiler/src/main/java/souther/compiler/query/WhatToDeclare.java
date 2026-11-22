@@ -38,10 +38,12 @@ import java.util.Set;
  * the condition is what is written in a behavior, handed what it compares.
  *
  * <p><b>No helper named can be left out.</b> Leaving one out, with the rest declared, leaves some
- * condition with more readings than are made of one. The ones that take the fewest readings out
- * are left out first, so for a condition told of alone the helpers are the fewest there are: a
- * choice is taken out by one helper, the outermost around it that the condition is not inside, so
- * what is left is least where the greatest are taken out.
+ * condition with more readings than are made of one. The ones in the fewest conditions are left
+ * out first, so that one several share is kept before one for each of them, and of those the ones
+ * that take the fewest readings out; so for a condition told of alone the helpers are the fewest
+ * there are: a choice is taken out by one helper, the outermost around it that the condition is
+ * not inside, so what is left is least where the greatest are taken out. For several they may not
+ * be the fewest, and none of them is one that could be left out.
  *
  * @param conditions  how many conditions it is told of
  * @param helpers     the helpers to declare as behaviors, the one in the most conditions first
@@ -106,10 +108,16 @@ public record WhatToDeclare(int conditions, List<HelperToDeclare> helpers, int i
      *  made, none of which can be left out. */
     private static List<HelperToDeclare> toDeclare(List<Through> conditions) {
         Map<ValueName.Helper, BigInteger> takenOut = new LinkedHashMap<>();
-        conditions.forEach(each -> each.byHelper().forEach((helper, held) ->
-                takenOut.merge(helper, held.readings(), BigInteger::multiply)));
+        Map<ValueName.Helper, Integer> heldBy = new LinkedHashMap<>();
+        conditions.forEach(each -> each.byHelper().forEach((helper, held) -> {
+            takenOut.merge(helper, held.readings(), BigInteger::multiply);
+            heldBy.merge(helper, 1, Integer::sum);
+        }));
         Set<ValueName.Helper> declared = new LinkedHashSet<>(takenOut.keySet());
-        takenOut.entrySet().stream().sorted(Map.Entry.comparingByValue()).forEach(each -> {
+        takenOut.entrySet().stream().sorted(Comparator
+                .comparing((Map.Entry<ValueName.Helper, BigInteger> each) ->
+                        heldBy.get(each.getKey()))
+                .thenComparing(Map.Entry.comparingByValue())).forEach(each -> {
             declared.remove(each.getKey());
             if (conditions.stream().anyMatch(condition ->
                     condition.readingsWhere(declared).compareTo(left()) > 0)) {

@@ -620,9 +620,10 @@ public final class Main {
             Compilation compilation = Compiler.analyzed(read, path, warnings, measure,
                     environment.today(), new Adequacy.Choice(module, behavior),
                     early -> {
+                        // Before the notice, whose own walk of the bodies an author waits for too.
+                        told.begin(early);
                         toldBeforeTheMeasurement(early, chosenModule, chosenBehavior,
                                 render.locale());
-                        told.begin(early);
                     });
             // Said first, and whatever the command answers with after. What is wrong with the source
             // is the same news whether the rest of this reports, refuses, or succeeds.

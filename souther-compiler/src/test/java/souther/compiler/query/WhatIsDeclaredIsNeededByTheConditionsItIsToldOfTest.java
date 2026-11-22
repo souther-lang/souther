@@ -105,6 +105,22 @@ class WhatIsDeclaredIsNeededByTheConditionsItIsToldOfTest {
         assertEquals(2, declare.helpers().getFirst().conditions());
     }
 
+    /** Either condition is brought down by the helper the two share or by the greater one of its
+     *  own: the one they share is what is declared, and not one for each. */
+    @Test
+    void aHelperSeveralConditionsShareIsNamedBeforeOneForEach() {
+        WhatToDeclare declare = toldAhead(read(match("K", 2) + match("L", 4) + match("M", 4) + """
+                let ofTwo (l: L, p: L): Int = ofL(l) + ofL(p)
+                let ofOther (m: M, q: M): Int = ofM(m) + ofM(q)
+                behavior paid : (k: K, l: L, p: L, m: M, q: M) -> Bool
+                let paid (k, l, p, m, q) =
+                    ofK(k) + ofTwo(l, p) == 0 || ofK(k) + ofOther(m, q) == 1
+                """));
+
+        assertEquals(2, declare.conditions());
+        assertEquals(List.of("ofK"), named(declare));
+    }
+
     /** Asked of one condition, nothing written in the other is named. */
     @Test
     void aConditionNotAskedOfNamesNothing() {
