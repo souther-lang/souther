@@ -1579,7 +1579,8 @@ public final class Adequacy {
                 if (both == null || fn == null) {
                     continue;
                 }
-                out.put(spec.name(), souther.compiler.check.PathReachability.of(
+                out.put(spec.name(), db.onOneBehavior(name, spec.name(),
+                        () -> souther.compiler.check.PathReachability.of(
                         both.emitted(), SpecImplementation.align(spec, fn), plan,
                         readingOf(db, read, reading.value()),
                         ruleReading, meaningsOf(both.analysis(), read, reading.value(),
@@ -1588,7 +1589,7 @@ public final class Adequacy {
                                 .getOrDefault(spec.name(), ElementBindings.NONE),
                         ValueDefinitions.of(both.analysis(), Shapes.declarationNewtypes(db)),
                         both.analysis() == null ? DeparturesNoRunTakes.NONE
-                                : both.analysis().departures()));
+                                : both.analysis().departures())));
             }
             return Answer.of(Ordered.map(out));
         }
@@ -1639,8 +1640,9 @@ public final class Adequacy {
                 if (analysis == null) {
                     continue;
                 }
-                out.put(spec.name(), over(db, spec.name(), analysis, read, reading.value(),
-                        souther.compiler.partition.CaseCandidates.NEARBY));
+                out.put(spec.name(), db.onOneBehavior(name, spec.name(),
+                        () -> over(db, spec.name(), analysis, read, reading.value(),
+                                souther.compiler.partition.CaseCandidates.NEARBY)));
             }
             return Answer.of(Ordered.map(out));
         }
@@ -1721,9 +1723,11 @@ public final class Adequacy {
                 // analysis tree beside each holds the operations the language's own combinators
                 // stand for, and a walk of that one would find meetings at nodes no arm of the plan
                 // is in.
-                out.put(spec.name(), CoverageRead.of(spec.name(),
-                        checked.present() ? checked.value().run(spec.name()) : RunBodies.NONE,
-                        readingOf(db, read, reading.value())));
+                out.put(spec.name(), db.onOneBehavior(name, spec.name(),
+                        () -> CoverageRead.of(spec.name(),
+                                checked.present() ? checked.value().run(spec.name())
+                                        : RunBodies.NONE,
+                                readingOf(db, read, reading.value()))));
             }
             return Answer.of(Ordered.map(out));
         }

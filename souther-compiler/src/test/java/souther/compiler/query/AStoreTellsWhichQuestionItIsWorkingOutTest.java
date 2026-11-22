@@ -62,6 +62,15 @@ class AStoreTellsWhichQuestionItIsWorkingOutTest {
         public void finished(Key<?> key) {
             assertSame(inFlight.pop(), key, "the working out that ended is the innermost begun");
         }
+
+        @Override
+        public void startedOn(String module, String behavior) {
+            assertTrue(!inFlight.isEmpty(), "a part is a part of a question in flight");
+        }
+
+        @Override
+        public void finishedOn(String module, String behavior) {
+        }
     }
 
     private static Compilation measured() {
@@ -113,6 +122,16 @@ class AStoreTellsWhichQuestionItIsWorkingOutTest {
             public void finished(Key<?> key) {
                 where.finished(key);
             }
+
+            @Override
+            public void startedOn(String module, String behavior) {
+                where.startedOn(module, behavior);
+            }
+
+            @Override
+            public void finishedOn(String module, String behavior) {
+                where.finishedOn(module, behavior);
+            }
         });
 
         compilation.answerEverything();
@@ -163,6 +182,44 @@ class AStoreTellsWhichQuestionItIsWorkingOutTest {
                 behavior("sort"))), alone);
         assertEquals(Optional.of(new WhatIsBeingMeasured.Work(behavior("sort"),
                 behavior("twice"))), forAnother);
+    }
+
+    /** A question about a module that goes through its behaviors in turn. */
+    private record AboutTheModule(String name, List<String> behaviors)
+            implements Key<List<Optional<WhatIsBeingMeasured.Work>>> {
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<List<Optional<WhatIsBeingMeasured.Work>>> compute(Db db) {
+            List<Optional<WhatIsBeingMeasured.Work>> out = new ArrayList<>();
+            for (String behavior : behaviors) {
+                out.add(db.onOneBehavior(name, behavior, AboutOne.where::now));
+            }
+            out.add(AboutOne.where.now());
+            return Answer.of(out);
+        }
+    }
+
+    @Test
+    void aQuestionAboutAModuleSaysWhichOfItsBehaviorsItIsOn() {
+        Compilation compilation = measured();
+        ACompiledModel.compiles(compilation);
+        AboutOne.where = new WhatIsBeingMeasured();
+        compilation.tell(AboutOne.where);
+        WhatIsBeingMeasured.Subject module =
+                new WhatIsBeingMeasured.Subject("told.model", Optional.empty());
+
+        List<Optional<WhatIsBeingMeasured.Work>> seen = compilation.db()
+                .ask(new AboutTheModule("told.model", List.of("sort", "twice"))).value();
+
+        assertEquals(List.of(
+                Optional.of(new WhatIsBeingMeasured.Work(behavior("sort"), behavior("sort"))),
+                Optional.of(new WhatIsBeingMeasured.Work(behavior("twice"), behavior("twice"))),
+                Optional.of(new WhatIsBeingMeasured.Work(module, module))), seen);
     }
 
     @Test

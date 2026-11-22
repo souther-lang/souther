@@ -164,7 +164,7 @@ final class ModelVocabulary {
      *  says who is told which question it is working out, which changes no answer. */
     static final Set<String> DB_NEITHER = Set.of("readings", "execution", "allowances", "ask",
             "dependenciesOf", "isComputed", "watching", "everyAnswer", "revision",
-            "ruleReadingFor", "tell");
+            "ruleReadingFor", "tell", "onOneBehavior");
 
     /**
      * The static methods of a model that take a model or a store and are not changes: the rest of

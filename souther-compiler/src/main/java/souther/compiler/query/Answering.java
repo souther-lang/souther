@@ -22,6 +22,14 @@ public interface Answering {
         @Override
         public void finished(Key<?> key) {
         }
+
+        @Override
+        public void startedOn(String module, String behavior) {
+        }
+
+        @Override
+        public void finishedOn(String module, String behavior) {
+        }
     };
 
     /** The answer of {@code key} starts being worked out. */
@@ -29,4 +37,13 @@ public interface Answering {
 
     /** The working out of {@code key} that started has ended. */
     void finished(Key<?> key);
+
+    /**
+     * The question in flight starts the part of its working out that is about {@code behavior}
+     * of {@code module} ({@link Db#onOneBehavior}). Nested as a question asked there would be.
+     */
+    void startedOn(String module, String behavior);
+
+    /** That part has ended. */
+    void finishedOn(String module, String behavior);
 }

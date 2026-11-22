@@ -427,6 +427,23 @@ public final class Db implements StoreWork {
         this.told = told;
     }
 
+    /**
+     * Does the part of the question in flight that is about {@code behavior} of {@code module},
+     * and tells whoever listens that it is that part being worked out.
+     *
+     * <p>For a question about a module that goes through its behaviors in turn: the working out
+     * is the module's question's, and which behavior it is on is what someone waiting is told.
+     * Nothing is kept or recorded for it — what the work reads is read by the question in flight.
+     */
+    public <T> T onOneBehavior(String module, String behavior, Supplier<T> work) {
+        told.startedOn(module, behavior);
+        try {
+            return work.get();
+        } finally {
+            told.finishedOn(module, behavior);
+        }
+    }
+
     /** Answers {@code key}, computing it if nothing kept from before still holds. */
     @SuppressWarnings("unchecked")
     public <T> Answer<T> ask(Key<T> key) {

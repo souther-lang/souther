@@ -93,16 +93,33 @@ public final class WhatIsBeingMeasured implements Answering {
 
     @Override
     public void started(Key<?> key) {
+        entered(about(key));
+    }
+
+    @Override
+    public void finished(Key<?> key) {
+        left();
+    }
+
+    @Override
+    public void startedOn(String module, String behavior) {
+        entered(Optional.of(new Subject(module, Optional.of(behavior))));
+    }
+
+    @Override
+    public void finishedOn(String module, String behavior) {
+        left();
+    }
+
+    private void entered(Optional<Subject> about) {
         Optional<Work> around = inFlight.isEmpty() ? Optional.empty() : inFlight.peek();
-        Optional<Subject> about = about(key);
         Optional<Work> within = about.isEmpty() ? around
                 : Optional.of(inside(around, about.get()));
         inFlight.push(within);
         now = within;
     }
 
-    @Override
-    public void finished(Key<?> key) {
+    private void left() {
         inFlight.pop();
         now = inFlight.isEmpty() ? Optional.empty() : inFlight.peek();
     }
