@@ -46,14 +46,18 @@ class TheHelperWhoseChoicesMultiplyIsToldBeforeTheMeasurementTest {
             """;
 
     private static List<String> saidAhead(String... more) throws Exception {
+        return errorLines(more).stream().filter(line -> line.contains("made through choices")
+                || line.contains("選択を通して")).toList();
+    }
+
+    private static List<String> errorLines(String... more) throws Exception {
         Path file = Files.createTempDirectory("souther-told-ahead").resolve("told.sou");
         Files.writeString(file, MODEL);
         List<String> args = new ArrayList<>(List.of("examples", file.toString()));
         args.addAll(List.of(more));
         Ran ran = CliInProcess.run(args.toArray(String[]::new));
         assertEquals(0, ran.code(), ran.err());
-        return ran.err().lines().filter(line -> line.contains("made through choices")
-                || line.contains("選択を通して")).toList();
+        return ran.err().lines().toList();
     }
 
     @Test
@@ -76,5 +80,26 @@ class TheHelperWhoseChoicesMultiplyIsToldBeforeTheMeasurementTest {
     @Test
     void itIsSaidOfTheBehaviorsThatAreMeasuredAndOfNoOther() throws Exception {
         assertEquals(List.of(), saidAhead("--behavior", "same"));
+    }
+
+    /** Once, and after what it speaks of: a reader is told of it where there is something to
+     *  change and nowhere else. */
+    @Test
+    void thatTheModelCanBeChangedBeforeTheMeasurementEndsIsSaidAfterIt() throws Exception {
+        List<String> err = errorLines("--lang", "en");
+        assertEquals(List.of(1), positionsOf(err, "without waiting for this run to end"));
+        assertEquals(List.of(0), positionsOf(err, "made through choices"));
+        assertEquals(List.of(1), positionsOf(errorLines("--lang", "ja"), "待たずに"));
+    }
+
+    @Test
+    void itIsNotSaidWhereNothingWasSaidAhead() throws Exception {
+        assertEquals(List.of(), positionsOf(errorLines("--behavior", "same"),
+                "without waiting for this run to end"));
+    }
+
+    private static List<Integer> positionsOf(List<String> lines, String text) {
+        return IntStream.range(0, lines.size()).filter(i -> lines.get(i).contains(text))
+                .boxed().toList();
     }
 }

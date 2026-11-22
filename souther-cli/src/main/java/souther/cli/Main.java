@@ -704,19 +704,27 @@ public final class Main {
      * Each helper of the behaviors {@code module} and {@code behavior} select whose comparisons
      * a function applied outside it reads again on each element, one line for each helper, said
      * on the error stream so that a document on the output stays one document.
+     *
+     * <p>Where anything is said, so is that none of it waits on the measurement: whoever reads it
+     * has what to change while the run is still measuring the model as it stands.
      */
     private void toldBeforeTheMeasurement(Compilation compilation, String module, String behavior,
                                           Locale locale) {
-        for (HelpersReadOnApplicationsAroundThem.Said said
-                : HelpersReadOnApplicationsAroundThem.toldOf(compilation, module, behavior)) {
+        List<HelpersReadOnApplicationsAroundThem.Said> helpers =
+                HelpersReadOnApplicationsAroundThem.toldOf(compilation, module, behavior);
+        List<ConditionsReadThroughTooManyChoices.Said> choices =
+                ConditionsReadThroughTooManyChoices.toldOf(compilation);
+        for (HelpersReadOnApplicationsAroundThem.Said said : helpers) {
             List<String> readBy = new ArrayList<>();
             said.applications().forEach((reader, times) -> readBy.add(
                     Messages.get("cli.examples.helper.ahead.read", locale, reader, times)));
             err.println(Messages.get("cli.examples.helper.ahead", locale, said.helper().name(),
                     String.join(", ", readBy), calledInside(said.calledInside(), locale)));
         }
-        ConditionsReadThroughTooManyChoices.toldOf(compilation)
-                .forEach(said -> toldOfChoices(said, locale));
+        choices.forEach(said -> toldOfChoices(said, locale));
+        if (!helpers.isEmpty() || !choices.isEmpty()) {
+            err.println(Messages.get("cli.examples.ahead.change.first", locale));
+        }
     }
 
     /** The conditions of one behavior whose values are made through more choices than one
