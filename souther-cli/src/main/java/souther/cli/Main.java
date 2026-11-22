@@ -601,7 +601,9 @@ public final class Main {
         }
         SourceContextResolver contexts = read.contexts();
         List<Located> warnings = new ArrayList<>();
-        try {
+        // Open until the command has answered: the report and the rows offered ask the measurement
+        // for what the compile did not, so the wait an author is told about ends with them.
+        try (ToldWhileMeasuring told = new ToldWhileMeasuring(err, render.locale())) {
             ModulePath path = classPath.isEmpty() ? ModulePath.EMPTY
                     : ModulePath.ofClassPath(classPath);
             // The analysing entry point, not the compiling one. What the rows cover is a question
@@ -615,8 +617,11 @@ public final class Main {
             String chosenBehavior = behavior;
             Compilation compilation = Compiler.analyzed(read, path, warnings, measure,
                     environment.today(), new Adequacy.Choice(module, behavior),
-                    early -> toldBeforeTheMeasurement(early, chosenModule, chosenBehavior,
-                            render.locale()));
+                    early -> {
+                        toldBeforeTheMeasurement(early, chosenModule, chosenBehavior,
+                                render.locale());
+                        told.begin(early);
+                    });
             // Said first, and whatever the command answers with after. What is wrong with the source
             // is the same news whether the rest of this reports, refuses, or succeeds.
             List<Located> errors = compilation.errors();

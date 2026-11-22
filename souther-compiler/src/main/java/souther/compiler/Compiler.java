@@ -20,6 +20,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
 
 /**
  * The compiler pipeline facade: source → parse → derive → type check → ClassFile bytecode
@@ -273,8 +274,7 @@ public final class Compiler {
     public static Compilation analyzed(CompilationSources sources, ModulePath path,
                                        List<Located> warningsOut, Adequacy.Asked measure,
                                        LocalDate writtenOn, Adequacy.Choice choice,
-                                       java.util.function.Consumer<Compilation>
-                                               beforeTheMeasurement) {
+                                       Consumer<Compilation> beforeTheMeasurement) {
         Compilation compilation = sources.compilation(path).writtenOn(writtenOn);
         compilation.choose(choice);
         return driven(() -> {

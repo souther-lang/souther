@@ -590,6 +590,11 @@ public final class Compilation {
         db.abandonWhen(abandonment);
     }
 
+    /** Who is told which question this compilation is working out — {@link Db#tell}. */
+    public void tell(Answering told) {
+        db.tell(told);
+    }
+
     /** The names of the modules these sources declare, in the order the sources were given. */
     public List<String> modules() {
         List<String> declared = db.ask(new Front.Declared()).value();
