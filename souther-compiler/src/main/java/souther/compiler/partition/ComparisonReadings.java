@@ -2119,13 +2119,31 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 boolean runsWhenLeftIs = both.op().rightRunsWhenLeftIs();
                 walk(both.left(), in, reads, applying, flow, assumed, live, out, forks,
                         numbering);
+                boolean readsNothing = in.metOnly().isPresent();
                 walk(both.right(), in, reads,
-                        applying.taking(both.left(), runsWhenLeftIs, in.read()), flow,
-                        applying.saysWhatStandsInIt() ? assumed
+                        readsNothing ? applying.takingNothingRead()
+                                : applying.taking(both.left(), runsWhenLeftIs, in.read()), flow,
+                        readsNothing || applying.saysWhatStandsInIt() ? assumed
                                 : taking(Condition.of(both.left(), reads, symbols, in.newtypes(),
                                         numbering), runsWhenLeftIs, in.read(), assumed,
                                         in.conditions(), numbering),
                         live, out, forks, numbering);
+            }
+            // Where only where each construct stands is asked, the condition is walked for the
+            // constructs in it and read for nothing: what it states is what the arms are entered
+            // under, and no application told of is told by that.
+            case Core.If iff when in.metOnly().isPresent() -> {
+                in.ways().enteringACondition();
+                walk(iff.cond(), in, reads, applying, flow, assumed, live, out, forks, numbering);
+                in.ways().leavingACondition();
+                Choice.Decides then = Choice.Decides.ofCondition(iff, true);
+                Choice.Decides els = Choice.Decides.ofCondition(iff, false);
+                walk(iff.then(), in, reads.choosing(then, symbols, in.newtypes()),
+                        applying.takingNothingRead().choosing(then, symbols, in.newtypes(), null),
+                        flow, assumed, live, out, forks, numbering);
+                walk(iff.els(), in, reads.choosing(els, symbols, in.newtypes()),
+                        applying.takingNothingRead().choosing(els, symbols, in.newtypes(), null),
+                        flow, assumed, live, out, forks, numbering);
             }
             // The condition under what stood above the fork, and each arm under what that arm proves
             // of it. A comparison inside a condition is not below the fork: it runs to decide it.
@@ -2252,10 +2270,14 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     Core.Case arm = match.cases().get(part);
                     Choice.Decides taken = Choice.Decides.ofCase(match, arm);
                     int which = part;
+                    boolean readsNothing = in.metOnly().isPresent();
                     walk(arm.body(), in, reads.choosing(taken, symbols, in.newtypes()),
-                            applying.choosing(taken, symbols, in.newtypes(), on ->
+                            applying.choosing(taken, symbols, in.newtypes(),
+                                    readsNothing ? null : on ->
                                     in.conditions().arm(match, which, on).proposition()), flow,
-                            entering(match, arm, part, in.read(), reads, assumed, numbering),
+                            readsNothing ? assumed
+                                    : entering(match, arm, part, in.read(), reads, assumed,
+                                            numbering),
                             live, out, forks, numbering);
                 }
             }
@@ -2280,7 +2302,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                                 shortOfEachElement(seeded.step(), inside, in));
                         ScopeStep.forEachChild(seeded.step(), (body, into) -> walk(body, in,
                                 inside.entering(into, symbols, in.newtypes()),
-                                through.into(seeded.step(), into, inside, in.read())
+                                through.into(seeded.step(), into, inside, in.read(),
+                                                in.metOnly().isEmpty())
                                         .carryingIntoTheFirst(seeded.accumulator(), seed),
                                 flow, assumed, live, out, forks, numbering));
                         in.oneApplication().leaving();
@@ -2317,10 +2340,13 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     in.constructions().made(block, assumed);
                 }
                 in.oneApplication().entering(block, shortOfEachElement(block, reads, in));
-                List<OnTheWay> handed = past(assumed, writtenUnder(block, reads, in, numbering));
+                boolean readsNothing = in.metOnly().isPresent();
+                List<OnTheWay> handed = readsNothing ? assumed
+                        : past(assumed, writtenUnder(block, reads, in, numbering));
                 ScopeStep.forEachChild(block, (child, step) -> {
-                    ClosureApplications applied = applying.into(block, step, reads, in.read());
-                    if (child == block.body()) {
+                    ClosureApplications applied =
+                            applying.into(block, step, reads, in.read(), !readsNothing);
+                    if (child == block.body() && !readsNothing) {
                         answeredBy(block, applied, in);
                     }
                     walk(child, in, reads.entering(step, symbols, in.newtypes()), applied, flow,
@@ -2340,11 +2366,14 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 for (int part = 0; part < arms.size(); part++) {
                     Choice.Arm arm = arms.get(part);
                     int which = part;
+                    boolean readsNothing = in.metOnly().isPresent();
                     walk(arm.answers(), in, reads.choosing(arm.decidedBy(), symbols, in.newtypes()),
-                            applying.choosing(arm.decidedBy(), symbols, in.newtypes(), on ->
+                            applying.choosing(arm.decidedBy(), symbols, in.newtypes(),
+                                    readsNothing ? null : on ->
                                     in.conditions().arm(attempt, which, on).proposition()), flow,
-                            past(assumed, numbering.said(attempting(attempt, part, in.read(),
-                                    reads, numbering))),
+                            readsNothing ? assumed
+                                    : past(assumed, numbering.said(attempting(attempt, part,
+                                            in.read(), reads, numbering))),
                             live, out, forks, numbering);
                 }
             }

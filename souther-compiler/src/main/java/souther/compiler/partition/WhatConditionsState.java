@@ -90,6 +90,15 @@ final class WhatConditionsState {
         return readingsKept;
     }
 
+    /** How many comparisons, truths, forks and operator answers have been read through this, which
+     *  is what a walk that reads no condition leaves at nought. */
+    int readings() {
+        return comparisons.size() + truths.size() + presences.size() + holdings.size()
+                + arms.size() + constructions.size() + dividedInputs.size()
+                + operatorsAnswer.size() + operatorsAnswerOfTheRelation.size()
+                + operatorsAnswerLeavingOut.size();
+    }
+
     /** What the conditions met over {@code read} state, kept for that reading. */
     static WhatConditionsState of(InputReading read) {
         return read.derived(WhatConditionsState.class, WhatConditionsState::new);
