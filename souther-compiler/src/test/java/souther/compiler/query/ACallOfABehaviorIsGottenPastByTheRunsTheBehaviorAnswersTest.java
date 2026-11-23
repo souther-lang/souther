@@ -4,12 +4,18 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.ACompiledModel;
 import souther.compiler.DocumentShape;
 import souther.compiler.check.CallPassage;
+import souther.compiler.check.StopOrigin;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.inputs.AStopNotShown;
+import souther.compiler.inputs.WhyAStopIsNotShown;
 import souther.compiler.report.AdequacyReport;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -76,6 +82,12 @@ class ACallOfABehaviorIsGottenPastByTheRunsTheBehaviorAnswersTest {
         return assertInstanceOf(CallPassage.Open.class, passageOf(compilation, behavior)).why();
     }
 
+    /** Where in {@code behavior}'s body the proof that a run gets past gave out. */
+    private static StopOrigin mayStopAt(Compilation compilation, String behavior) {
+        return assertInstanceOf(CallPassage.WhyOpen.MayStopAt.class,
+                whyOpen(compilation, behavior)).origin();
+    }
+
     /** The lines of the report that say a stop is not resolved. */
     private static List<String> notResolved(String report) {
         return report.lines().filter(line -> line.contains(NOT_RESOLVED)).toList();
@@ -140,15 +152,50 @@ class ACallOfABehaviorIsGottenPastByTheRunsTheBehaviorAnswersTest {
         Compilation compilation = readByItsRules(throwsScored("Points(n)", UNREACHABLE));
         String report = reportOf(compilation, "reachedTwelve");
 
-        CallPassage.WhyOpen why = whyOpen(compilation, "scoreOf");
-        assertEquals("Points",
-                assertInstanceOf(CallPassage.WhyOpen.AConstruction.class, why).type());
+        assertEquals("Points", assertInstanceOf(StopOrigin.AConstruction.class,
+                mayStopAt(compilation, "scoreOf")).type());
         List<String> open = notResolved(report);
         assertEquals(1, open.size(), report);
-        assertTrue(open.getFirst().contains("it is the call of scoreOf at "), report);
-        assertTrue(open.getFirst().contains("which may stop at the construction of Points at "),
+        assertTrue(open.getFirst().contains("a run may stop at the call of scoreOf at "), report);
+        assertTrue(open.getFirst().contains("; scoreOf may stop at the construction of Points at "),
                 report);
-        assertFalse(open.getFirst().contains("none of the operations"), report);
+    }
+
+    /** The premise is taken in the body it is written in as by a caller: a comparison over a
+     *  value a run works out through an {@code unreachable} is read past it. */
+    @Test
+    void anUnreachableInTheBodyItIsWrittenInLeavesNoComparisonOpen() {
+        Compilation compilation = readByItsRules("""
+                data Points = Int
+                    invariant value >= 0 && value <= 12
+                data Throw = List<Int>
+                behavior reachedTwelve : (t: Throw) -> Bool
+                let reachedTwelve (t) = {
+                    let p = match List.get(0, t.value) with
+                        | Some n -> Points(Int.clamp(0, 12, n))
+                        | None -> unreachable "a throw always names a pin"
+                    p.value == 12
+                }
+                """);
+        String report = reportOf(compilation, "reachedTwelve");
+
+        assertEquals(List.of(), notResolved(report), report);
+        assertFalse(report.contains("works out an operation that may end the run"), report);
+    }
+
+    /** A stop left untold in a closure the comparison applies says where it is. */
+    @Test
+    void aStopLeftUntoldInAClosureTheComparisonAppliesIsSaidWhereItIs() {
+        Compilation compilation = readByItsRules(throwsScored("Points(n)", "Points(0)") + """
+
+                behavior total : (ts: List<Throw>) -> Bool
+
+                let total (ts) = List.fold((s, t) -> s + scoreOf(t).value, 0, ts) >= 50
+                """);
+        List<String> open = notResolved(reportOf(compilation, "total"));
+
+        assertFalse(open.isEmpty());
+        assertTrue(open.stream().allMatch(line -> line.contains("a run may stop at ")), open::toString);
     }
 
     /** The premise is taken through every call on the way: of a behavior calling the one that
@@ -201,15 +248,16 @@ class ACallOfABehaviorIsGottenPastByTheRunsTheBehaviorAnswersTest {
                 """);
         String report = reportOf(compilation, "twelveOrMore");
 
-        CallPassage.WhyOpen.ACall call = assertInstanceOf(CallPassage.WhyOpen.ACall.class,
-                whyOpen(compilation, "pinsOf"));
+        StopOrigin.ACall call = assertInstanceOf(StopOrigin.ACall.class,
+                mayStopAt(compilation, "pinsOf"));
         assertEquals("scoreOf", call.behavior().name());
-        assertInstanceOf(CallPassage.WhyOpen.AConstruction.class,
-                assertInstanceOf(CallPassage.Open.class, call.passage()).why());
-        assertInstanceOf(CallPassage.WhyOpen.ACall.class, whyOpen(compilation, "twelveOrMore"));
-        assertTrue(report.contains("it is the call of pinsOf at "), report);
-        assertTrue(report.contains("which calls scoreOf at "), report);
-        assertTrue(report.contains("which may stop at the construction of Points at "), report);
+        assertInstanceOf(StopOrigin.AConstruction.class,
+                assertInstanceOf(CallPassage.WhyOpen.MayStopAt.class,
+                        assertInstanceOf(CallPassage.Open.class, call.passage()).why()).origin());
+        assertInstanceOf(StopOrigin.ACall.class, mayStopAt(compilation, "twelveOrMore"));
+        assertTrue(report.contains("a run may stop at the call of pinsOf at "), report);
+        assertTrue(report.contains("; pinsOf may stop at the call of scoreOf at "), report);
+        assertTrue(report.contains("; scoreOf may stop at the construction of Points at "), report);
     }
 
     /** A document says the same: the call, each call down from it, and the construction at the
@@ -234,39 +282,76 @@ class ACallOfABehaviorIsGottenPastByTheRunsTheBehaviorAnswersTest {
                 .json(SourceRendering.namedByIdentity(compilation.texts())));
 
         DocumentShape.assertShapedLikeTheSchema(document);
-        List<JsonNode> calls = document.findParents("reason").stream()
-                .filter(each -> each.get("reason").asString().equals("in_a_call"))
-                .map(each -> each.get("call")).toList();
-        assertTrue(calls.stream().anyMatch(call -> call.get("behavior").asString().equals("pinsOf")
-                && call.at("/passage/reason").asString().equals("call")
-                && call.at("/passage/call/behavior").asString().equals("scoreOf")
-                && call.at("/passage/call/passage/reason").asString().equals("construction")
-                && call.at("/passage/call/passage/construction").asString().equals("Points")),
+        List<JsonNode> places = new ArrayList<>();
+        for (JsonNode restsOn : document.findValues("restsOn")) {
+            restsOn.forEach(places::add);
+        }
+        assertTrue(places.stream().anyMatch(place -> place.at("/kind").asString().equals("call")
+                && place.at("/behavior").asString().equals("pinsOf")
+                && place.at("/passage/reason").asString().equals("may_stop")
+                && place.at("/passage/place/behavior").asString().equals("scoreOf")
+                && place.at("/passage/place/passage/place/kind").asString()
+                        .equals("construction")
+                && place.at("/passage/place/passage/place/construction").asString()
+                        .equals("Points")),
                 document::toString);
     }
 
-    /** The schema holds a document to what the types hold this to: a call exactly where the
-     *  reason is a call, and of a passage, the construction or the call exactly where it names
-     *  one, and a place only where there is one. */
-    @Test
-    void theSchemaRefusesAReasonWithoutWhatItNames() {
-        JsonMapper json = JsonMapper.builder().build();
-        String item = "#/$defs/findings/items/properties/unresolved/items";
-        String passage = "#/$defs/passageOfACall";
-        String call = "{\"behavior\": \"made\", \"passage\": {\"reason\": \"no_body\"}}";
+    private static final String ITEM = "#/$defs/findings/items/properties/unresolved/items";
 
-        assertEquals(List.of(), DocumentShape.of(json.readTree(
-                "{\"reason\": \"in_a_call\", \"call\": " + call + "}"), item).wrong());
-        for (String wrong : List.of("{\"reason\": \"in_a_call\"}",
-                "{\"reason\": \"no_operation_told\", \"call\": " + call + "}")) {
-            assertFalse(DocumentShape.of(json.readTree(wrong), item).wrong().isEmpty(), wrong);
+    /** Whether the schema shipped beside this takes {@code written} at {@code reference}. */
+    private static boolean schemaTakes(String written, String reference) {
+        return DocumentShape.of(JsonMapper.builder().build().readTree(written), reference)
+                .wrong().isEmpty();
+    }
+
+    /**
+     * The schema holds a stop not resolved to what its reason holds it to here, from one source:
+     * for every reason, an operation is written exactly where the reason is of one, and places
+     * only where it rests on stops left untold — as the type refuses the rest.
+     */
+    @Test
+    void theSchemaTakesAStopNotResolvedExactlyWhereItsTypeDoes() {
+        StopOrigin somewhere = new StopOrigin.SomethingWorkedOut(new SourcePos(0, 0));
+        for (WhyAStopIsNotShown why : WhyAStopIsNotShown.values()) {
+            for (boolean operation : new boolean[] {false, true}) {
+                for (boolean places : new boolean[] {false, true}) {
+                    boolean typed;
+                    try {
+                        new AStopNotShown(operation ? Optional.of("x + 1") : Optional.empty(), why,
+                                places ? List.of(somewhere) : List.of());
+                        typed = true;
+                    } catch (IllegalArgumentException refused) {
+                        typed = false;
+                    }
+                    String written = "{\"reason\": \"" + AdequacyReport.word(why) + "\""
+                            + (operation ? ", \"operation\": \"x + 1\"" : "")
+                            + (places ? ", \"restsOn\": [{\"kind\": \"worked_out\"}]" : "")
+                            + "}";
+                    assertEquals(typed, schemaTakes(written, ITEM), written);
+                }
+            }
         }
-        for (String wrong : List.of("{\"reason\": \"construction\"}",
-                "{\"reason\": \"no_body\", \"construction\": \"Points\"}",
-                "{\"reason\": \"call\"}",
-                "{\"reason\": \"gotten_past\", \"call\": " + call + "}",
-                "{\"reason\": \"not_read\", \"at\": {}}")) {
-            assertFalse(DocumentShape.of(json.readTree(wrong), passage).wrong().isEmpty(), wrong);
+    }
+
+    /** And of a place and of a passage, the construction, the call or the place exactly where
+     *  what it is names one. */
+    @Test
+    void theSchemaRefusesAPlaceOrAPassageWithoutWhatItNames() {
+        String place = "#/$defs/stopPlace";
+        String passage = "#/$defs/passageOfACall";
+        assertTrue(schemaTakes("{\"kind\": \"call\", \"behavior\": \"made\","
+                + " \"passage\": {\"reason\": \"may_stop\", \"place\": {\"kind\": \"worked_out\"}}}",
+                place));
+        for (String wrong : List.of("{\"kind\": \"construction\"}",
+                "{\"kind\": \"worked_out\", \"construction\": \"Points\"}",
+                "{\"kind\": \"call\", \"behavior\": \"made\"}",
+                "{\"kind\": \"worked_out\", \"behavior\": \"made\"}")) {
+            assertFalse(schemaTakes(wrong, place), wrong);
+        }
+        for (String wrong : List.of("{\"reason\": \"may_stop\"}",
+                "{\"reason\": \"no_body\", \"place\": {\"kind\": \"worked_out\"}}")) {
+            assertFalse(schemaTakes(wrong, passage), wrong);
         }
     }
 
@@ -288,7 +373,7 @@ class ACallOfABehaviorIsGottenPastByTheRunsTheBehaviorAnswersTest {
                 """);
 
         assertTrue(rowsRunsGetPast(kept, "scored"));
-        assertInstanceOf(CallPassage.WhyOpen.AConstruction.class, whyOpen(halfKept, "scored"));
+        assertInstanceOf(StopOrigin.AConstruction.class, mayStopAt(halfKept, "scored"));
     }
 
     /** Of two calls in one comparison that each leave it open, the one the proof gave out at is
@@ -311,8 +396,8 @@ class ACallOfABehaviorIsGottenPastByTheRunsTheBehaviorAnswersTest {
 
         assertFalse(rowsRunsGetPast(compilation, "first"));
         assertFalse(rowsRunsGetPast(compilation, "second"));
-        assertTrue(report.contains("it is the call of first at ")
-                || report.contains("it is the call of second at "), report);
+        assertTrue(report.contains("a run may stop at the call of first at ")
+                || report.contains("a run may stop at the call of second at "), report);
     }
 
     /** What a passage is left open at is said of the behavior's own body: an operation in it, or
@@ -325,8 +410,7 @@ class ACallOfABehaviorIsGottenPastByTheRunsTheBehaviorAnswersTest {
                 behavior injected : (n: Int) -> Int
                 """);
 
-        assertInstanceOf(CallPassage.WhyOpen.SomethingWorkedOut.class,
-                whyOpen(compilation, "made"));
+        assertInstanceOf(StopOrigin.SomethingWorkedOut.class, mayStopAt(compilation, "made"));
         assertInstanceOf(CallPassage.WhyOpen.NoBody.class, whyOpen(compilation, "injected"));
     }
 

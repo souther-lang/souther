@@ -10,7 +10,6 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.Type;
-import souther.compiler.types.ValueName;
 
 import java.math.BigInteger;
 import java.util.List;
@@ -91,48 +90,50 @@ class AWorkingPutTogetherKeepsWhichStopsItLeavesUntoldTest {
         onlyTheQuotient.ownStopOfAQuotientByAValueUntold(q);
         assertFalse(onlyTheQuotient.working().leavesUntoldBeyond(List.of(q)));
 
+        Core noRow = quotient();
         AffineReading.WhatWasTold both = new AffineReading.WhatWasTold();
         both.ownStopOfAQuotientByAValueUntold(q);
-        both.aStopWhereNoRowIs();
+        both.aStopWhereNoRowIs(noRow);
         assertTrue(both.working().leavesUntoldBeyond(List.of(q)));
+        assertEquals(List.of(q, noRow), both.working().leftUntold().untoldAt(),
+                "and each stop it left untold says where it is");
 
         AffineReading.WhatWasTold absorbing = new AffineReading.WhatWasTold();
         absorbing.ownStopOfAQuotientByAValueUntold(q);
         AffineReading.WhatWasTold apart = new AffineReading.WhatWasTold();
-        apart.aStopWhereNoRowIs();
+        apart.aStopWhereNoRowIs(noRow);
         absorbing.absorb(apart);
         assertTrue(absorbing.working().leavesUntoldBeyond(List.of(q)));
+        assertEquals(List.of(q, noRow), absorbing.working().leftUntold().untoldAt());
     }
 
-    /** Some operation left untold, and a stop left untold in a call of {@code behavior}. */
-    private static UndividedByARelation.Working leavingTheCallOf(String behavior) {
+    /** Some operation left untold, and a stop left untold at {@code node}. */
+    private static UndividedByARelation.Working leavingAStopAt(Core node) {
         return new UndividedByARelation.Working(List.of(), Told.SOME, true, List.of(), true,
-                NotAccountedFor.aCall(new NotAccountedFor.ACall(
-                        new ValueName.Behavior("m", behavior), POS)));
+                NotAccountedFor.aStopAt(node));
     }
 
-    private static List<String> callsOf(UndividedByARelation.Working working) {
-        return working.leftUntold().calls().stream().map(call -> call.behavior().name())
-                .toList();
-    }
-
-    /** A call one reading names is named by the readings together, whether or not they agree on
-     *  what they tell, and by whatever a working is put beside or read past. */
+    /** Where a stop one reading left untold is, is said by the readings together, whether or not
+     *  they agree on what they tell, and by whatever a working is put beside or read past. */
     @Test
-    void aCallAReadingLeavesUntoldIsKeptByEveryWayOfPuttingWorkingsTogether() {
-        UndividedByARelation.Working made = leavingTheCallOf("made");
+    void whereAReadingLeftAStopUntoldIsKeptByEveryWayOfPuttingWorkingsTogether() {
+        Core here = quotient();
+        Core there = quotient();
+        UndividedByARelation.Working leaving = leavingAStopAt(here);
         // Told of every operation where the other is told of some: the two disagree on what
         // they tell, and are put together as no reading.
         UndividedByARelation.Working toldWhole = new UndividedByARelation.Working(List.of(),
                 Told.EVERY);
 
-        assertEquals(List.of("made"), callsOf(
-                UndividedByARelation.Working.together(List.of(toldWhole, made))));
-        assertEquals(List.of("made", "other"), callsOf(UndividedByARelation.Working.together(
-                List.of(made, leavingTheCallOf("other")))));
-        assertEquals(List.of("made"), callsOf(made.after(aStopNothingAnswersFor())));
-        assertEquals(List.of("made"), callsOf(aStopNothingAnswersFor().after(made)));
-        assertEquals(List.of("made"), callsOf(made.notOnEveryRun()));
+        assertEquals(List.of(here), UndividedByARelation.Working.together(
+                List.of(toldWhole, leaving)).leftUntold().untoldAt());
+        assertEquals(List.of(here, there), UndividedByARelation.Working.together(
+                List.of(leaving, leavingAStopAt(there))).leftUntold().untoldAt());
+        assertEquals(List.of(here),
+                leaving.after(aStopNothingAnswersFor()).leftUntold().untoldAt());
+        assertEquals(List.of(here),
+                aStopNothingAnswersFor().after(leaving).leftUntold().untoldAt());
+        assertEquals(List.of(here), leaving.notOnEveryRun().leftUntold().untoldAt());
     }
 
     private static UndividedByARelation.IntOperation operationAt(Core node) {

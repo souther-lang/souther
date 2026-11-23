@@ -1,8 +1,5 @@
 package souther.compiler.check;
 
-import souther.compiler.diag.SourcePos;
-import souther.compiler.types.ValueName;
-
 import java.util.Objects;
 
 /**
@@ -11,8 +8,8 @@ import java.util.Objects;
  * out, or that it is not, and what that rests on.
  *
  * <p>Not shown to get past is not shown to stop. {@link Open} says only that no proof was made,
- * and what it names is where the proof gave out: the first expression the walk met whose own
- * working may end a run, and not every one there is.
+ * and where it names an expression, that is where the proof gave out: the first the walk met whose
+ * own working may end a run, and not every one there is.
  */
 public sealed interface CallPassage {
 
@@ -49,38 +46,11 @@ public sealed interface CallPassage {
         /** The body is there, and what its inputs or its rules hold is not read. */
         record NotRead() implements WhyOpen {}
 
-        /**
-         * A construction written at {@code at}, of {@code type}, of which it is not shown that
-         * every run making it keeps its invariant.
-         */
-        record AConstruction(SourcePos at, String type) implements WhyOpen {
+        /** The expression in the body the proof gave out at. */
+        record MayStopAt(StopOrigin origin) implements WhyOpen {
 
-            public AConstruction {
-                Objects.requireNonNull(at, "a construction is written somewhere");
-                Objects.requireNonNull(type, "a construction is of some type");
-            }
-        }
-
-        /**
-         * A call written at {@code at} of {@code behavior}, whose own passage is {@code passage}:
-         * what is told of a call is asked of the behavior it calls, so the reason a call is left
-         * open is that behavior's.
-         */
-        record ACall(SourcePos at, ValueName.Behavior behavior, CallPassage passage)
-                implements WhyOpen {
-
-            public ACall {
-                Objects.requireNonNull(at, "a call is written somewhere");
-                Objects.requireNonNull(behavior, "a call is of some behavior");
-                Objects.requireNonNull(passage, "what the behavior called is told of");
-            }
-        }
-
-        /** Something else written at {@code at} whose own working may end a run. */
-        record SomethingWorkedOut(SourcePos at) implements WhyOpen {
-
-            public SomethingWorkedOut {
-                Objects.requireNonNull(at, "it is written somewhere");
+            public MayStopAt {
+                Objects.requireNonNull(origin, "it may stop somewhere");
             }
         }
     }

@@ -311,8 +311,8 @@ public final class GuardThresholds {
      * run, and none where every run is shown to get past. What a caller is told of it ({@link
      * souther.compiler.check.BehaviorAnswers#passageOf}). Asked by the numbers its operations lie
      * within: a sum of inputs declared within a range ends no run, and one of any {@code Int}
-     * may. An {@code unreachable} is taken as the premise it states, the body's to account for
-     * ({@link WorkedOutToReachIt#takingWhatItRulesOutAsRuledOut}).
+     * may. An {@code unreachable} is taken as the premise it states, as every reader of what a
+     * row's run gets past takes it ({@link WorkedOutToReachIt}).
      *
      * <p>The expression is the one the answer rests on, the first the walk met, and not every one
      * there is: another may be left where it is answered for.
@@ -322,8 +322,7 @@ public final class GuardThresholds {
      */
     public static Optional<Core> whereARowsRunMayEnd(AnalysisBody states, InputReading read,
                                                      ElementBindings elements) {
-        return OneReading.over(() -> WorkedOutToReachIt.of(read).takingWhatItRulesOutAsRuledOut()
-                .whereARunMayEndWhereItWasPassedOver(
+        return OneReading.over(() -> WorkedOutToReachIt.of(read).whereARunMayEndWhereItWasPassedOver(
                         new Denotation(states.core(), namesOf(read, elements)))
                 .map(at -> Core.withoutStanding(at.value())));
     }

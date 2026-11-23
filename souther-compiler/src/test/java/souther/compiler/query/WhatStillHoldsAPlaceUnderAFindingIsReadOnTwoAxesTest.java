@@ -195,26 +195,26 @@ class WhatStillHoldsAPlaceUnderAFindingIsReadOnTwoAxesTest {
                                 + " module, line and column the report says, made where the"
                                 + " construction is judged, or show that nothing carrying a rule"
                                 + " whose stop is not resolved crosses a module boundary")));
-        // A call of a behavior a run may stop in, under a rule whose stop is not resolved, and
-        // each place in the called bodies down to where the proof that a run gets past gave out:
-        // the call, the construction or the expression there. Each is where it is written, which
-        // the words and the document say as a line and a column, and the place may be in another
-        // module than the rule's, the one the called behavior is declared in. The models reach a
-        // call, and no two of them were seen differing only there; nothing they reach is a
-        // construction or an expression left open in a body called.
-        String sayWhereACallLeavesItOpen = "say where each is written as the module, line and"
-                + " column the report says, made where the called behavior is asked of its body,"
-                + " or show that nothing carrying a rule whose stop is not resolved crosses a"
-                + " module boundary";
-        out.put("souther.compiler.check.CallPassage$WhyOpen$ACall.at",
+        // Where a stop left untold is, under a rule whose stop is not resolved, and each place in
+        // a called body down to where the proof that a run gets past gave out: a call, a
+        // construction or another expression. Each is where it is written, which the words and the
+        // document say as a line and a column, and the place may be in another module than the
+        // rule's, the one a called behavior is declared in. The models reach a call, and no two
+        // calls were seen differing only there; two other expressions were, two stops left untold
+        // that only where they are written tells apart; nothing they reach is a construction.
+        String sayWhereAStopIsLeftUntold = "say where each is written as the module, line and"
+                + " column the report says, made where the stop is found left untold, or show"
+                + " that nothing carrying a rule whose stop is not resolved crosses a module"
+                + " boundary";
+        out.put("souther.compiler.check.StopOrigin$ACall.at",
                 new Standing(new Because.ReachedAndNotObservedToDiscriminate(),
-                        new AcrossTheCut.BlocksIt(sayWhereACallLeavesItOpen)));
-        out.put("souther.compiler.check.CallPassage$WhyOpen$AConstruction.at",
+                        new AcrossTheCut.BlocksIt(sayWhereAStopIsLeftUntold)));
+        out.put("souther.compiler.check.StopOrigin$AConstruction.at",
                 new Standing(new Because.NothingReachesOne(),
-                        new AcrossTheCut.BlocksIt(sayWhereACallLeavesItOpen)));
-        out.put("souther.compiler.check.CallPassage$WhyOpen$SomethingWorkedOut.at",
-                new Standing(new Because.NothingReachesOne(),
-                        new AcrossTheCut.BlocksIt(sayWhereACallLeavesItOpen)));
+                        new AcrossTheCut.BlocksIt(sayWhereAStopIsLeftUntold)));
+        out.put("souther.compiler.check.StopOrigin$SomethingWorkedOut.at",
+                new Standing(new Because.TwoOfThemDifferOnlyThere(),
+                        new AcrossTheCut.BlocksIt(sayWhereAStopIsLeftUntold)));
         return out;
     }
 

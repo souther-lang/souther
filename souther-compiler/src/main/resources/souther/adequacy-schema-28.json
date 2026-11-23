@@ -89,40 +89,18 @@
     }
   },
   "$defs": {
-    "callNotGottenPast": {
+    "stopPlace": {
       "type": "object",
       "required": [
-        "behavior",
-        "passage"
+        "kind"
       ],
       "additionalProperties": false,
-      "description": "A call of a behavior of which it is not shown that every run of a row gets past it, which is not that some run does not: what is told of a call is asked of the behavior it calls, over whatever that behavior's own inputs may hold.",
-      "properties": {
-        "behavior": {
-          "type": "string",
-          "description": "The behavior called, by its name."
-        },
-        "at": {
-          "$ref": "#/$defs/at",
-          "description": "Where the call is written, present where a reader can be sent there."
-        },
-        "passage": {
-          "$ref": "#/$defs/passageOfACall"
-        }
-      }
-    },
-    "passageOfACall": {
-      "type": "object",
-      "required": [
-        "reason"
-      ],
-      "additionalProperties": false,
-      "description": "What a behavior called is told of its body: where the proof that every run of a row gets past it gave out. That is the first expression the proof found whose own working may end a run, and not every one there is. Not shown to get past is not shown to stop.",
+      "description": "An expression whose own working may end a run of a row: where a stop is left untold, as the reading that left it found it, or where in a called behavior's body the proof that every run gets past gave out. The same in the body that writes it and in a caller of that body. An `unreachable` states the premise that no run reaches it, and is never one of these.",
       "allOf": [
         {
           "if": {
             "properties": {
-              "reason": {
+              "kind": {
                 "const": "construction"
               }
             }
@@ -143,39 +121,87 @@
         {
           "if": {
             "properties": {
-              "reason": {
+              "kind": {
                 "const": "call"
               }
             }
           },
           "then": {
             "required": [
-              "call"
+              "behavior",
+              "passage"
+            ]
+          },
+          "else": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "behavior"
+                  ]
+                },
+                {
+                  "required": [
+                    "passage"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "construction",
+            "call",
+            "worked_out"
+          ],
+          "description": "`construction`: a construction whose invariant is not shown to hold on every run that makes it, of the type `construction`. `call`: a call of the behavior `behavior`, which is not shown to be got past by every run, and `passage` says what that behavior is told of its body. `worked_out`: something else whose own working may end a run."
+        },
+        "construction": {
+          "type": "string",
+          "description": "Of `construction` only: the type made, as it is written."
+        },
+        "behavior": {
+          "type": "string",
+          "description": "Of `call` only: the behavior called, by its name."
+        },
+        "passage": {
+          "$ref": "#/$defs/passageOfACall",
+          "description": "Of `call` only: what the behavior called is told of its body, asked over whatever its own inputs may hold."
+        },
+        "at": {
+          "$ref": "#/$defs/at",
+          "description": "Where it is written, present where a reader can be sent there."
+        }
+      }
+    },
+    "passageOfACall": {
+      "type": "object",
+      "required": [
+        "reason"
+      ],
+      "additionalProperties": false,
+      "description": "What a behavior called is told of its body: that every run of a row is shown to get past it, or what not being shown rests on. Not shown to get past is not shown to stop.",
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "reason": {
+                "const": "may_stop"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "place"
             ]
           },
           "else": {
             "not": {
               "required": [
-                "call"
-              ]
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "reason": {
-                "enum": [
-                  "construction",
-                  "something_worked_out"
-                ]
-              }
-            }
-          },
-          "else": {
-            "not": {
-              "required": [
-                "at"
+                "place"
               ]
             }
           }
@@ -188,23 +214,13 @@
             "no_body",
             "reaches_itself",
             "not_read",
-            "construction",
-            "call",
-            "something_worked_out"
+            "may_stop"
           ],
-          "description": "`gotten_past`: every run is shown to get past it. `no_body`: the behavior has no body in the model to read. `reaches_itself`: asking the body asks the behavior again, through the calls it makes, and nothing is said of it. `not_read`: its inputs or rules are not read. `construction`: a construction in it whose invariant is not shown to hold on every run that makes it, named by`construction` and `at`. `call`: a call in it of another behavior, said by `call` the same way. `something_worked_out`: something else written at `at` whose own working may end a run. An `unreachable` in the body is the premise it states and the behavior's to account for, and is never this."
+          "description": "`gotten_past`: every run is shown to get past it. `no_body`: the behavior has no body in the model to read. `reaches_itself`: asking the body asks the behavior again, through the calls it makes, and nothing is said of it. `not_read`: its inputs or rules are not read. `may_stop`: the proof that every run gets past gave out at `place`, the first expression it met whose own working may end a run, and not every one there is."
         },
-        "construction": {
-          "type": "string",
-          "description": "Of `construction` only: the type made, as it is written."
-        },
-        "at": {
-          "$ref": "#/$defs/at",
-          "description": "Of `construction` and `something_worked_out`: where it is written, present where a reader can be sent there."
-        },
-        "call": {
-          "$ref": "#/$defs/callNotGottenPast",
-          "description": "Of `call` only: the call, and what its behavior is told of in turn."
+        "place": {
+          "$ref": "#/$defs/stopPlace",
+          "description": "Of `may_stop` only: where in the body the proof gave out."
         }
       }
     },
@@ -5115,19 +5131,41 @@
                   "if": {
                     "properties": {
                       "reason": {
-                        "const": "in_a_call"
+                        "enum": [
+                          "no_operation_told",
+                          "on_rows_of_the_statement"
+                        ]
                       }
                     }
                   },
                   "then": {
+                    "not": {
+                      "required": [
+                        "operation"
+                      ]
+                    }
+                  },
+                  "else": {
                     "required": [
-                      "call"
+                      "operation"
                     ]
+                  }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "reason": {
+                        "enum": [
+                          "no_operation_told",
+                          "not_every_operation_told"
+                        ]
+                      }
+                    }
                   },
                   "else": {
                     "not": {
                       "required": [
-                        "call"
+                        "restsOn"
                       ]
                     }
                   }
@@ -5136,19 +5174,20 @@
               "properties": {
                 "operation": {
                   "type": "string",
-                  "description": "The operation, as written. Absent where a run may stop in something worked out that no operation names."
+                  "description": "The operation, as written. Absent exactly where the reason is of no operation: a run may stop in something worked out that no operation names, or on rows the statement says of its own."
                 },
-                "call": {
-                  "$ref": "#/$defs/callNotGottenPast",
-                  "description": "Present exactly where the reason is `in_a_call`: the call of a behavior a run may stop in, and what that behavior is told of its body."
+                "restsOn": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "$ref": "#/$defs/stopPlace"
+                  },
+                  "description": "Of `no_operation_told` and `not_every_operation_told` only: where the stops left untold that it rests on are, as the readings that left them found them, and not every one there may be. Absent where none was found."
                 },
                 "reason": {
                   "enum": [
                     "no_operation_told",
-                    "in_a_call",
                     "on_rows_of_the_statement",
-                    "on_an_arm",
-                    "on_an_application",
                     "not_every_operation_told",
                     "something_before_it_may_stop",
                     "a_condition_not_read",
@@ -5157,7 +5196,7 @@
                     "no_value_found",
                     "no_value_found_within_what_is_tried"
                   ],
-                  "description": "Why neither is shown. `no_operation_told`: a run may stop in something worked out that this compiler does not read as an operation. `in_a_call`: a run may stop in a call of a behavior, since it is not shown that every run of a row gets past working that behavior's body out, and `call` says which call and why. `on_rows_of_the_statement`: the comparison stops a run on rows it states, such as a divisor of nought, and no input reaching them is looked for. `on_an_arm` and `on_an_application`: the operation is worked out on one arm of a choice, or inside a function applied to each element, and the comparison is no condition, so nothing says which runs take the arm or make the application. `not_every_operation_told`: another part of the comparison may stop a run first and is not read. `something_before_it_may_stop`: something evaluated before the comparison may stop a run first. `a_condition_not_read`: a condition on the way is no comparison of whole numbers of the input, so no input is checked against it. `not_over_the_input`: the operation is over a value the body works out, such as a total or a product, and not over numbers of the input. `no_value_shown`: the input's types declare invariants or cases, and no input meeting them is built. `no_value_found`: no input tried takes the operation past its type. `no_value_found_within_what_is_tried`: the inputs tried ran out first, and another may."
+                  "description": "Why neither is shown. `no_operation_told`: a run may stop in something worked out that this compiler does not read as an operation. `on_rows_of_the_statement`: the comparison stops a run on rows it states, such as a divisor of nought, and no input reaching them is looked for. `not_every_operation_told`: another part of the comparison may stop a run first and is not read. `something_before_it_may_stop`: something evaluated before the comparison may stop a run first. `a_condition_not_read`: a condition on the way is no comparison of whole numbers of the input, so no input is checked against it. `not_over_the_input`: the operation is over a value the body works out, such as a total or a product, and not over numbers of the input. `no_value_shown`: the input's types declare invariants or cases, and no input meeting them is built. `no_value_found`: no input tried takes the operation past its type. `no_value_found_within_what_is_tried`: the inputs tried ran out first, and another may."
                 }
               }
             }
@@ -5184,7 +5223,7 @@
                 },
                 "asked": {
                   "$ref": "#/$defs/constructionAsked",
-                  "description": "What a run has to meet to get past it, of what the way to it does not already hold. Which rows do not is for the rows run, and a condition on several numbers says what none of them does alone, as a product at nought or above is met by a gross at nought whatever the rate is. Absent where what its type asks is not read (`asks_not_read`)."
+                  "description": "What a run has to meet to get past it, of what the way to it does not already hold. Which rows do not is for the rows run, and a condition on several numbers says what none of them does alone, as a product at nought or above is met by a gross at nought whatever the rate is. Absent where what its type asks is not read, which is so under `asks_not_read` and may be under `reach_not_shown`, and where the way to it already holds all it asks."
                 },
                 "reason": {
                   "type": "string",

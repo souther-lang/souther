@@ -1810,8 +1810,14 @@ class EverySchemaWordIsAccountedForTest {
         // sealed passages and the reasons a passage is left open, for the reason the ones above
         // are.
         held.add("/$defs/passageOfACall/properties/reason");
-        // Which of those reasons name a place: two of the words above, asked of what was written.
-        held.add("/$defs/passageOfACall/allOf/2/if/properties/reason");
+        // What a place a run may stop at is, by kind: written by a switch over the sealed places,
+        // for the reason the one above is.
+        held.add("/$defs/stopPlace/properties/kind");
+        // Which reasons a stop not resolved names an operation under, and which rest on stops left
+        // untold: words of the reason's own enum, each held to what that enum says of itself by
+        // `theSchemaTakesAStopNotResolvedExactlyWhereItsTypeDoes`.
+        held.add("/$defs/findings/items/properties/unresolved/items/allOf/0/if/properties/reason");
+        held.add("/$defs/findings/items/properties/unresolved/items/allOf/1/if/properties/reason");
 
         List<String> unaccounted = paths.stream().filter(p -> !held.contains(p)).toList();
         assertEquals(List.of(), unaccounted,

@@ -577,21 +577,6 @@ final class WorkedOutToReachIt {
         return new WorkedOutToReachIt(read, _ -> false, true);
     }
 
-    /**
-     * The same, where each {@code unreachable} met is taken as the premise it states: a run is
-     * taken to get past it, as the body's own account takes the arm it answers. What a behavior's
-     * callers are told of its body is asked so: the premise is the called behavior's, and a run
-     * that reaches it aborts there, in that behavior. What a run reaching it works out is asked as
-     * before, and a construction whose invariant is not shown to hold on every run that makes it
-     * is not taken so, since nothing written states that it holds.
-     */
-    WorkedOutToReachIt takingWhatItRulesOutAsRuledOut() {
-        Predicate<Denotation> before = beyond;
-        return new WorkedOutToReachIt(read, value -> before.test(value)
-                || Core.withoutStanding(value.value()) instanceof Core.Unreachable,
-                closuresApart, toldElsewhere, ownStopsSaidOnTheirWays, onTheWay, numbersAsked);
-    }
-
     /** The same, each node asked with whatever it applies. */
     static WorkedOutToReachIt asking(InputReading read) {
         return new WorkedOutToReachIt(read, _ -> false, false);
@@ -605,9 +590,13 @@ final class WorkedOutToReachIt {
      * where the discharge check proved every clause of it under what holds where it is made
      * ({@link BehaviorAnswers#shownToHold}), and where its clauses fold to true over what it is
      * handed ({@link #aConstructionEndsNoRun}).
+     * A premise the model states ends none ({@link #statesThatNoRowsRunReachesIt}).
      */
     private boolean itselfEndsNoRun(Denotation value) {
         Core written = Core.withoutStanding(value.value());
+        if (statesThatNoRowsRunReachesIt(written)) {
+            return true;
+        }
         if (written instanceof Core.Construct made) {
             return value.at().builtByAnAttempt(made)
                     || read.rules().declarations().answers()
@@ -664,8 +653,24 @@ final class WorkedOutToReachIt {
      * not drawing classes: a proof that a body ends no run asks the owner.
      */
     static GetsPast completionOfARowsRun(Core e) {
+        if (statesThatNoRowsRunReachesIt(e)) {
+            return new GetsPast.Always();
+        }
         GetsPast owned = WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(e);
         return owned.endsOnlyPastTheRepresentation() ? new GetsPast.Always() : owned;
+    }
+
+    /**
+     * Whether {@code e} is an {@code unreachable}, which states the premise that no run reaches it
+     * (spec §unreachable): a run of a row is taken to get past it, and one that reaches it is the
+     * model's fault there, told of when the row is run. Taken by every reader of what a row's run
+     * gets past, so the body it is written in, a caller of that body and a helper read where it is
+     * called take it alike. What the owner says stands for every reader that asks whether a run
+     * stops: one that reaches it aborts. A construction whose invariant is not shown to hold on
+     * every run that makes it is no premise anything writes, and is not taken so.
+     */
+    private static boolean statesThatNoRowsRunReachesIt(Core e) {
+        return Core.withoutStanding(e) instanceof Core.Unreachable;
     }
 
     /**
@@ -743,12 +748,12 @@ final class WorkedOutToReachIt {
         return endsNoRun(value, new Question(onTheWay));
     }
 
-    /** Whether working out {@code closure} where {@code call} applies it ends no run: asked with
-     *  what the call hands it ({@link #closuresHeldOverTheirElements}). */
-    boolean endsNoRunWhereApplied(Denotation call, Core.Block closure) {
+    /** Where working out {@code closure} where {@code call} applies it may end a run, asked with
+     *  what the call hands it ({@link #closuresHeldOverTheirElements}); none where it ends none. */
+    Optional<Denotation> whereARunMayEndWhereApplied(Denotation call, Core.Block closure) {
         Question question = new Question(true, onTheWay);
-        return endsNoRun(new Denotation(closure, call.at()),
-                question.applying(closuresHeldOverTheirElements(call, question)));
+        return Optional.ofNullable(whereItMayEnd(new Denotation(closure, call.at()),
+                question.applying(closuresHeldOverTheirElements(call, question))).at());
     }
 
     private boolean endsNoRun(Denotation value, Question question) {
@@ -1260,13 +1265,14 @@ final class WorkedOutToReachIt {
     }
 
     /**
-     * Whether working out {@code value}, which a reading passed over, leaves no stop unsaid: every
-     * stop a run may come to there is none, or one the analysis says on each way
+     * Where working out {@code value}, which a reading passed over, leaves a stop unsaid; none
+     * where every stop a run may come to there is none, or one the analysis says on each way
      * ({@link #besideTheStopsSaidOnTheirWays}). Not whether a run ends, which a stop said
      * elsewhere does not answer.
      */
-    boolean leavesNoStopUntoldWhereItWasPassedOver(Denotation value) {
-        return endsNoRun(value, new Question(true, null, ownStopsSaidOnTheirWays, onTheWay));
+    Optional<Denotation> whereAStopIsLeftUnsaidWhereItWasPassedOver(Denotation value) {
+        return Optional.ofNullable(whereItMayEnd(value,
+                new Question(true, null, ownStopsSaidOnTheirWays, onTheWay)).at());
     }
 
     /**

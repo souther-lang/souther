@@ -1,17 +1,14 @@
 package souther.compiler.partition;
 
 import souther.compiler.core.Core;
-import souther.compiler.diag.SourcePos;
-import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 
 /**
  * What a working says it does not account for: nothing, the stops of some quotients by a value
- * and nothing else, or something no reader can name; and, beside any of these, the calls of a
- * behavior whose stop it leaves untold.
+ * and nothing else, or something no reader can name; and, beside any of these, where each stop it
+ * leaves untold is, where the reading that left it found the expression.
  *
  * <p>The quotients are named by the node of the expression they are, so that a reader that judges
  * the quotients a comparison always works out ({@link QuotientsEveryRunWorksOut}) can take what
@@ -23,10 +20,10 @@ import java.util.Objects;
  * made, so what one working leaves to something else cannot be recovered by putting it beside one
  * that leaves only quotients.
  *
- * <p>A call is said for a reader to name, and accounts for nothing: what a call's behavior is told
- * of is asked of the behavior ({@link souther.compiler.check.BehaviorAnswers#passageOf}), and no
- * reader of this one asks it. So a working leaving a call is left to something else, and the
- * calls of two put together are the calls of both, whatever else either leaves.
+ * <p>Where a stop is left untold is said for a reader to name, and accounts for nothing: the
+ * places of two put together are the places of both, whatever else either leaves. Something else
+ * is only ever made from what was left before ({@link #andSomethingElse}), so no reader widening
+ * what is left drops a place it held.
  */
 final class NotAccountedFor {
 
@@ -39,93 +36,90 @@ final class NotAccountedFor {
         SOMETHING_ELSE
     }
 
-    /**
-     * A call of {@code behavior}, written at {@code at}, whose stop a working leaves untold: it is
-     * not shown that the run of every row gets past working its body out.
-     */
-    record ACall(ValueName.Behavior behavior, SourcePos at) {
-
-        ACall {
-            Objects.requireNonNull(behavior, "a call is of some behavior");
-            Objects.requireNonNull(at, "a call is written somewhere");
-        }
-    }
-
     static final NotAccountedFor NOTHING = new NotAccountedFor(Kind.NOTHING, List.of(),
             List.of());
 
-    /** Something else and no call. Not handed out: what is left to something else is made from
-     *  what was left before ({@link #andSomethingElse}), so that no reader widening it drops the
-     *  calls it holds. */
+    /** Something else and no place: not handed out, for the reason the class says. */
     private static final NotAccountedFor SOMETHING_ELSE = new NotAccountedFor(
             Kind.SOMETHING_ELSE, List.of(), List.of());
 
     private final Kind kind;
     private final List<Core.Binary> quotients;
-    private final List<ACall> calls;
+    private final List<Core> untoldAt;
 
-    /** The quotients are a set of nodes: each once, by the node it is. The calls are a set of
-     *  values, each once, in the order first met. */
-    private NotAccountedFor(Kind kind, List<Core.Binary> quotients, List<ACall> calls) {
+    /** The quotients and the places are sets of nodes: each once, by the node it is, in the order
+     *  first met. */
+    private NotAccountedFor(Kind kind, List<? extends Core> quotients, List<? extends Core> at) {
         this.kind = kind;
-        List<Core.Binary> distinct = new ArrayList<>();
-        for (Core.Binary each : quotients) {
-            if (distinct.stream().noneMatch(one -> one == each)) {
-                distinct.add(each);
+        this.quotients = distinct(quotients).stream().map(Core.Binary.class::cast).toList();
+        this.untoldAt = distinct(at);
+    }
+
+    private static List<Core> distinct(List<? extends Core> nodes) {
+        if (nodes.isEmpty()) {
+            return List.of();
+        }
+        List<Core> out = new ArrayList<>();
+        for (Core each : nodes) {
+            if (out.stream().noneMatch(one -> one == each)) {
+                out.add(each);
             }
         }
-        this.quotients = List.copyOf(distinct);
-        this.calls = calls.isEmpty() ? List.of() : calls.stream().distinct().toList();
+        return List.copyOf(out);
     }
 
     /** The stops of {@code nodes}, quotients by a value, and nothing else; something else where
-     *  there are none. */
+     *  there are none. Each is where a stop is left untold. */
     static NotAccountedFor quotients(List<Core.Binary> nodes) {
         return nodes.isEmpty() ? SOMETHING_ELSE
-                : new NotAccountedFor(Kind.QUOTIENTS, List.copyOf(nodes), List.of());
+                : new NotAccountedFor(Kind.QUOTIENTS, nodes, nodes);
+    }
+
+    /** A stop left untold at {@code node}, which is something else. */
+    static NotAccountedFor aStopAt(Core node) {
+        return new NotAccountedFor(Kind.SOMETHING_ELSE, List.of(), List.of(node));
     }
 
     /** This, and something else beside it: what a reader leaves where it cannot name what is
-     *  left, with every call this names still named. */
+     *  left, with every place this holds still held. */
     NotAccountedFor andSomethingElse() {
         return join(SOMETHING_ELSE);
-    }
-
-    /** The stop of {@code call} left untold, which is something else. */
-    static NotAccountedFor aCall(ACall call) {
-        return new NotAccountedFor(Kind.SOMETHING_ELSE, List.of(), List.of(call));
     }
 
     Kind kind() {
         return kind;
     }
 
-    /** The calls whose stop is left untold, in the order first met. */
-    List<ACall> calls() {
-        return calls;
+    /** Where each stop left untold is, in the order first met: the expressions whose own working
+     *  may end a run, as the readings that left them found them, and not every one there may be. */
+    List<Core> untoldAt() {
+        return untoldAt;
     }
 
     /** Both put together. */
     NotAccountedFor join(NotAccountedFor other) {
-        if (kind == Kind.NOTHING && calls.isEmpty()) {
+        if (kind == Kind.NOTHING && untoldAt.isEmpty()) {
             return other;
         }
-        if (other.kind == Kind.NOTHING && other.calls.isEmpty()) {
+        if (other.kind == Kind.NOTHING && other.untoldAt.isEmpty()) {
             return this;
         }
-        List<ACall> bothCalls = other.calls.isEmpty() ? calls
-                : calls.isEmpty() ? other.calls : both(calls, other.calls);
+        List<Core> at = both(untoldAt, other.untoldAt);
         if (kind == Kind.SOMETHING_ELSE || other.kind == Kind.SOMETHING_ELSE) {
-            return bothCalls.isEmpty() ? SOMETHING_ELSE
-                    : new NotAccountedFor(Kind.SOMETHING_ELSE, List.of(), bothCalls);
+            return at.isEmpty() ? SOMETHING_ELSE
+                    : new NotAccountedFor(Kind.SOMETHING_ELSE, List.of(), at);
         }
-        List<Core.Binary> both = new ArrayList<>(quotients);
-        both.addAll(other.quotients);
-        return new NotAccountedFor(Kind.QUOTIENTS, both, bothCalls);
+        return new NotAccountedFor(Kind.QUOTIENTS, both(quotients, other.quotients), at);
     }
 
-    private static List<ACall> both(List<ACall> one, List<ACall> other) {
-        List<ACall> out = new ArrayList<>(one);
+    private static <T> List<T> both(List<T> one, List<T> other) {
+        if (other.isEmpty()) {
+            return one;
+        }
+        if (one.isEmpty()) {
+            return other;
+        }
+        List<T> out = new ArrayList<>(one);
         out.addAll(other);
         return out;
     }
@@ -149,19 +143,22 @@ final class NotAccountedFor {
     @Override
     public boolean equals(Object other) {
         return other instanceof NotAccountedFor that && kind == that.kind
-                && quotients.size() == that.quotients.size()
-                && quotients.stream().allMatch(that::names)
-                && calls.size() == that.calls.size() && that.calls.containsAll(calls);
+                && sameNodes(quotients, that.quotients) && sameNodes(untoldAt, that.untoldAt);
+    }
+
+    private static boolean sameNodes(List<? extends Core> one, List<? extends Core> other) {
+        return one.size() == other.size()
+                && one.stream().allMatch(each -> other.stream().anyMatch(that -> that == each));
     }
 
     @Override
     public int hashCode() {
         int sum = kind.hashCode();
-        for (Core.Binary each : quotients) {
+        for (Core each : quotients) {
             sum += System.identityHashCode(each);
         }
-        for (ACall each : calls) {
-            sum += each.hashCode();
+        for (Core each : untoldAt) {
+            sum += 31 * System.identityHashCode(each);
         }
         return sum;
     }
@@ -169,6 +166,6 @@ final class NotAccountedFor {
     @Override
     public String toString() {
         String said = kind == Kind.QUOTIENTS ? "quotients " + quotients.size() : kind.toString();
-        return calls.isEmpty() ? said : said + ", calls " + calls;
+        return untoldAt.isEmpty() ? said : said + ", untold at " + untoldAt.size();
     }
 }

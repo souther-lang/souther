@@ -4712,7 +4712,28 @@
           "lowered" : 0
         },
         "unresolved" : [ {
-          "reason" : "no_operation_told"
+          "reason" : "no_operation_told",
+          "restsOn" : [ {
+            "kind" : "worked_out",
+            "at" : {
+              "sourceId" : "1",
+              "line" : 47,
+              "column" : 11,
+              "writtenAt" : {
+                "kind" : "here"
+              }
+            }
+          }, {
+            "kind" : "worked_out",
+            "at" : {
+              "sourceId" : "1",
+              "line" : 47,
+              "column" : 47,
+              "writtenAt" : {
+                "kind" : "here"
+              }
+            }
+          } ]
         } ]
       }, {
         "kind" : "rule_unaccounted",
@@ -7854,9 +7875,13 @@
           "lowered" : 0
         },
         "unresolved" : [ {
-          "reason" : "in_a_call",
-          "call" : {
+          "reason" : "no_operation_told",
+          "restsOn" : [ {
+            "kind" : "call",
             "behavior" : "現価を引く",
+            "passage" : {
+              "reason" : "no_body"
+            },
             "at" : {
               "sourceId" : "2",
               "line" : 98,
@@ -7864,11 +7889,8 @@
               "writtenAt" : {
                 "kind" : "here"
               }
-            },
-            "passage" : {
-              "reason" : "no_body"
             }
-          }
+          } ]
         } ]
       } ]
     }, {

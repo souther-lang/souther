@@ -88,8 +88,9 @@ import souther.compiler.coverage.CoverageSites;
 import souther.compiler.examples.FixtureReader;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.AnalysisBody;
-import souther.compiler.check.AnOperationApplied;
+import souther.compiler.check.BehaviorAnswers;
 import souther.compiler.check.CallPassage;
+import souther.compiler.check.StopOrigin;
 import souther.compiler.check.CalledBody;
 import souther.compiler.core.Core;
 import souther.compiler.core.WhatABodyReads;
@@ -5346,23 +5347,10 @@ public final class Adequacy {
             }
             Optional<Core> stop = GuardThresholds.whereARowsRunMayEnd(body,
                     readingOf(db, input, reading), ElementBindings.of(body, reading.newtypes()));
-            return Answer.of(stop.<CallPassage>map(at -> new CallPassage.Open(whyOpenAt(db, at)))
+            BehaviorAnswers answers = Shapes.behaviorAnswers(db);
+            return Answer.of(stop.<CallPassage>map(at -> new CallPassage.Open(
+                    new CallPassage.WhyOpen.MayStopAt(StopOrigin.of(at, answers))))
                     .orElse(CallPassage.PAST));
-        }
-
-        /** What the proof that the runs get past gave out at, {@code at}: a construction, a call
-         *  of a behavior, with what that behavior is told of, or something else worked out. */
-        private static CallPassage.WhyOpen whyOpenAt(Db db, Core at) {
-            Core written = Core.withoutStanding(at);
-            if (written instanceof Core.Construct made) {
-                return new CallPassage.WhyOpen.AConstruction(made.pos(), made.typeName().name());
-            }
-            if (AnOperationApplied.of(written) instanceof AnOperationApplied applied
-                    && applied.operation() instanceof ValueName.Behavior called) {
-                return new CallPassage.WhyOpen.ACall(written.pos(), called,
-                        db.ask(new RowsRunsGetPast(called.module(), called.name())).value());
-            }
-            return new CallPassage.WhyOpen.SomethingWorkedOut(written.pos());
         }
 
         @Override
