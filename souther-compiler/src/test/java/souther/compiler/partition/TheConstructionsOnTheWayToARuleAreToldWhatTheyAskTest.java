@@ -36,6 +36,14 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
+    /** The type {@code one} says is made, by its name in {@code demo}, the module every model here
+     *  declares its types in: a document writes it qualified by that module. */
+    private static String madeIn(JsonNode one) {
+        String qualified = one.path("construction").asString();
+        assertTrue(qualified.startsWith("demo."), qualified);
+        return qualified.substring("demo.".length());
+    }
+
     private static final String HEAD = """
             module demo
 
@@ -151,7 +159,7 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
         Compilation compilation = compiled(UNTYPED);
         List<JsonNode> asks = asksOf(compilation);
         assertEquals(1, asks.size(), asks.toString());
-        assertEquals("Refund", asks.getFirst().path("construction").asString());
+        assertEquals("Refund", madeIn(asks.getFirst()));
         JsonNode asked = asks.getFirst().path("asked");
         assertEquals(List.of(is("gross * rate", "at_least", "0"), is("gross", "at_least", "0")),
                 List.copyOf(asked.path("allOf").values()));
@@ -474,7 +482,7 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
                     }
                 """);
         assertEquals(List.of("Held: reach_not_shown"), asksOf(compilation).stream()
-                .map(one -> one.path("construction").asString() + ": "
+                .map(one -> madeIn(one) + ": "
                         + one.path("reason").asString())
                 .distinct().toList());
     }
@@ -528,7 +536,7 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
                 """);
         assertEquals(List.of("Span: asks_not_read", "Refund: something_before_it_may_stop"),
                 asksOf(compilation).stream()
-                        .map(one -> one.path("construction").asString() + ": "
+                        .map(one -> madeIn(one) + ": "
                                 + one.path("reason").asString())
                         .toList());
         assertTrue(Pattern.compile("stop not resolved: [^\\n]*; whether a run stops at Span at "
@@ -718,7 +726,7 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
         if (node.isObject() && node.path("kind").asString().equals("rule_stop_not_shown")) {
             List<String> made = out.computeIfAbsent(node.path("subject").toString(),
                     _ -> new ArrayList<>());
-            node.path("asks").forEach(one -> made.add(one.path("construction").asString()
+            node.path("asks").forEach(one -> made.add(madeIn(one)
                     + ": " + one.path("reason").asString()));
         }
         node.forEach(child -> collectNotShown(child, out));
@@ -766,7 +774,7 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
                 """);
         assertEquals(List.of("Held at 10: a_condition_not_read", "Held at 17: reach_not_shown"),
                 asksOf(compilation).stream()
-                        .map(one -> one.path("construction").asString() + " at "
+                        .map(one -> madeIn(one) + " at "
                                 + one.path("at").path("line").asInt() + ": "
                                 + one.path("reason").asString())
                         .distinct().toList());
@@ -803,7 +811,7 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
                 }
                 """);
         assertEquals(List.of("Span at 9: asks_not_read"), asksOf(compilation).stream()
-                .map(one -> one.path("construction").asString() + " at "
+                .map(one -> madeIn(one) + " at "
                         + one.path("at").path("line").asInt() + ": "
                         + one.path("reason").asString())
                 .distinct().toList());
@@ -921,7 +929,7 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
                 }
                 """);
         assertEquals(List.of("Span at 9: asks_not_read"), asksOf(compilation).stream()
-                .map(one -> one.path("construction").asString() + " at "
+                .map(one -> madeIn(one) + " at "
                         + one.path("at").path("line").asInt() + ": "
                         + one.path("reason").asString())
                 .distinct().toList());
@@ -1006,7 +1014,7 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
             List<String> made = out.computeIfAbsent(node.path("subject").toString(),
                     _ -> new ArrayList<>());
             node.path("constructions").forEach(one ->
-                    made.add(one.path("construction").asString()));
+                    made.add(madeIn(one)));
         }
         node.forEach(child -> collectStops(child, out));
     }
@@ -1027,7 +1035,7 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
                 """);
         List<JsonNode> asks = asksOf(compilation);
         assertEquals(1, asks.size(), asks.toString());
-        assertEquals("Count", asks.getFirst().path("construction").asString());
+        assertEquals("Count", madeIn(asks.getFirst()));
         assertEquals(is("x", "at_least", "0"), asks.getFirst().path("asked"));
     }
 }

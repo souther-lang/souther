@@ -704,16 +704,18 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             // What no reading answers for is left unanswered by the readings together, whichever
             // of them a run is read as.
             boolean untold = readings.stream().anyMatch(Working::aStopUntold);
-            if (!readings.stream().allMatch(each -> each.tellsWhat(first))) {
-                return UNREAD.leavingAStopUntold(untold);
-            }
-            // Whether every run reaches the relation is no part of what is told of it: readings
-            // that tell alike tell that, and the relation is on every run only if each is. What
-            // any of them leaves out is left out of the readings together.
+            // What any of them leaves out is left out of the readings together, and so is every
+            // call any of them names, whether or not they agree on what they tell.
             NotAccountedFor left = NotAccountedFor.NOTHING;
             for (Working each : readings) {
                 left = left.join(each.leftUntold);
             }
+            if (!readings.stream().allMatch(each -> each.tellsWhat(first))) {
+                return new Working(UNREAD.operations, UNREAD.told, UNREAD.onEveryRun,
+                        UNREAD.partials, untold, left.andSomethingElse());
+            }
+            // Whether every run reaches the relation is no part of what is told of it: readings
+            // that tell alike tell that, and the relation is on every run only if each is.
             return new Working(first.operationsAtThePlacesAllAgreeOn(readings), first.told,
                     readings.stream().allMatch(Working::onEveryRun), first.partials, untold,
                     left);
@@ -734,14 +736,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 out.add(agreed ? each : each.workedOutAt(null));
             }
             return out;
-        }
-
-        /** The same, with {@code untold} as whether a stop is left that no reading tells, which
-         *  is not told to be a quotient's own where it is newly left. */
-        private Working leavingAStopUntold(boolean untold) {
-            return untold == aStopUntold ? this
-                    : new Working(operations, told, onEveryRun, partials, untold,
-                            untold ? NotAccountedFor.SOMETHING_ELSE : leftUntold);
         }
 
         /** Whether this tells the operations {@code other} does, each once or more, and as much
@@ -771,10 +765,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             // Nothing is left out exactly where every operation is told and no stop is left
             // untold, and where one of them says otherwise something is.
+            NotAccountedFor said = leftUntold == null ? NotAccountedFor.NOTHING : leftUntold;
             leftUntold = told == WhatARelationLeavesUndivided.Told.EVERY && !aStopUntold
                     ? NotAccountedFor.NOTHING
-                    : leftUntold == null || leftUntold.kind() == NotAccountedFor.Kind.NOTHING
-                            ? NotAccountedFor.SOMETHING_ELSE : leftUntold;
+                    : said.kind() == NotAccountedFor.Kind.NOTHING ? said.andSomethingElse()
+                    : said;
         }
 
         /** Whether what is untold is at most the running totals of the walks in {@link #partials}. */

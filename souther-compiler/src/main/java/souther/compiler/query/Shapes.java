@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.ARecursion;
 import souther.compiler.check.BehaviorAnswers;
+import souther.compiler.check.CallPassage;
 import souther.compiler.check.ConstructionsShownToHold;
 import souther.compiler.core.Core;
 import souther.compiler.check.BehaviorBodies;
@@ -2156,9 +2157,9 @@ public final class Shapes {
             }
 
             @Override
-            public boolean rowsRunsGetPast(ValueName.Behavior behavior) {
-                return Boolean.TRUE.equals(db.ask(new Adequacy.RowsRunsGetPast(behavior.module(),
-                        behavior.name())).value());
+            public CallPassage passageOf(ValueName.Behavior behavior) {
+                return db.ask(new Adequacy.RowsRunsGetPast(behavior.module(), behavior.name()))
+                        .value();
             }
 
             @Override

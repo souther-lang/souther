@@ -89,6 +89,151 @@
     }
   },
   "$defs": {
+    "stopPlace": {
+      "type": "object",
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false,
+      "description": "An expression whose own working may end a run of a row: where a stop is left untold, as the reading that left it found it, or where in a called behavior's body the proof that every run gets past gave out. The same in the body that writes it and in a caller of that body. An `unreachable` states the premise that no run reaches it, and is never one of these.",
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "construction"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "construction"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "construction"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "call"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "module",
+              "behavior",
+              "passage"
+            ]
+          },
+          "else": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "module"
+                  ]
+                },
+                {
+                  "required": [
+                    "behavior"
+                  ]
+                },
+                {
+                  "required": [
+                    "passage"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "construction",
+            "call",
+            "worked_out"
+          ],
+          "description": "`construction`: a construction whose invariant is not shown to hold on every run that makes it, of the type `construction`. `call`: a call of the behavior `behavior`, which is not shown to be got past by every run, and `passage` says what that behavior is told of its body. `worked_out`: something else whose own working may end a run."
+        },
+        "construction": {
+          "type": "string",
+          "description": "Of `construction` only: the type made, qualified by the module that declares it, as two modules may each declare a data of one name."
+        },
+        "module": {
+          "type": "string",
+          "description": "Of `call` only: the module that declares the behavior called, which may be another than the one the call is written in."
+        },
+        "behavior": {
+          "type": "string",
+          "description": "Of `call` only: the behavior called, by its name in `module`."
+        },
+        "passage": {
+          "$ref": "#/$defs/passageOfACall",
+          "description": "Of `call` only: what the behavior called is told of its body, asked over whatever its own inputs may hold."
+        },
+        "at": {
+          "$ref": "#/$defs/at",
+          "description": "Where it is written, present where a reader can be sent there."
+        }
+      }
+    },
+    "passageOfACall": {
+      "type": "object",
+      "required": [
+        "reason"
+      ],
+      "additionalProperties": false,
+      "description": "What a behavior called is told of its body: that every run of a row is shown to get past it, or what not being shown rests on. Not shown to get past is not shown to stop.",
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "reason": {
+                "const": "may_stop"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "place"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "place"
+              ]
+            }
+          }
+        }
+      ],
+      "properties": {
+        "reason": {
+          "enum": [
+            "gotten_past",
+            "no_body",
+            "reaches_itself",
+            "not_read",
+            "may_stop"
+          ],
+          "description": "`gotten_past`: every run is shown to get past it. `no_body`: the behavior has no body in the model to read. `reaches_itself`: asking the body asks the behavior again, through the calls it makes, and nothing is said of it. `not_read`: its inputs or rules are not read. `may_stop`: the proof that every run gets past gave out at `place`, the first expression it met whose own working may end a run, and not every one there is."
+        },
+        "place": {
+          "$ref": "#/$defs/stopPlace",
+          "description": "Of `may_stop` only: where in the body the proof gave out."
+        }
+      }
+    },
     "sourceIdentity": {
       "type": "string",
       "description": "A source as the compilation identifies it, written once here for every field that carries one. It is what the caller handed the file over as — a position in a list for a build, a document URI for an editor — and not a name to show a reader: what to call a file depends on which other files are in front of that reader, so it is neither stable across runs nor a key. `sources` says what each of these is called. A field that carries one says so by being defined here, which is what lets a reader find every one of them without a list of the places they appear.",
@@ -4991,17 +5136,64 @@
                 "reason"
               ],
               "additionalProperties": false,
+              "allOf": [
+                {
+                  "if": {
+                    "properties": {
+                      "reason": {
+                        "enum": [
+                          "no_operation_told",
+                          "on_rows_of_the_statement"
+                        ]
+                      }
+                    }
+                  },
+                  "then": {
+                    "not": {
+                      "required": [
+                        "operation"
+                      ]
+                    }
+                  },
+                  "else": {
+                    "required": [
+                      "operation"
+                    ]
+                  }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "reason": {
+                        "enum": [
+                          "no_operation_told",
+                          "not_every_operation_told"
+                        ]
+                      }
+                    }
+                  },
+                  "else": {
+                    "not": {
+                      "required": [
+                        "restsOn"
+                      ]
+                    }
+                  }
+                }
+              ],
               "properties": {
                 "operation": {
                   "type": "string",
-                  "description": "The operation, as written. Absent where a run may stop in something worked out that no operation names."
+                  "description": "The operation, as written. Absent exactly where the reason is of no operation: a run may stop in something worked out that no operation names, or on rows the statement says of its own."
+                },
+                "restsOn": {
+                  "$ref": "#/$defs/stopPlace",
+                  "description": "Of `no_operation_told` and `not_every_operation_told` only: where the first stop left untold that it rests on is, as the reading that left it found it, and not every one there may be. Absent where none was found."
                 },
                 "reason": {
                   "enum": [
                     "no_operation_told",
                     "on_rows_of_the_statement",
-                    "on_an_arm",
-                    "on_an_application",
                     "not_every_operation_told",
                     "something_before_it_may_stop",
                     "a_condition_not_read",
@@ -5010,7 +5202,7 @@
                     "no_value_found",
                     "no_value_found_within_what_is_tried"
                   ],
-                  "description": "Why neither is shown. `no_operation_told`: a run may stop in something worked out that this compiler does not read as an operation. `on_rows_of_the_statement`: the comparison stops a run on rows it states, such as a divisor of nought, and no input reaching them is looked for. `on_an_arm` and `on_an_application`: the operation is worked out on one arm of a choice, or inside a function applied to each element, and the comparison is no condition, so nothing says which runs take the arm or make the application. `not_every_operation_told`: another part of the comparison may stop a run first and is not read. `something_before_it_may_stop`: something evaluated before the comparison may stop a run first. `a_condition_not_read`: a condition on the way is no comparison of whole numbers of the input, so no input is checked against it. `not_over_the_input`: the operation is over a value the body works out, such as a total or a product, and not over numbers of the input. `no_value_shown`: the input's types declare invariants or cases, and no input meeting them is built. `no_value_found`: no input tried takes the operation past its type. `no_value_found_within_what_is_tried`: the inputs tried ran out first, and another may."
+                  "description": "Why neither is shown. `no_operation_told`: a run may stop in something worked out that this compiler does not read as an operation. `on_rows_of_the_statement`: the comparison stops a run on rows it states, such as a divisor of nought, and no input reaching them is looked for. `not_every_operation_told`: another part of the comparison may stop a run first and is not read. `something_before_it_may_stop`: something evaluated before the comparison may stop a run first. `a_condition_not_read`: a condition on the way is no comparison of whole numbers of the input, so no input is checked against it. `not_over_the_input`: the operation is over a value the body works out, such as a total or a product, and not over numbers of the input. `no_value_shown`: the input's types declare invariants or cases, and no input meeting them is built. `no_value_found`: no input tried takes the operation past its type. `no_value_found_within_what_is_tried`: the inputs tried ran out first, and another may."
                 }
               }
             }
@@ -5029,7 +5221,7 @@
               "properties": {
                 "construction": {
                   "type": "string",
-                  "description": "The type made, as it is written."
+                  "description": "The type made, qualified by the module that declares it, as two modules may each declare a data of one name."
                 },
                 "at": {
                   "$ref": "#/$defs/at",
@@ -5037,7 +5229,7 @@
                 },
                 "asked": {
                   "$ref": "#/$defs/constructionAsked",
-                  "description": "What a run has to meet to get past it, of what the way to it does not already hold. Which rows do not is for the rows run, and a condition on several numbers says what none of them does alone, as a product at nought or above is met by a gross at nought whatever the rate is. Absent where what its type asks is not read (`asks_not_read`)."
+                  "description": "What a run has to meet to get past it, of what the way to it does not already hold. Which rows do not is for the rows run, and a condition on several numbers says what none of them does alone, as a product at nought or above is met by a gross at nought whatever the rate is. Absent where what its type asks is not read, which is so under `asks_not_read` and may be under `reach_not_shown`, and where the way to it already holds all it asks."
                 },
                 "reason": {
                   "type": "string",
@@ -5070,7 +5262,7 @@
               "properties": {
                 "construction": {
                   "type": "string",
-                  "description": "The type made, as it is written."
+                  "description": "The type made, qualified by the module that declares it, as two modules may each declare a data of one name."
                 },
                 "at": {
                   "$ref": "#/$defs/at",

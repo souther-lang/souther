@@ -560,15 +560,50 @@ public sealed interface ReportMessage extends Message {
     /** Why a stop is not resolved: something worked out is read as no operation. */
     record NoOperationIsReadThere() implements ReportMessage, Prose {}
 
+    /**
+     * The same, and where the first stop left untold is, {@code at}: a place a run may stop at,
+     * said by {@link TheConstructionOf}, {@link TheCallOf} or {@link WhatIsWorkedOutAt}, a call
+     * followed by what its behavior is told of.
+     */
+    record NoOperationIsReadAt(Message at) implements ReportMessage, Prose {}
+
+    /** {@link AnotherPartIsNotRead}, and where the first stop left untold in that part is,
+     *  {@code at}, said as {@link NoOperationIsReadAt} says it. */
+    record AnotherPartIsNotReadAt(Message at) implements ReportMessage, Prose {}
+
+    /** A place a run may stop at: the construction of {@code type} written at {@code at}, of which
+     *  it is not shown that every run making it keeps its invariant. */
+    record TheConstructionOf(String type, String at) implements ReportMessage, Prose {}
+
+    /** A place a run may stop at: the call of {@code behavior} written at {@code at}, followed by
+     *  what the behavior is told of, said by one of the messages for that below. */
+    record TheCallOf(String behavior, String at) implements ReportMessage, Prose {}
+
+    /** A place a run may stop at: what is worked out at {@code at}. */
+    record WhatIsWorkedOutAt(String at) implements ReportMessage, Prose {}
+
+    /** What {@code behavior}, called, is told of: every run is shown to get past its body. */
+    record TheCalledBehaviorIsGottenPast(String behavior) implements ReportMessage, Prose {}
+
+    /** What {@code behavior}, called, is told of: it has no body in the model to read. */
+    record TheCalledBehaviorHasNoBody(String behavior) implements ReportMessage, Prose {}
+
+    /** What {@code behavior}, called, is told of: it reaches itself through what it calls, and no
+     *  answer is made of it. */
+    record TheCalledBehaviorReachesItself(String behavior) implements ReportMessage, Prose {}
+
+    /** What {@code behavior}, called, is told of: its inputs or its rules are not read. */
+    record TheCalledBehaviorIsNotRead(String behavior) implements ReportMessage, Prose {}
+
+    /** What {@code behavior}, called, is told of: it may stop at {@code place}, the place in its
+     *  body the proof that every run gets past gave out at, said by one of the messages for a
+     *  place and followed, where that is a call, by what that behavior is told of. */
+    record TheCalledBehaviorMayStopAt(String behavior, Message place)
+            implements ReportMessage, Prose {}
+
     /** Why: the comparison stops a run on rows it states, and no input reaching them is looked
      *  for. */
     record TheComparisonStopsOnRowsItStates() implements ReportMessage, Prose {}
-
-    /** Why: the operation is worked out on one arm of a choice. */
-    record ItIsWorkedOutOnAnArm() implements ReportMessage, Prose {}
-
-    /** Why: the operation is worked out inside a function applied to each element. */
-    record ItIsWorkedOutOnEachElement() implements ReportMessage, Prose {}
 
     /** Why: another part of the comparison may stop a run first and is not read. */
     record AnotherPartIsNotRead() implements ReportMessage, Prose {}

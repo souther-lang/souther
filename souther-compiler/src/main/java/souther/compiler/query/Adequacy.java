@@ -88,6 +88,9 @@ import souther.compiler.coverage.CoverageSites;
 import souther.compiler.examples.FixtureReader;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.AnalysisBody;
+import souther.compiler.check.BehaviorAnswers;
+import souther.compiler.check.CallPassage;
+import souther.compiler.check.StopOrigin;
 import souther.compiler.check.CalledBody;
 import souther.compiler.core.Core;
 import souther.compiler.core.WhatABodyReads;
@@ -5316,8 +5319,13 @@ public final class Adequacy {
      * behavior, since a caller that is measured reads it: no line of the body is drawn for it. No
      * where there is no body here to ask. A behavior that reaches itself is refused as that, and is
      * told of nothing.
+     *
+     * <p>Where the runs are not shown to get past, what that rests on is said with it: the
+     * expression in the body where the proof gave out ({@link GuardThresholds#whereARowsRunMayEnd}),
+     * and of a call there, the called behavior's own answer, asked here as this is, so a reader
+     * is told every behavior on the way down to the expression that leaves them open.
      */
-    public record RowsRunsGetPast(String name, String behavior) implements Key<Boolean> {
+    public record RowsRunsGetPast(String name, String behavior) implements Key<CallPassage> {
 
         @Override
         public String module() {
@@ -5325,20 +5333,29 @@ public final class Adequacy {
         }
 
         @Override
-        public Answer<Boolean> compute(Db db) {
+        public Answer<CallPassage> compute(Db db) {
             Bodies.Elaborated checked = db.ask(new Bodies.Observable(name)).value();
             Map<String, InputDomain> inputs = db.ask(new Inputs(name)).value();
             RuleReadingSource reading = Shapes.ruleReading(db, name).value();
             AnalysisBody body = checked == null ? null : checked.analysisBodies().get(behavior);
             InputDomain input = inputs == null ? null : inputs.get(behavior);
-            return Answer.of(body != null && input != null && reading != null
-                    && GuardThresholds.rowsRunsGetPast(body, readingOf(db, input, reading),
-                            ElementBindings.of(body, reading.newtypes())));
+            if (body == null) {
+                return Answer.of(new CallPassage.Open(new CallPassage.WhyOpen.NoBody()));
+            }
+            if (input == null || reading == null) {
+                return Answer.of(new CallPassage.Open(new CallPassage.WhyOpen.NotRead()));
+            }
+            Optional<Core> stop = GuardThresholds.whereARowsRunMayEnd(body,
+                    readingOf(db, input, reading), ElementBindings.of(body, reading.newtypes()));
+            BehaviorAnswers answers = Shapes.behaviorAnswers(db);
+            return Answer.of(stop.<CallPassage>map(at -> new CallPassage.Open(
+                    new CallPassage.WhyOpen.MayStopAt(StopOrigin.of(at, answers))))
+                    .orElse(CallPassage.PAST));
         }
 
         @Override
-        public Answer<Boolean> onCycle(List<Key<?>> cycle) {
-            return Answer.of(false);
+        public Answer<CallPassage> onCycle(List<Key<?>> cycle) {
+            return Answer.of(new CallPassage.Open(new CallPassage.WhyOpen.OnACycle()));
         }
     }
 

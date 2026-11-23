@@ -1806,6 +1806,18 @@ class EverySchemaWordIsAccountedForTest {
         // switch over the relations, so one added there does not compile without its word, and
         // held to the schema by the same validation of the corpus documents.
         held.add("/$defs/constructionAsked/oneOf/0/properties/is");
+        // What a behavior called is told of its body, by kind. Written by a switch over the
+        // sealed passages and the reasons a passage is left open, for the reason the ones above
+        // are.
+        held.add("/$defs/passageOfACall/properties/reason");
+        // What a place a run may stop at is, by kind: written by a switch over the sealed places,
+        // for the reason the one above is.
+        held.add("/$defs/stopPlace/properties/kind");
+        // Which reasons a stop not resolved names an operation under, and which rest on stops left
+        // untold: words of the reason's own enum, each held to what that enum says of itself by
+        // `theSchemaTakesAStopNotResolvedExactlyWhereItsTypeDoes`.
+        held.add("/$defs/findings/items/properties/unresolved/items/allOf/0/if/properties/reason");
+        held.add("/$defs/findings/items/properties/unresolved/items/allOf/1/if/properties/reason");
 
         List<String> unaccounted = paths.stream().filter(p -> !held.contains(p)).toList();
         assertEquals(List.of(), unaccounted,

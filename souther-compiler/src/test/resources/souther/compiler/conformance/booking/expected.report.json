@@ -8998,7 +8998,7 @@
           "lowered" : 0
         },
         "asks" : [ {
-          "construction" : "Nights",
+          "construction" : "conformance.allowances.Nights",
           "at" : {
             "sourceId" : "7",
             "line" : 24,

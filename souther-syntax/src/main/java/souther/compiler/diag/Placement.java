@@ -257,6 +257,14 @@ public final class Placement {
         return code;
     }
 
+    /** This, as words two placements share exactly where they are equal: which text, and whose
+     *  code, each by its kind and what it names. What {@link SourcePos#IN_A_STEADY_ORDER} orders
+     *  two texts by, which is an order and not which was written first. */
+    String steadily() {
+        return text.getClass().getSimpleName() + ":" + text + "|"
+                + code.getClass().getSimpleName() + ":" + code;
+    }
+
     /**
      * Where the code this position names is written, or null where it is written at the position in
      * a text a reader has in front of them.

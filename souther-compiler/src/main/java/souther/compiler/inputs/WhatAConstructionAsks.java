@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import souther.compiler.diag.SourcePos;
 import souther.compiler.numeric.Rel;
+import souther.compiler.types.TypeKey;
 
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -27,12 +28,13 @@ import java.util.Set;
  * <p>The same condition is what narrows the rows the rule is read over; this is that condition
  * told, and nothing here is worked out again from the text.
  *
- * @param construction the type made, as it is written
+ * @param construction the type made, as the declaration it is: two modules may each declare one
+ *                     of a name
  * @param at           where the construction is written
  * @param asks         what it asks
  * @param bearing      which rules what it asks is said under
  */
-public record WhatAConstructionAsks(String construction, SourcePos at, Asked asks,
+public record WhatAConstructionAsks(TypeKey construction, SourcePos at, Asked asks,
                                     Bearing bearing) {
 
     public WhatAConstructionAsks {

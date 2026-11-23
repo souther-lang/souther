@@ -1,6 +1,7 @@
 package souther.compiler.inputs;
 
 import souther.compiler.diag.SourcePos;
+import souther.compiler.types.TypeKey;
 
 import java.util.Objects;
 import java.util.Optional;
@@ -14,13 +15,14 @@ import java.util.Optional;
  * Said whether or not what it asks is read, so a construction whose condition no reading takes in
  * is said here with that reason, and not left out.
  *
- * @param construction the type made, as it is written
+ * @param construction the type made, as the declaration it is: two modules may each declare one
+ *                     of a name
  * @param at           where the construction is written
  * @param asked        what it asks that the way to it does not hold, or none where what it asks
  *                     is not read
  * @param why          why neither is shown
  */
-public record AConstructionStopNotShown(String construction, SourcePos at,
+public record AConstructionStopNotShown(TypeKey construction, SourcePos at,
                                         Optional<WhatAConstructionAsks.Asked> asked,
                                         WhyAConstructionStopIsNotShown why) {
 

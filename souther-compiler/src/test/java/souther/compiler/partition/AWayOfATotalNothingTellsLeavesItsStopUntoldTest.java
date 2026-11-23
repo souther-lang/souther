@@ -70,6 +70,9 @@ class AWayOfATotalNothingTellsLeavesItsStopUntoldTest {
         assertEquals(2, said.size(), "one for each way");
         assertTrue(said.stream().allMatch(each -> each.stops().operations().aStopUntold()),
                 "each leaves a stop untold");
+        assertTrue(said.stream().allMatch(each -> each.stops().operations().leftUntold()
+                        .whereUnaccountedFor(List.of()).orElseThrow() == TOTAL),
+                "at the call that makes the total, which the report names");
     }
 
     /** A working that tells no operation and leaves a stop untold is a stop, not none. */
@@ -91,6 +94,8 @@ class AWayOfATotalNothingTellsLeavesItsStopUntoldTest {
         assertEquals(1, said.size(), "one, where they are read");
         assertSame(ANYWHERE, said.getFirst().reached());
         assertTrue(said.getFirst().stops().operations().aStopUntold());
+        assertSame(TOTAL, said.getFirst().stops().operations().leftUntold()
+                .whereUnaccountedFor(List.of()).orElseThrow(), "at the call that makes the total");
     }
 
     /**

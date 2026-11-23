@@ -91,16 +91,17 @@ public final class RoundedToAWholeNumber {
      *
      * <p>The policy is the value {@code standing} says it stands at, as {@link #read} takes it: a
      * rounding in a helper's body is handed its policy by a name. What a run works out to get the
-     * policy is not what it stands at, so a policy whose working out may end a run is no written
-     * case.
+     * policy is not what it stands at, so a policy whose working out may end a run of a row
+     * ({@link ARowsRun}, with {@code answers} what the behaviors called answer) is no written case.
      */
-    public static Written written(Core call, UnaryOperator<Core> standing) {
+    public static Written written(Core call, UnaryOperator<Core> standing,
+                                  BehaviorAnswers answers) {
         AnOperationApplied applied = AnOperationApplied.of(Core.withoutStanding(call));
         BoundOperationFact.RoundsToAStep rounds = applied == null ? null
                 : DefaultBoundOperationFacts.get().roundsToAWholeNumber(applied.operation());
         Core value = rounds == null ? null : applied.argument(rounds.value());
         Core policy = rounds == null ? null : applied.argument(rounds.mode());
-        WholeRounding way = policy == null || !WhatARunMayEndFor.endsNoneBeneath(policy) ? null
+        WholeRounding way = (policy == null || !ARowsRun.getsPastBeneath(policy, answers)) ? null
                 : rounds.wayOf(standing.apply(policy));
         return value == null || way == null ? null : new Written(value, way);
     }

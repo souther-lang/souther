@@ -1,6 +1,9 @@
 package souther.compiler.inputs;
 
+import souther.compiler.abort.GetsPast;
+import souther.compiler.check.ARowsRun;
 import souther.compiler.check.AffineForms;
+import souther.compiler.check.BehaviorAnswers;
 import souther.compiler.check.TypeView;
 import souther.compiler.check.AnOperationApplied;
 import souther.compiler.check.ARounding;
@@ -14,7 +17,6 @@ import souther.compiler.check.Comparison;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.ValueStanding;
-import souther.compiler.check.WhatARunMayEndFor;
 import souther.compiler.check.WholeRounding;
 import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.ElementAnswer;
@@ -1701,10 +1703,11 @@ public sealed interface ElementValue {
             // may end a run, the operations kept are not every one. A function made here runs
             // nothing. Nor is what the node itself works out, which read as no number of the
             // element: a product of a choice and a number beside the element is one.
+            BehaviorAnswers answers = source.declarations().answers();
             Core.forEachChild(here, child -> leftSome |= !recorded.contains(child)
                     && !Evaluated.makesAFunction(child)
-                    && !WhatARunMayEndFor.endsNoneBeneath(child));
-            leftSome |= !WhatARunMayEndFor.itselfApartFromTheClosuresWrittenAtIt(here).endsNone();
+                    && !ARowsRun.getsPastBeneath(child, answers));
+            leftSome |= !(ARowsRun.completionOf(here, answers) instanceof GetsPast.Always);
         }
 
         /**

@@ -215,6 +215,19 @@ public final class SourcePos implements RecordOfTheBuilding {
         return other.isBefore(one) ? 1 : 0;
     };
 
+    /**
+     * Places in an order that holds whichever texts they are in: by the text and whose code it
+     * carries, and within one of those in the order they are written ({@link #IN_WRITTEN_ORDER}).
+     * Two places compare as equal exactly where they are equal, so a caller choosing one of
+     * several by it chooses the same one whatever order it met them in.
+     *
+     * <p>Between two texts this is an order and not which was written first, which nothing says:
+     * a caller wanting the first written asks it of places in one text.
+     */
+    public static final Comparator<SourcePos> IN_A_STEADY_ORDER = Comparator
+            .comparing((SourcePos at) -> at.placement.steadily())
+            .thenComparing(IN_WRITTEN_ORDER);
+
     /** Whether the code at this position was copied here rather than written at it — what sizes an
      *  underline, and what tells an empty literal the author wrote from one that arrived inside a
      *  copied body. Not whether a reader can be sent here, which is {@link DiagnosticPlace}'s. */

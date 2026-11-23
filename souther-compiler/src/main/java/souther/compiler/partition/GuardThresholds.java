@@ -306,19 +306,25 @@ public final class GuardThresholds {
     }
 
     /**
-     * Whether the runs of rows get past working out the body {@code states}, over whatever its
-     * inputs may hold: what a caller is told of it ({@link
-     * souther.compiler.check.BehaviorAnswers#rowsRunsGetPast}). Asked by the numbers its operations
-     * lie within: a sum of inputs declared within a range ends no run, and one of any {@code Int}
-     * may.
+     * Where it is not shown that the runs of rows get past working out the body {@code states},
+     * over whatever its inputs may hold: the expression written in it whose own working may end a
+     * run, and none where every run is shown to get past. What a caller is told of it ({@link
+     * souther.compiler.check.BehaviorAnswers#passageOf}). Asked by the numbers its operations lie
+     * within: a sum of inputs declared within a range ends no run, and one of any {@code Int}
+     * may. An {@code unreachable} is taken as the premise it states, as every reader of what a
+     * row's run gets past takes it ({@link WorkedOutToReachIt}).
+     *
+     * <p>The expression is the one the answer rests on, the first the walk met, and not every one
+     * there is: another may be left where it is answered for.
      *
      * @param elements the bindings of {@code states}, which hold what each value it builds is
      *                 defined as
      */
-    public static boolean rowsRunsGetPast(AnalysisBody states, InputReading read,
-                                          ElementBindings elements) {
-        return OneReading.over(() -> WorkedOutToReachIt.of(read).endsNoRunWhereItWasPassedOver(
-                new Denotation(states.core(), namesOf(read, elements))));
+    public static Optional<Core> whereARowsRunMayEnd(AnalysisBody states, InputReading read,
+                                                     ElementBindings elements) {
+        return OneReading.over(() -> WorkedOutToReachIt.of(read).whereARunMayEndWhereItWasPassedOver(
+                        new Denotation(states.core(), namesOf(read, elements)))
+                .map(at -> Core.withoutStanding(at.value())));
     }
 
     /** The walk of the body's comparisons, over the names {@code read} reads. */

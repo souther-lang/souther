@@ -187,14 +187,34 @@ class WhatStillHoldsAPlaceUnderAFindingIsReadOnTwoAxesTest {
                                 + " construction is told what it asks, or show that nothing"
                                 + " carrying a rule a run may stop in crosses a module boundary")));
         // A construction on the way to a rule of which neither a stop nor none is shown, held with
-        // why. The same place as above, said by the same words and document, and seen by nothing
-        // a compile of the models answers.
+        // why. The same place as above, said by the same words and document. The models reach
+        // it, and no two of them were seen differing only there.
         out.put("souther.compiler.inputs.AConstructionStopNotShown.at",
-                new Standing(new Because.NothingReachesOne(),
+                new Standing(new Because.ReachedAndNotObservedToDiscriminate(),
                         new AcrossTheCut.BlocksIt("say where the construction is written as the"
                                 + " module, line and column the report says, made where the"
                                 + " construction is judged, or show that nothing carrying a rule"
                                 + " whose stop is not resolved crosses a module boundary")));
+        // Where a stop left untold is, under a rule whose stop is not resolved, and each place in
+        // a called body down to where the proof that a run gets past gave out: a call, a
+        // construction or another expression. Each is where it is written, which the words and the
+        // document say as a line and a column, and the place may be in another module than the
+        // rule's, the one a called behavior is declared in. The models reach a call, and no two
+        // calls were seen differing only there; two other expressions were, two stops left untold
+        // that only where they are written tells apart; nothing they reach is a construction.
+        String sayWhereAStopIsLeftUntold = "say where each is written as the module, line and"
+                + " column the report says, made where the stop is found left untold, or show"
+                + " that nothing carrying a rule whose stop is not resolved crosses a module"
+                + " boundary";
+        out.put("souther.compiler.check.StopOrigin$ACall.at",
+                new Standing(new Because.ReachedAndNotObservedToDiscriminate(),
+                        new AcrossTheCut.BlocksIt(sayWhereAStopIsLeftUntold)));
+        out.put("souther.compiler.check.StopOrigin$AConstruction.at",
+                new Standing(new Because.NothingReachesOne(),
+                        new AcrossTheCut.BlocksIt(sayWhereAStopIsLeftUntold)));
+        out.put("souther.compiler.check.StopOrigin$SomethingWorkedOut.at",
+                new Standing(new Because.TwoOfThemDifferOnlyThere(),
+                        new AcrossTheCut.BlocksIt(sayWhereAStopIsLeftUntold)));
         return out;
     }
 

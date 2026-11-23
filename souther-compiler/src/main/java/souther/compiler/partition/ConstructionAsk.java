@@ -8,6 +8,7 @@ import souther.compiler.meaning.Proposition;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
+import souther.compiler.types.TypeKey;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -29,19 +30,22 @@ import java.util.function.Predicate;
  * another construction reads here and nowhere else.
  *
  * @param made         the construction, the node of the tree that works it out
- * @param construction the type made, as it is written
  * @param at           where the construction is written
  * @param bearing      which rules what it asks is said under
  * @param requirement  what it asks, with what the declarations hold already left out
  */
-record ConstructionAsk(Core.Construct made, String construction, SourcePos at,
+record ConstructionAsk(Core.Construct made, SourcePos at,
                        WhatAConstructionAsks.Bearing bearing, Requirement requirement) {
 
     ConstructionAsk {
-        if (made == null || construction == null || at == null || bearing == null
-                || requirement == null) {
+        if (made == null || at == null || bearing == null || requirement == null) {
             throw new IllegalArgumentException("a construction asks something of some rules");
         }
+    }
+
+    /** The type made, as the declaration it is: read off the node, which says it. */
+    TypeKey construction() {
+        return made.typeName().key();
     }
 
     /** Whether this is what {@code node}, a construction of the tree, asks. Asked by identity,
@@ -60,7 +64,7 @@ record ConstructionAsk(Core.Construct made, String construction, SourcePos at,
     Optional<WhatAConstructionAsks> toldOf(Predicate<Requirement.Is> heldOnEveryWay) {
         WhatAConstructionAsks.Asked told = requirement.leavingOut(heldOnEveryWay).told();
         return told == null ? Optional.empty()
-                : Optional.of(new WhatAConstructionAsks(construction, at, told, bearing));
+                : Optional.of(new WhatAConstructionAsks(construction(), at, told, bearing));
     }
 
     /**

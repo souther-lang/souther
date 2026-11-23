@@ -48,7 +48,7 @@ class AnElementOfAListOfWholeNumbersIsReadAsTheNumberAndNotWhereItStandsTest {
                         + "; a run that gets there stops in"
                         + " a + ns[*] where a + ns[*] is at least 9223372036854775808, in"
                         + " a + ns[*] + 3 where a + ns[*] is 9223372036854775805 to"
-                        + " 9223372036854775807, and no such run is shown to exist"),
+                        + " 9223372036854775807, and it is not shown that any such run exists"),
                 report.stream().filter(line -> line.startsWith("· no line")
                         || line.startsWith("· may stop")
                         || line.startsWith("· stop not resolved")).toList());

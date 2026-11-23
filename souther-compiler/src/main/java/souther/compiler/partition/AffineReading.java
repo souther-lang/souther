@@ -537,12 +537,12 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         boolean tellsWhatItWorksOut(Core value, InputReads at);
 
         /**
-         * Whether working out {@code value}, which {@link #tellsWhatItWorksOut} did not tell,
-         * leaves no stop untold all the same, beside what this reading told
-         * ({@link WorkedOutToReachIt#leavesNoStopUntoldWhereItWasPassedOver}): every stop in it is
-         * none, or one the analysis says on each way. Not whether a run ends there.
+         * Where working out {@code value}, which {@link #tellsWhatItWorksOut} did not tell, leaves
+         * a stop untold beside what this reading told
+         * ({@link WorkedOutToReachIt#whereAStopIsLeftUnsaidWhereItWasPassedOver}); none where every
+         * stop in it is none, or one the analysis says on each way. Not whether a run ends there.
          */
-        boolean passedOverLeavesNoStopUntold(Core value, InputReads at);
+        Optional<Core> whereAPassedOverStopIsLeftUntold(Core value, InputReads at);
     }
 
     /**
@@ -728,7 +728,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     told.add(mul, UndividedByARelation.IntOperation.overTheInput(atom,
                             held.least(), held.greatest(), told.workedOutOf(mul)));
                 } else {
-                    told.passedOverWhatMayEndARun();
+                    told.passedOverWhatMayEndARun(mul);
                 }
             }
 
@@ -781,7 +781,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 if (!(DeclaredBounds.whereMakingSucceeds(construct, type, ofTheInput.ruleReading())
                         instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld where)) {
                     if (reached.leavesItsOwnStopUntold(new Denotation(construct, at))) {
-                        told.passedOverWhatMayEndARun();
+                        told.passedOverWhatMayEndARun(construct);
                     }
                     return;
                 }
@@ -800,7 +800,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 if (where instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld held) {
                     tellHeld(operation, held, form, told.workedOutOf(operation));
                 } else if (!(where instanceof WhereAnOperatorAnswers.Everywhere)) {
-                    told.passedOverWhatMayEndARun();
+                    told.passedOverWhatMayEndARun(operation);
                 }
             }
 
@@ -810,7 +810,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              */
             @Override
             public void unobserved(Core node) {
-                told.passedOverWhatMayEndARun();
+                told.passedOverWhatMayEndARun(node);
             }
 
             /** The same, read in {@code at}: passed over, its owner asked whether working it out
@@ -875,9 +875,10 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             }
 
             @Override
-            public boolean passedOverLeavesNoStopUntold(Core value, InputReads at) {
+            public Optional<Core> whereAPassedOverStopIsLeftUntold(Core value, InputReads at) {
                 return reached.besideWhatIsTold(this::toldHere)
-                        .leavesNoStopUntoldWhereItWasPassedOver(new Denotation(value, at));
+                        .whereAStopIsLeftUnsaidWhereItWasPassedOver(new Denotation(value, at))
+                        .map(Denotation::value);
             }
 
             /**
@@ -1029,7 +1030,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 if (where instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld held) {
                     tellHeld(node, held, total, after);
                 } else {
-                    told.passedOverWhatMayEndARun();
+                    told.passedOverWhatMayEndARun(node);
                 }
             }
 
@@ -1125,7 +1126,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     // each way it reads the node in. Of the node's own working: what a name in it
                     // was given is told where it was given.
                     if (reached.leavesItsOwnStopUntold(worked)) {
-                        told.aStopWhereNoRowIs();
+                        told.aStopWhereNoRowIs(node);
                     }
                     return true;
                 }
@@ -1152,7 +1153,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                                 new Denotation(call.args().get(0), at))) {
                     return false;
                 }
-                told.countsOverTheStop.add(stoppedAt.holdAside(node, at).atom);
+                told.countsOverTheStop.add(new CountOverTheStop(node,
+                        stoppedAt.holdAside(node, at).atom));
                 return true;
             }
 
@@ -1215,9 +1217,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 tellWhatIsWorkedOutAtEachElement(node, at);
                 // A step the node applies that answers no element is read by nothing here.
                 for (Core.Block step : InputNumber.stepsAnsweringNoElement(node, at, ruleSource)) {
-                    if (!reached.endsNoRunWhereApplied(new Denotation(node, at), step)) {
-                        told.passedOverWhatMayEndARun();
-                    }
+                    reached.whereARunMayEndWhereApplied(new Denotation(node, at), step)
+                            .ifPresent(stop -> told.passedOverWhatMayEndARun(stop.value()));
                 }
                 for (Evaluated.Step step : Evaluated.inOrder(Core.withoutStanding(node))) {
                     if (step instanceof Evaluated.Step.Always(Core part)
@@ -1240,7 +1241,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             private void ownWorkingPassedOver(Core node, InputReads at) {
                 Denotation worked = new Denotation(node, at);
                 if (reached.leavesItsOwnStopUntold(worked)) {
-                    told.passedOverWhatMayEndARun();
+                    told.passedOverWhatMayEndARun(node);
                 } else if (!reached.endsNoRunWhereItWasPassedOver(worked)) {
                     told.toldOnlyForWhereARunStops();
                 }
@@ -1296,7 +1297,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                         if (isAQuotientByAValue(here)) {
                             told.ownStopOfAQuotientByAValueUntold((Core.Binary) here);
                         } else {
-                            told.passedOverWhatMayEndARun();
+                            told.passedOverWhatMayEndARun(here);
                         }
                     } else if (!reached.ownWorkingEndsNoRun(worked)) {
                         told.toldOnlyForWhereARunStops();
@@ -2179,7 +2180,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                                               StoppedValues.Held aside) {
                 RoundedToAWholeNumber.Written rounding = RoundedToAWholeNumber.written(node,
                         policy -> WrittenOutElements.reading(ruleSource.symbols(),
-                                ruleSource.newtypes()).standing(policy, at).value());
+                                ruleSource.newtypes()).standing(policy, at).value(),
+                        ruleSource.declarations().answers());
                 if (rounding == null || !(AffineForms.outcome(rounding.value(), at, this)
                         instanceof AffineForms.Outcome.Composed<NumericTerm, InputReads> number)) {
                     return false;
@@ -2682,6 +2684,10 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         };
     }
 
+    /** The count of a list over the expression a reading stopped at, held aside as {@code count},
+     *  and the call that counts it. */
+    private record CountOverTheStop(Core node, NumericTerm count) {}
+
     /**
      * An operation of whole numbers over the expression a reading stopped at, held aside: the
      * form, over the atom the expression is held as; where a run stops at it; and the node that
@@ -2796,7 +2802,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         /** The counts of a list whose working out is answered for only where the line the
          *  comparison draws on the count is at a count a list holds, to be asked of the form of
          *  the comparison. */
-        private final List<NumericTerm> countsOverTheStop = new ArrayList<>();
+        private final List<CountOverTheStop> countsOverTheStop = new ArrayList<>();
         /** The operations an operation over a name is worked out after, by the name: for the
          *  accumulator of a walk being unrolled, what the steps before worked out, and for a name
          *  a value was given, what a run worked out to give it. */
@@ -2810,9 +2816,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         private final int[] elementsRead;
         private boolean exact = true;
         /** What was left untold, in an operation or a stop: every way {@link #exact} is made false
-         *  or {@link #aStopUntold} made true joins its cause here
+         *  or {@link #aStopUntold} made true adds its cause here, as it is met
          *  ({@link UndividedByARelation.Working#leftUntold}). */
-        private NotAccountedFor untold = NotAccountedFor.NOTHING;
+        private final NotAccountedFor.Gathered untold = new NotAccountedFor.Gathered();
         /** Whether a run may stop where an answer read here has no place, which no operation
          *  told and no row of a line is at ({@link UndividedByARelation.Working#aStopUntold}). */
         private boolean aStopUntold;
@@ -3047,7 +3053,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             keptOnce.addAll(apart.keptOnce);
             keptAt.addAll(apart.keptAt);
             exact &= apart.exact;
-            untold = untold.join(apart.untold);
+            untold.take(apart.untold);
             partials.addAll(apart.partials);
         }
 
@@ -3079,7 +3085,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             apart.keptElsewhere = true;
             aStopUntold |= apart.aStopUntold;
             aStopSaidElsewhere |= apart.aStopSaidElsewhere;
-            untold = untold.join(apart.untold);
+            untold.take(apart.untold);
             keptOnce.addAll(apart.toldOnce);
             keptOnce.addAll(apart.keptOnce);
             keptAt.addAll(apart.lastToldAt.keySet());
@@ -3142,20 +3148,31 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          */
         void passedOver(WorkedOutToReachIt reached, Denotation skipped,
                         Predicate<Denotation> tells) {
-            if (reached.endsNoRunWhereItWasPassedOver(skipped)) {
+            Optional<Denotation> stop = reached.whereARunMayEndWhereItWasPassedOver(skipped);
+            if (stop.isEmpty()) {
                 return;
             }
             leavingSomethingUntold();
-            if (tells == null || !reached.besideWhatIsTold(value -> toldAt(value.value()))
-                    .endsNoRunUntoldWhereItWasPassedOver(skipped, tells)) {
-                aStopUntold = true;
+            Optional<Denotation> untoldStop = tells == null ? stop
+                    : reached.besideWhatIsTold(value -> toldAt(value.value()))
+                            .whereAStopIsLeftUntoldWhereItWasPassedOver(skipped, tells);
+            if (untoldStop.isPresent()) {
+                aStopUntoldAt(untoldStop.get().value());
             }
         }
 
-        /** That something a run works out, and which may end it, was passed over unread. */
-        void passedOverWhatMayEndARun() {
+        /** That {@code at}, which a run works out and which may end it, was passed over unread:
+         *  not every operation is read, and the stop there is left untold. */
+        void passedOverWhatMayEndARun(Core at) {
             leavingSomethingUntold();
+            aStopUntoldAt(at);
+        }
+
+        /** That a stop is left untold at {@code at} ({@link NotAccountedFor#whereUnaccountedFor}):
+         *  every way a stop is left untold says where. */
+        private void aStopUntoldAt(Core at) {
             aStopUntold = true;
+            untold.stopAt(at);
         }
 
         /**
@@ -3174,12 +3191,12 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         void ownStopOfAQuotientByAValueUntold(Core.Binary quotient) {
             exact = false;
             aStopUntold = true;
-            untold = untold.join(NotAccountedFor.quotients(List.of(quotient)));
+            untold.quotient(quotient);
         }
 
         private void leavingSomethingUntold() {
             exact = false;
-            untold = NotAccountedFor.SOMETHING_ELSE;
+            untold.somethingElse();
         }
 
         /**
@@ -3191,12 +3208,11 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         }
 
         /**
-         * That a run may stop where an answer read here has no place: no row of a line is at it,
-         * so what a row gets past is told in full, and the stop is told by nothing.
+         * That a run may stop at {@code at} where an answer read there has no place: no row of a
+         * line is at it, so what a row gets past is told in full, and the stop is told by nothing.
          */
-        void aStopWhereNoRowIs() {
-            aStopUntold = true;
-            untold = NotAccountedFor.SOMETHING_ELSE;
+        void aStopWhereNoRowIs(Core at) {
+            aStopUntoldAt(at);
         }
 
         /**
@@ -3232,12 +3248,12 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 if (WhatLiesBesideTheStop.areAddendsOf(each.form(), whole)) {
                     aStopSaidElsewhere = true;
                 } else if (!each.toldOverWhatItComesTo(this, ofTheInput)) {
-                    passedOverWhatMayEndARun();
+                    passedOverWhatMayEndARun(each.node());
                 }
             }
-            for (NumericTerm count : countsOverTheStop) {
-                if (!WhatLiesBesideTheStop.lineIsAtACountAListHolds(whole, count)) {
-                    passedOverWhatMayEndARun();
+            for (CountOverTheStop count : countsOverTheStop) {
+                if (!WhatLiesBesideTheStop.lineIsAtACountAListHolds(whole, count.count())) {
+                    passedOverWhatMayEndARun(count.node());
                 } else {
                     aStopSaidElsewhere = true;
                 }
@@ -3359,17 +3375,21 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
 
         /** {@code told} as the working: every operation is told where {@code everyOne}, and
          *  where not, what is left out is what was left untold, which the running totals and
-         *  what is told beside the rows ({@code besideTheRows}) are not accounted for in. */
+         *  what is told beside the rows ({@code besideTheRows}) are not accounted for in. What
+         *  is left to something else is widened from what was left untold, so the places it
+         *  holds are kept. */
         private UndividedByARelation.Working working(
                 List<UndividedByARelation.IntOperation> told, boolean everyOne,
                 boolean besideTheRowsIsEmpty) {
+            NotAccountedFor gathered = untold.done();
+            NotAccountedFor left = everyOne
+                    ? (aStopUntold ? gathered.andSomethingElse() : NotAccountedFor.NOTHING)
+                    : (besideTheRowsIsEmpty && partials.isEmpty()) ? gathered
+                    : gathered.andSomethingElse();
             return new UndividedByARelation.Working(told, everyOne
                     ? WhatARelationLeavesUndivided.Told.EVERY
                     : WhatARelationLeavesUndivided.Told.SOME,
-                    true, exact ? partials : List.of(), aStopUntold,
-                    everyOne ? NotAccountedFor.NOTHING
-                            : (besideTheRowsIsEmpty && partials.isEmpty()) ? untold
-                            : NotAccountedFor.SOMETHING_ELSE);
+                    true, exact ? partials : List.of(), aStopUntold, left);
         }
     }
 
@@ -3453,12 +3473,13 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             UndividedByARelation.Working here = switch (step) {
                 case Evaluated.Step.Always always ->
                         toldEvaluating(always.expression(), at, ofTheInput, answersFor).working();
-                case Evaluated.Step.OnlyWhere only ->
-                        WorkedOutToReachIt.of(ofTheInput)
-                                .endsNoRun(new Denotation(only.expression(), at))
-                                ? new UndividedByARelation.Working(List.of(),
-                                        WhatARelationLeavesUndivided.Told.EVERY)
-                                : UndividedByARelation.Working.UNREAD;
+                case Evaluated.Step.OnlyWhere only -> WorkedOutToReachIt.of(ofTheInput)
+                        .whereARunMayEnd(new Denotation(only.expression(), at))
+                        .map(stop -> new UndividedByARelation.Working(List.of(),
+                                WhatARelationLeavesUndivided.Told.SOME, true, List.of(), false,
+                                NotAccountedFor.aStopAt(stop.value())))
+                        .orElseGet(() -> new UndividedByARelation.Working(List.of(),
+                                WhatARelationLeavesUndivided.Told.EVERY));
             };
             together = here.after(together);
         }
@@ -3513,11 +3534,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 null, null, answersFor.saidOnItsWays());
         if (!reading.tellsWhatItWorksOut(expression, at)) {
             // Not told only where something in it that may end a run is read by nothing.
-            if (reading.passedOverLeavesNoStopUntold(expression, at)) {
-                told.passedOverWhatEndsNoRun();
-            } else {
-                told.passedOverWhatMayEndARun();
-            }
+            reading.whereAPassedOverStopIsLeftUntold(expression, at).ifPresentOrElse(
+                    told::passedOverWhatMayEndARun, told::passedOverWhatEndsNoRun);
         }
         return told;
     }
@@ -3536,8 +3554,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
      *
      * <p>Where that leaves a stop untold, or reads the expression as no number, the expression is
      * asked as a whole whether every stop in it is none or one some owner says
-     * ({@link Arithmetic#passedOverLeavesNoStopUntold}): then none is left untold, though not every
-     * one is said among what this reading says.
+     * ({@link Arithmetic#whereAPassedOverStopIsLeftUntold}): then none is left untold, though not
+     * every one is said among what this reading says.
      */
     private static WhatWasTold toldForWhereARunStops(Core expression, InputReads at,
                                                      InputReading ofTheInput,
@@ -3554,12 +3572,13 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         if (read && !told.aStopUntold) {
             return told;
         }
-        if (reading.passedOverLeavesNoStopUntold(expression, at)) {
+        Optional<Core> untold = reading.whereAPassedOverStopIsLeftUntold(expression, at);
+        if (untold.isEmpty()) {
             WhatWasTold whole = new WhatWasTold();
             whole.passedOverWhatIsSaidElsewhere();
             return whole;
         }
-        told.passedOverWhatMayEndARun();
+        told.passedOverWhatMayEndARun(untold.get());
         return told;
     }
 

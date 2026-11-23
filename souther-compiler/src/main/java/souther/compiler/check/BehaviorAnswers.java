@@ -30,8 +30,8 @@ public interface BehaviorAnswers {
         }
 
         @Override
-        public boolean rowsRunsGetPast(ValueName.Behavior behavior) {
-            return false;
+        public CallPassage passageOf(ValueName.Behavior behavior) {
+            return new CallPassage.Open(new CallPassage.WhyOpen.NoBody());
         }
 
         @Override
@@ -55,9 +55,16 @@ public interface BehaviorAnswers {
      * taken to get past where the representation stops, as it is past an operation, and the stop
      * there is said in the account of the body whose operation it is. False where there is no body
      * to ask, one injected from outside the model included: that it was not shown to answer is not
-     * that it was shown to stop.
+     * that it was shown to stop. An {@code unreachable} in the body is the premise it states, and
+     * the behavior's to account for, so the runs are taken to get past it.
      */
-    boolean rowsRunsGetPast(ValueName.Behavior behavior);
+    default boolean rowsRunsGetPast(ValueName.Behavior behavior) {
+        return passageOf(behavior).getsPast();
+    }
+
+    /** The same, with what a passage left open rests on: where in the body the proof gave out,
+     *  or that there is no body to ask. */
+    CallPassage passageOf(ValueName.Behavior behavior);
 
     /**
      * Whether the construction written at {@code construction} in {@code module} is in a value the

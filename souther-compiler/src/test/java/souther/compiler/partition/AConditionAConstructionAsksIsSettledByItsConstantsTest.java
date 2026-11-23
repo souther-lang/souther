@@ -112,8 +112,7 @@ class AConditionAConstructionAsksIsSettledByItsConstantsTest {
      *  the way to the rule holds. */
     @Test
     void aConstructionNoRunGetsPastIsToldUnderEveryRuleWhateverTheWayHolds() {
-        ConstructionAsk never = new ConstructionAsk(MADE, "Held", NOWHERE, EVERY_RULE,
-                Requirement.NEVER);
+        ConstructionAsk never = new ConstructionAsk(MADE, NOWHERE, EVERY_RULE, Requirement.NEVER);
         assertEquals(true, never.bearing().bearsOn(Set.of(TermPath.of("y"))));
         assertEquals(Optional.of(new WhatAConstructionAsks.Never()),
                 never.toldOf(_ -> true).map(WhatAConstructionAsks::asks));
@@ -122,9 +121,9 @@ class AConditionAConstructionAsksIsSettledByItsConstantsTest {
     @Test
     void anAskIsOfSomeTypeAtSomePlaceUnderSomeRulesAndNumbersOfNoPlaceAreNotPlaces() {
         assertThrows(IllegalArgumentException.class,
-                () -> new ConstructionAsk(MADE, null, NOWHERE, EVERY_RULE, Requirement.NEVER));
+                () -> new ConstructionAsk(MADE, null, EVERY_RULE, Requirement.NEVER));
         assertThrows(IllegalArgumentException.class,
-                () -> new ConstructionAsk(null, "Held", NOWHERE, EVERY_RULE, Requirement.NEVER));
+                () -> new ConstructionAsk(null, NOWHERE, EVERY_RULE, Requirement.NEVER));
         assertThrows(IllegalArgumentException.class,
                 () -> new WhatAConstructionAsks.OnPlaces(Set.of()));
     }
@@ -132,13 +131,13 @@ class AConditionAConstructionAsksIsSettledByItsConstantsTest {
     @Test
     void whatIsToldIsWhatIsLeftAndNothingWhereNothingIs() {
         Requirement both = Requirement.and(ask("w", HELD), Y);
-        ConstructionAsk one = new ConstructionAsk(MADE, "Held", NOWHERE, EVERY_RULE, both);
+        ConstructionAsk one = new ConstructionAsk(MADE, NOWHERE, EVERY_RULE, both);
         assertEquals(Optional.of(new WhatAConstructionAsks.Is("y", Rel.GE, "0")),
                 one.toldOf(is -> onTheWay(is)).map(WhatAConstructionAsks::asks));
-        assertEquals(Optional.empty(), new ConstructionAsk(MADE, "Held", NOWHERE, EVERY_RULE,
+        assertEquals(Optional.empty(), new ConstructionAsk(MADE, NOWHERE, EVERY_RULE,
                 ask("w", HELD)).toldOf(is -> onTheWay(is)));
         assertEquals(Optional.of(new WhatAConstructionAsks.Never()),
-                new ConstructionAsk(MADE, "Held", NOWHERE, EVERY_RULE, Requirement.NEVER)
+                new ConstructionAsk(MADE, NOWHERE, EVERY_RULE, Requirement.NEVER)
                         .toldOf(is -> onTheWay(is)).map(WhatAConstructionAsks::asks));
     }
 }
