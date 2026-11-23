@@ -117,11 +117,12 @@ import java.util.function.Supplier;
  * ({@link WithinOneApplication}).
  *
  * @param operationsStanding what this tree says of the forks the tree that runs names less of
+ * @param stops              whether a run stops at each step of the body it may stop at
  */
 record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                           Map<ConditionOccurrence, Citation> conditionsMet,
                           List<OutcomeMet> outcomes, List<ForkDecided> decided,
-                          WhereTheOperationsStand operationsStanding) {
+                          WhereTheOperationsStand operationsStanding, StopsOfABody stops) {
 
     ComparisonReadings {
         comparisons = List.copyOf(comparisons);
@@ -578,7 +579,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                         ForkDependencies.Gathered dependencies,
                         WithinOneApplication.Gathered oneApplication,
                         ComparisonWitnesses.AtComparisons witnesses, WaysToNodes ways,
-                        WhereConstructionsAreMet constructions, Core whole, Core within,
+                        WhereARunMayStop constructions, Core whole, Core within,
                         Optional<WayIn> calledAt, Optional<AtAConstruct> metOnly) {
 
         /** The same reading, in the body of a recursive helper read at {@code at}, a call of it:
@@ -754,7 +755,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         ForkDependencies.Gathered dependencies = new ForkDependencies.Gathered();
         WithinOneApplication.Gathered oneApplication = new WithinOneApplication.Gathered();
         WaysToNodes ways = new WaysToNodes();
-        WhereConstructionsAreMet constructions = new WhereConstructionsAreMet();
+        WhereARunMayStop constructions = new WhereARunMayStop();
         walk(body, new Body(behavior, read, answering,
                         templates, outcomes, decided, stated, conditions,
                         CallContext.OF_THE_BODY, body, reads, armsNamed, dependencies,
@@ -785,7 +786,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         }
         return new ComparisonReadings(readings, forks, numbering.metAt(), outcomes, decided,
                 new WhereTheOperationsStand(armsNamed.named(), dependencies.read(),
-                        oneApplication.read()));
+                        oneApplication.read()),
+                new StopsOfABody(constructions, conditions, read, templates.definitions()));
     }
 
     /** How one build of a value was reached: where it is and the tree it stands in, what stood on
@@ -1091,7 +1093,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         }
         List<AConstructionOnTheWay> out = new ArrayList<>();
         for (Core.Construct each : made) {
-            Optional<WhereConstructionsAreMet.Met> met = in.constructions().at(each);
+            Optional<WhereARunMayStop.Met> met = in.constructions().at(each);
             AConstructionOnTheWay.Asked asked = asks.stream().filter(ask -> ask.of(each))
                     .findFirst().<AConstructionOnTheWay.Asked>map(AConstructionOnTheWay.Asked.Read::new)
                     .orElseGet(() -> askedAlone(each, met, in));
@@ -1215,7 +1217,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      *  {@code met}: the {@code entry}-th way in. */
     @FunctionalInterface
     private interface Reaching {
-        AConstructionOnTheWay.Reach reach(int entry, WhereConstructionsAreMet.Met met);
+        AConstructionOnTheWay.Reach reach(int entry, WhereARunMayStop.Met met);
     }
 
     /** What a run by one way in may work out before the comparison: each construction, in the
@@ -1522,11 +1524,61 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         return Optional.of(out);
     }
 
+    /**
+     * Each way a run gets to {@code site}, a step a run may stop at that the walk met on
+     * {@code assumed} inside the applications {@code applying}, as far as each is read
+     * ({@link WaysToASite}): the ways into the tree it stands in ({@link #waysIn}), each with what
+     * a run by it works out before the step.
+     *
+     * <p>What a run works out before it is, in each tree it goes through, everything before where
+     * it goes on and what it is handed there ({@link WhatARunWorksOutBeforeACount#workedOutGoingIn}),
+     * and in the step's own tree everything before the step and what the step is worked out of
+     * ({@link WhatARunWorksOutBeforeACount#workedOutBeforeASite}) — where a run by the way runs
+     * that tree once before it gets there. Otherwise an application or a step before this one may
+     * have run any of it on another value, and what comes first is not read. The way is read whole
+     * only where what a run meets is on the way the walk carried, as for a comparison
+     * ({@link #whatItMeets}).
+     */
+    private static WaysToASite waysToASite(Core site, List<OnTheWay> assumed,
+                                           ClosureApplications applying, Body in) {
+        WaysIn ways = waysIn(site, assumed, in);
+        List<WaysToASite.Reach> each = new ArrayList<>();
+        for (AWayIn way : ways.each()) {
+            Inner inner = way.inner();
+            boolean outside = way.through().stream().noneMatch(stretch ->
+                    WhatARunWorksOutBeforeACount.goesIntoAFunctionValue(stretch.root(),
+                            stretch.at()));
+            Supplier<Boolean> read = () -> outside
+                    && (!(inner.inside() || WhatARunWorksOutBeforeACount.goesIntoAFunctionValue(
+                            inner.root(), site)) || inner.reached().wheneverTheWayIs(applying));
+            Supplier<Optional<WhatARunWorksOutBeforeACount.BeforeAConstruction>> before = () -> {
+                WhatARunWorksOutBeforeACount.BeforeAConstruction past =
+                        WhatARunWorksOutBeforeACount.BeforeAConstruction.NOTHING;
+                for (Stretch stretch : way.through()) {
+                    Optional<WhatARunWorksOutBeforeACount.BeforeAConstruction> going =
+                            in.constructions().workedOutGoingIn(stretch.root(), stretch.at());
+                    if (going.isEmpty()) {
+                        return Optional.empty();
+                    }
+                    past = past.then(going.get());
+                }
+                if (!inner.once().once(applying)) {
+                    return Optional.empty();
+                }
+                return WhatARunWorksOutBeforeACount.workedOutBeforeASite(inner.root(), site)
+                        .map(past::then);
+            };
+            each.add(new WaysToASite.Reach(way.toTheComparison(), new Pullback.Once<>(before),
+                    new Pullback.Once<>(read)));
+        }
+        return new WaysToASite(each, ways.every());
+    }
+
     /** Whether the way to {@code made}, which the walk met inside {@code met}'s applications in
      *  {@code tree}, is on the way the walk carried: outside every function value of it, or got
      *  to whatever the row is as {@code reached} says ({@link Inner#reached}). */
     private static boolean read(Core tree, Core made, boolean inside, ReachedBy reached,
-                                WhereConstructionsAreMet.Met met) {
+                                WhereARunMayStop.Met met) {
         return !(inside || WhatARunWorksOutBeforeACount.goesIntoAFunctionValue(tree, made))
                 || reached.wheneverTheWayIs(met.applying());
     }
@@ -1536,7 +1588,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      *  {@code carried} into it. */
     private static AConstructionOnTheWay.Reach reach(
             int entry, AWayIn way, List<OnTheWay> into, List<OnTheWay> carried,
-            WhereConstructionsAreMet.Met met,
+            WhereARunMayStop.Met met,
             Supplier<Optional<WhatARunWorksOutBeforeACount.BeforeAConstruction>> before,
             Supplier<Boolean> wayRead) {
         return new AConstructionOnTheWay.Reach(entry, way.toTheComparison(),
@@ -1585,7 +1637,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      *  it: nothing where no clause of its type governs what it builds, and not read where the walk
      *  did not meet it on one way or its condition is read as nothing. */
     private static AConstructionOnTheWay.Asked askedAlone(Core.Construct made,
-                                                          Optional<WhereConstructionsAreMet.Met> met,
+                                                          Optional<WhereARunMayStop.Met> met,
                                                           Body in) {
         if (ClausesInOrder.at(made, in.read().rules()).governsNothing()) {
             return new AConstructionOnTheWay.Asked.Nothing();
@@ -2038,9 +2090,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         // asks whether a run on the way to a rule gets to it, and which; and of a call handed a
         // function value by a name, where a run goes into the body of the function value.
         if (in.metOnly().isEmpty() && in.context().equals(CallContext.OF_THE_BODY)) {
-            if (e instanceof Core.Construct made) {
-                in.constructions().met(made, assumed, reads, applying);
-            }
+            in.constructions().met(e, assumed, reads, applying,
+                    () -> waysToASite(e, assumed, applying, in));
             if (in.root() != null && handsAFunctionValueByAName(e, reads, in)) {
                 in.constructions().handing(Core.withoutStanding(e), assumed);
             }
@@ -2424,6 +2475,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             // stands for what was built, so a comparison written over that name is one over the
             // positions the construction was given.
             case Core.IfConstructed attempt -> {
+                in.constructions().tested(attempt.construct());
                 walk(attempt.construct(), in, reads, applying, flow, assumed, live, out, forks,
                         numbering);
                 List<Choice.Arm> arms = Choice.of(attempt).arms();

@@ -19,7 +19,7 @@ import java.util.function.Supplier;
  * @param asked    what it asks of a run that works it out
  * @param reaches  each way a run on the way to the comparison gets to it, one for each way into
  *                 the body the comparison stands in that it is met before, where the walk met it
- *                 on one way ({@link WhereConstructionsAreMet}): none where no run is shown to get
+ *                 on one way ({@link WhereARunMayStop}): none where no run is shown to get
  *                 to it
  * @param everyWay whether {@code reaches} holds every way a run on the way to the comparison
  *                 gets to it: false where a way into the body the comparison stands in is not

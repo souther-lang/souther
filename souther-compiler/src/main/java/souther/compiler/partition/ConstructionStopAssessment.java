@@ -59,7 +59,7 @@ import java.util.function.Predicate;
  * before it ends no run whatever the input ({@link WhatARunMayEndFor}) or is a construction whose
  * condition is read over numbers of the input, which the value is then asked to meet. The way to
  * a construction on an arm is the arm's condition with what stood above it, as the walk met it
- * ({@link WhereConstructionsAreMet}). What a construction asks is where making its type succeeds,
+ * ({@link WhereARunMayStop}). What a construction asks is where making its type succeeds,
  * and nothing narrower or wider ({@link DeclaredBounds#whereMakingSucceeds}), so a value meeting it
  * gets past the construction and one that does not stops there.
  *
@@ -164,22 +164,43 @@ final class ConstructionStopAssessment {
         Predicate<Proposition> toTheComparison = heldOnEvery(ways, read);
         List<Judgement> out = new ArrayList<>();
         for (AConstructionOnTheWay one : onTheWay) {
-            out.add(switch (one.asked()) {
-                case AConstructionOnTheWay.Asked.Nothing _ -> new Judgement.Safe(one.made());
-                // Not read for want of the names where it is worked out, where the walk did not
-                // meet it on one way: that no run is shown to get to it is what is missing.
-                case AConstructionOnTheWay.Asked.NotRead _ -> new Judgement.Unresolved(one.made(),
-                        new AConstructionStopNotShown(one.made().typeName().key(),
-                                one.made().pos(), Optional.empty(), !one.reaches().isEmpty()
-                                        ? WhyAConstructionStopIsNotShown.ASKS_NOT_READ
-                                        : WhyAConstructionStopIsNotShown.REACH_NOT_SHOWN),
-                        new WhatAConstructionAsks.OnEveryRule());
-                case AConstructionOnTheWay.Asked.Read(ConstructionAsk ask) ->
-                        judged(one, ask, asks, waysTo, toTheComparison, read,
-                                each.definitions());
-            });
+            out.add(judgedWhole(one, asks, waysTo, toTheComparison, read, each.definitions()));
         }
         return out;
+    }
+
+    /**
+     * What is shown of {@code one}, a construction a run may stop at, where every row taking a way
+     * to it is in one of {@code ways}: the same judgement as of one on the way to a comparison,
+     * the way to it standing for the way to the comparison. {@code asks} are what the
+     * constructions a run may work out before it ask, and {@code waysTo} the way to each.
+     */
+    static Judgement ofASite(AConstructionOnTheWay one, List<SearchRegion> ways,
+                             List<ConstructionAsk> asks, Map<Core, List<OnTheWay>> waysTo,
+                             InputReading read, ValueTemplates definitions) {
+        Map<Integer, Map<Core, List<OnTheWay>>> byEntry = new HashMap<>();
+        one.reaches().forEach(reach -> byEntry.put(reach.entry(), waysTo));
+        return judgedWhole(one, asks, byEntry, heldOnEvery(ways, read), read, definitions);
+    }
+
+    /** What is shown of {@code one}, as far as what it asks is read ({@link #judged}). */
+    private static Judgement judgedWhole(AConstructionOnTheWay one, List<ConstructionAsk> asks,
+                                         Map<Integer, Map<Core, List<OnTheWay>>> waysTo,
+                                         Predicate<Proposition> toTheComparison,
+                                         InputReading read, ValueTemplates definitions) {
+        return switch (one.asked()) {
+            case AConstructionOnTheWay.Asked.Nothing _ -> new Judgement.Safe(one.made());
+            // Not read for want of the names where it is worked out, where the walk did not
+            // meet it on one way: that no run is shown to get to it is what is missing.
+            case AConstructionOnTheWay.Asked.NotRead _ -> new Judgement.Unresolved(one.made(),
+                    new AConstructionStopNotShown(one.made().typeName().key(),
+                            one.made().pos(), Optional.empty(), !one.reaches().isEmpty()
+                                    ? WhyAConstructionStopIsNotShown.ASKS_NOT_READ
+                                    : WhyAConstructionStopIsNotShown.REACH_NOT_SHOWN),
+                    new WhatAConstructionAsks.OnEveryRule());
+            case AConstructionOnTheWay.Asked.Read(ConstructionAsk ask) ->
+                    judged(one, ask, asks, waysTo, toTheComparison, read, definitions);
+        };
     }
 
     /**

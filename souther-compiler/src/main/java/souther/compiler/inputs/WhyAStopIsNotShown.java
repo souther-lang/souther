@@ -20,6 +20,8 @@ public enum WhyAStopIsNotShown {
     NOT_EVERY_OPERATION_TOLD(true, true),
     /** Something worked out before the rule may end a run. */
     SOMETHING_BEFORE_IT_MAY_STOP(true, false),
+    /** Some way a run gets to it is not read, and no way read shows a run stopping there. */
+    REACH_NOT_SHOWN(true, false),
     /** A condition on the way is not a relation of whole numbers of the input, nor settled. */
     A_CONDITION_NOT_READ(true, false),
     /** It, or another operation that may be worked out first, is over something that is no

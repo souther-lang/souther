@@ -7507,6 +7507,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         ? new ReportMessage.AnotherPartIsNotRead()
                         : new ReportMessage.AnotherPartIsNotReadAt(place);
                 case SOMETHING_BEFORE_IT_MAY_STOP -> new ReportMessage.SomethingBeforeItMayStopARun();
+                case REACH_NOT_SHOWN -> new ReportMessage.NoRunIsShownToGetToIt();
                 case A_CONDITION_NOT_READ -> new ReportMessage.AConditionOnTheWayIsNotRead();
                 case NOT_OVER_THE_INPUT -> new ReportMessage.ItIsOverAValueTheBodyWorksOut();
                 case NO_VALUE_SHOWN -> new ReportMessage.NoInputMeetingTheTypesIsBuilt();

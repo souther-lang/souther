@@ -623,25 +623,52 @@ final class StopAssessment {
         if (earlier.isEmpty()) {
             return new Judgement.Unresolved(site, WhyAStopIsNotShown.SOMETHING_BEFORE_IT_MAY_STOP);
         }
-        List<TakenConstraint.Affine> way = new ArrayList<>();
-        for (OnTheWay entry : place.way()) {
-            if (entry instanceof OnTheWay.TakenIn(var _,
-                    RowDemand.Relational(TakenConstraint.Affine affine), var _, var _)) {
-                way.add(affine);
-            } else if (entry instanceof OnTheWay.Narrowed narrowed
-                    && aPlaceOnItsOrder(narrowed) instanceof List<TakenConstraint.Affine> holes) {
-                way.addAll(holes);
-            } else if (!(entry instanceof OnTheWay.Settled(var _, var _, boolean thisWay)
-                    && thisWay)) {
-                return new Judgement.Unresolved(site, WhyAStopIsNotShown.A_CONDITION_NOT_READ);
-            }
+        List<TakenConstraint.Affine> way = asRelations(place.way());
+        if (way == null) {
+            return new Judgement.Unresolved(site, WhyAStopIsNotShown.A_CONDITION_NOT_READ);
         }
         way.addAll(within);
         // Everything else a run may stop at before this ({@link StopsBefore}).
         StopsBefore stopsBefore = StopsBefore.of(each, site, siteNode, earlier.get(), working,
                 divisors, after);
-        List<UndividedByARelation.IntOperation> others = new ArrayList<>(stopsBefore.operations());
-        List<LinearForm<NumericTerm>> quotients = stopsBefore.divisors();
+        return aStopLookedFor(site, stopsBefore.operations(), stopsBefore.divisors(), left, way,
+                read);
+    }
+
+    /**
+     * {@code way} as the relations of numbers of the input a value on it meets, or null where a
+     * condition of it is not one: each relation it takes in, each place a narrowing leaves a
+     * position out of on its order, and nothing for a condition settled this way.
+     */
+    static List<TakenConstraint.Affine> asRelations(List<OnTheWay> way) {
+        List<TakenConstraint.Affine> out = new ArrayList<>();
+        for (OnTheWay entry : way) {
+            if (entry instanceof OnTheWay.TakenIn(var _,
+                    RowDemand.Relational(TakenConstraint.Affine affine), var _, var _)) {
+                out.add(affine);
+            } else if (entry instanceof OnTheWay.Narrowed narrowed
+                    && aPlaceOnItsOrder(narrowed) instanceof List<TakenConstraint.Affine> holes) {
+                out.addAll(holes);
+            } else if (!(entry instanceof OnTheWay.Settled(var _, var _, boolean thisWay)
+                    && thisWay)) {
+                return null;
+            }
+        }
+        return out;
+    }
+
+    /**
+     * That a run on {@code way} stops at {@code site}, or why that is not shown: a value of the
+     * input meeting {@code way} is looked for that keeps each of {@code before} within its ends and
+     * every divisor of {@code quotients} away from nought, and takes the site past where it stops.
+     * One of {@code before} every value {@code left} leaves keeps within its ends is got past by
+     * the value looked for, which is one of them, and is held against it once one is found.
+     */
+    static Judgement aStopLookedFor(Site site, List<UndividedByARelation.IntOperation> before,
+                                    List<LinearForm<NumericTerm>> quotients,
+                                    WhatAWayLeavesOfAValue left, List<TakenConstraint.Affine> way,
+                                    InputReading read) {
+        List<UndividedByARelation.IntOperation> others = new ArrayList<>(before);
         // One every value on the way keeps within its ends is got past by the value looked for,
         // which is one of them, and is not asked of it. That it is got past is held against the
         // value once one is found.

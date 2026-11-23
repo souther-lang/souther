@@ -589,6 +589,44 @@ final class WhatARunWorksOutBeforeACount {
     }
 
     /**
+     * What a run works out before it takes the step of {@code site}, a node of {@code root}'s tree
+     * a run may stop at: everything before it on the way down from {@code root}
+     * ({@link #workedOutUpTo}), and then what the site itself is worked out of, which a run works
+     * out before the step — empty where that is not shown.
+     *
+     * <p>Not where a function value stands above the site, whose body runs where it is applied and
+     * not where it is written: what a run works out before an application is the call's, and the
+     * call holds the site. And not the construction an attempt tests, which takes the other arm
+     * where it is refused and is no step a run stops at ({@link Evaluated#inOrder}).
+     */
+    static Optional<BeforeAConstruction> workedOutBeforeASite(Core root, Core site) {
+        List<Core> toIt = root == null ? null : wayDownTo(root, site);
+        if (toIt == null) {
+            return Optional.empty();
+        }
+        for (int i = 0; i + 1 < toIt.size(); i++) {
+            if (Evaluated.makesAFunction(toIt.get(i))
+                    || !entersOnSomeRun(toIt.get(i), toIt.get(i + 1), site)) {
+                return Optional.empty();
+            }
+        }
+        List<Core> some = workedOutUpTo(root, site, false);
+        List<Core> every = workedOutUpTo(root, site, true);
+        if (some == null || every == null) {
+            return Optional.empty();
+        }
+        List<Core> onSomeRun = new ArrayList<>(some.subList(0, some.size() - 1));
+        List<Core> onEveryRun = new ArrayList<>(every.subList(0, every.size() - 1));
+        for (Evaluated.Step step : Evaluated.inOrder(site)) {
+            workedOut(onSomeRun, step.expression());
+            if (step instanceof Evaluated.Step.Always) {
+                workedOut(onEveryRun, step.expression());
+            }
+        }
+        return Optional.of(new BeforeAConstruction(onSomeRun, onEveryRun));
+    }
+
+    /**
      * What a run works out before a construction it gets to ({@link #workedOutBeforeAConstruction}),
      * as two questions ask it.
      *
