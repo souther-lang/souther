@@ -77,6 +77,10 @@ public record WrittenName(String canonical, String spelling, List<Region> segmen
                     "`" + canonical + "` is spelled nowhere and is written in " + segments.size()
                             + " places");
         }
+        // A name nobody wrote came in by no door: it is made of names that did, and canonicalizing
+        // it is working out what is already there.
+        assert spelling != null || canonical.equals(CanonicalNames.name(canonical))
+                : "`" + canonical + "` is made of something that was not canonicalized where it entered";
         for (Region segment : segments) {
             if (!segment.start().isInTheSameTextAs(segments.get(0).start())) {
                 throw new IllegalArgumentException("`" + canonical + "` is written in one file");
@@ -98,9 +102,14 @@ public record WrittenName(String canonical, String spelling, List<Region> segmen
      * A name no one wrote, anchored where a complaint about it belongs. {@code anchor} is a form in
      * the source holding something else — so it says where to report and not what to underline,
      * there being no characters here that spell this name.
+     *
+     * <p>{@code canonical} is canonical already, and not a spelling from outside: a name in the tree,
+     * a word of the compiler's own, or such names joined at a character nothing composes with. A pass
+     * makes these as often as it makes a tree, so what a name is called is settled where it enters
+     * ({@link CanonicalNames}) and not at each tree it is put in.
      */
-    public static WrittenName synthetic(String name, SourcePos anchor) {
-        return new WrittenName(CanonicalNames.name(name), null, List.of(), anchor);
+    public static WrittenName synthetic(String canonical, SourcePos anchor) {
+        return new WrittenName(canonical, null, List.of(), anchor);
     }
 
     /** Whether the source spells this name — false for one a pass minted. */
