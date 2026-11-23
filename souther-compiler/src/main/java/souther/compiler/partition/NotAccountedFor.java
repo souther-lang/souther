@@ -72,7 +72,7 @@ final class NotAccountedFor {
             }
         }
         this.quotients = List.copyOf(distinct);
-        this.calls = calls.stream().distinct().toList();
+        this.calls = calls.isEmpty() ? List.of() : calls.stream().distinct().toList();
     }
 
     /** The stops of {@code nodes}, quotients by a value, and nothing else; something else where
@@ -104,8 +104,8 @@ final class NotAccountedFor {
         if (other.kind == Kind.NOTHING && other.calls.isEmpty()) {
             return this;
         }
-        List<ACall> bothCalls = new ArrayList<>(calls);
-        bothCalls.addAll(other.calls);
+        List<ACall> bothCalls = other.calls.isEmpty() ? calls
+                : calls.isEmpty() ? other.calls : both(calls, other.calls);
         if (kind == Kind.SOMETHING_ELSE || other.kind == Kind.SOMETHING_ELSE) {
             return bothCalls.isEmpty() ? SOMETHING_ELSE
                     : new NotAccountedFor(Kind.SOMETHING_ELSE, List.of(), bothCalls);
@@ -113,6 +113,12 @@ final class NotAccountedFor {
         List<Core.Binary> both = new ArrayList<>(quotients);
         both.addAll(other.quotients);
         return new NotAccountedFor(Kind.QUOTIENTS, both, bothCalls);
+    }
+
+    private static List<ACall> both(List<ACall> one, List<ACall> other) {
+        List<ACall> out = new ArrayList<>(one);
+        out.addAll(other);
+        return out;
     }
 
     /** Whether this is accounted for by {@code asked}: nothing is left, or only the stops of

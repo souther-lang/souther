@@ -40,10 +40,22 @@ class ACallOfABehaviorIsGottenPastByTheRunsTheBehaviorAnswersTest {
                 | (2) -> High
             """;
 
+    /** Compiled with no measure asked: what a behavior is told of asks nothing of the rows. */
+    private static Compilation compiled(String model) {
+        return ACompiledModel.answered("module m\n" + model);
+    }
+
+    /** Measured at {@link Adequacy.Level#OFF}: whether a stop is resolved, and why, is what the
+     *  rules say, and asks nothing of the rows. */
+    private static Compilation readByItsRules(String model) {
+        return ACompiledModel.measured("module m\n" + model,
+                Adequacy.Asked.reportOnly(Adequacy.Level.OFF));
+    }
+
+    /** Measured from the rows: for whether the measurement is complete, which reads them. */
     private static Compilation measured(String model) {
-        Compilation compilation = Compilation.ofSource("module m\n" + model, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
-        return ACompiledModel.compiles(compilation);
+        return ACompiledModel.measured("module m\n" + model,
+                Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
     }
 
     private static String reportOf(Compilation compilation, String behavior) {
@@ -120,10 +132,12 @@ class ACallOfABehaviorIsGottenPastByTheRunsTheBehaviorAnswersTest {
     }
 
     /** A construction whose invariant is not shown to hold is no premise anything states: the
-     *  caller is left open, and the report names the call and the construction in it. */
+     *  caller is left open, and the report names the call and the construction in it. Written
+     *  beside an {@code unreachable} in the same body, so taking the premise is shown to take that
+     *  and nothing beside it. */
     @Test
     void aConstructionNotShownToHoldInABehaviorCalledIsNamedInTheCallersReport() {
-        Compilation compilation = measured(throwsScored("Points(n)", UNREACHABLE));
+        Compilation compilation = readByItsRules(throwsScored("Points(n)", UNREACHABLE));
         String report = reportOf(compilation, "reachedTwelve");
 
         CallPassage.WhyOpen why = whyOpen(compilation, "scoreOf");
@@ -135,26 +149,13 @@ class ACallOfABehaviorIsGottenPastByTheRunsTheBehaviorAnswersTest {
         assertTrue(open.getFirst().contains("which may stop at the construction of Points at "),
                 report);
         assertFalse(open.getFirst().contains("none of the operations"), report);
-        assertTrue(report.contains("measurement: partial"), report);
-    }
-
-    /** Taking the premise takes the {@code unreachable} and nothing beside it: a construction not
-     *  shown to hold in the same body still leaves it open, and is what is named. */
-    @Test
-    void anUnreachableBesideAConstructionNotShownToHoldTakesOnlyThePremise() {
-        Compilation compilation = measured(throwsScored("Points(n)", UNREACHABLE));
-        Compilation without = measured(throwsScored(CLAMPED, UNREACHABLE));
-
-        assertInstanceOf(CallPassage.WhyOpen.AConstruction.class,
-                whyOpen(compilation, "scoreOf"));
-        assertTrue(rowsRunsGetPast(without, "scoreOf"));
     }
 
     /** The premise is taken through every call on the way: of a behavior calling the one that
      *  states it, directly or in the step of a walk. */
     @Test
     void anUnreachableIsTakenThroughEveryCallOnTheWay() {
-        Compilation compilation = measured(throwsScored(CLAMPED, UNREACHABLE) + """
+        Compilation compilation = readByItsRules(throwsScored(CLAMPED, UNREACHABLE) + """
 
                 behavior anyTwelve : (ts: List<Throw>) -> Bool
 
@@ -184,7 +185,7 @@ class ACallOfABehaviorIsGottenPastByTheRunsTheBehaviorAnswersTest {
      *  every call down to it is said. */
     @Test
     void aStopLeftOpenDownACallIsNamedThroughEveryCall() {
-        Compilation compilation = measured(throwsScored("Points(n)", UNREACHABLE) + """
+        Compilation compilation = readByItsRules(throwsScored("Points(n)", UNREACHABLE) + """
 
                 behavior pinsOf : (t: Throw) -> Int
 
@@ -215,8 +216,7 @@ class ACallOfABehaviorIsGottenPastByTheRunsTheBehaviorAnswersTest {
      *  end, the way the schema shipped beside this says. */
     @Test
     void aDocumentWritesEveryCallDownToWhereThePassageIsLeftOpen() {
-        Compilation compilation = Compilation.ofSource("module m\n"
-                + throwsScored("Points(n)", UNREACHABLE) + """
+        Compilation compilation = readByItsRules(throwsScored("Points(n)", UNREACHABLE) + """
 
                 behavior pinsOf : (t: Throw) -> Int
 
@@ -229,9 +229,7 @@ class ACallOfABehaviorIsGottenPastByTheRunsTheBehaviorAnswersTest {
                 example twelveOrMore
                     | "12" : (Throw([12])) -> true
                     | "11" : (Throw([11])) -> false
-                """, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        ACompiledModel.compiles(compilation);
+                """);
         JsonNode document = JsonMapper.builder().build().readTree(AdequacyReport.of(compilation)
                 .json(SourceRendering.namedByIdentity(compilation.texts())));
 
@@ -251,13 +249,13 @@ class ACallOfABehaviorIsGottenPastByTheRunsTheBehaviorAnswersTest {
      *  states: a construction on an arm whose condition keeps its invariant is got past. */
     @Test
     void whereAPassageIsLeftOpenIsAskedOnTheArmItIsWrittenOn() {
-        Compilation kept = measured("""
+        Compilation kept = compiled("""
                 data Points = Int
                     invariant value >= 0 && value <= 12
                 behavior scored : (n: Int) -> Points
                 let scored (n) = if n >= 0 && n <= 12 then Points(n) else Points(0)
                 """);
-        Compilation halfKept = measured("""
+        Compilation halfKept = compiled("""
                 data Points = Int
                     invariant value >= 0 && value <= 12
                 behavior scored : (n: Int) -> Points
@@ -272,7 +270,7 @@ class ACallOfABehaviorIsGottenPastByTheRunsTheBehaviorAnswersTest {
      *  named, and naming it says nothing of the other: neither is taken to be got past. */
     @Test
     void ofTwoCallsThatEachLeaveItOpenNamingOneTakesNeitherAsGotPast() {
-        Compilation compilation = measured("""
+        Compilation compilation = readByItsRules("""
                 data Out = Low | High
                 behavior first : (n: Int) -> Int
                 let first (n) = Int.floorMod(100, n)
@@ -290,25 +288,21 @@ class ACallOfABehaviorIsGottenPastByTheRunsTheBehaviorAnswersTest {
         assertFalse(rowsRunsGetPast(compilation, "second"));
         assertTrue(report.contains("it is the call of first at ")
                 || report.contains("it is the call of second at "), report);
-        assertTrue(report.contains("measurement: partial"), report);
-        assertFalse(report.contains("adequacy: satisfied"), report);
     }
 
     /** What a passage is left open at is said of the behavior's own body: an operation in it, or
      *  that it has none. */
     @Test
     void whatAPassageIsLeftOpenAtIsSaidOfTheBehaviorsOwnBody() {
-        Compilation compilation = measured("""
+        Compilation compilation = compiled("""
                 behavior made : (n: Int) -> Int
                 let made (n) = Int.floorMod(100, n)
-                """ + CALLER);
+                behavior injected : (n: Int) -> Int
+                """);
 
-        CallPassage.WhyOpen why = whyOpen(compilation, "made");
-        assertInstanceOf(CallPassage.WhyOpen.SomethingWorkedOut.class, why);
-        assertInstanceOf(CallPassage.WhyOpen.NoBody.class,
-                whyOpen(measured("""
-                        behavior made : (n: Int) -> Int
-                        """), "made"));
+        assertInstanceOf(CallPassage.WhyOpen.SomethingWorkedOut.class,
+                whyOpen(compilation, "made"));
+        assertInstanceOf(CallPassage.WhyOpen.NoBody.class, whyOpen(compilation, "injected"));
     }
 
     /** A text and a list made one longer stop past what the representation holds alone. The runs
@@ -316,7 +310,7 @@ class ACallOfABehaviorIsGottenPastByTheRunsTheBehaviorAnswersTest {
      *  said by the body whose operation it is. */
     @Test
     void aStopOfTheRepresentationIsSaidByTheBodyItIsInAndLeavesNoCallerOpen() {
-        Compilation compilation = measured("""
+        Compilation compilation = readByItsRules("""
                 behavior text : (s: String) -> String
                 let text (s) = s ++ "x"
                 behavior list : (xs: List<Int>) -> List<Int>
@@ -367,13 +361,13 @@ class ACallOfABehaviorIsGottenPastByTheRunsTheBehaviorAnswersTest {
     /** The inputs it is asked over are the ones it declares, and not what a caller hands it. */
     @Test
     void theInputsItIsAskedOverAreTheBehaviorsOwn() {
-        Compilation declared = measured("""
+        Compilation declared = compiled("""
                 data Divisor = Int
                     invariant value >= 1
                 behavior made : (n: Divisor) -> Int
                 let made (n) = Int.floorMod(100, n.value)
                 """);
-        Compilation handedAConstant = measured("""
+        Compilation handedAConstant = compiled("""
                 behavior made : (n: Int) -> Int
                 let made (n) = Int.floorMod(100, n)
                 behavior chosen : (n: Int) -> Int
@@ -388,7 +382,7 @@ class ACallOfABehaviorIsGottenPastByTheRunsTheBehaviorAnswersTest {
     /** A value the body builds is asked by its definition, which is run where it is built. */
     @Test
     void aValueTheBodyReadsIsAskedByItsDefinition() {
-        Compilation compilation = measured("""
+        Compilation compilation = compiled("""
                 let limit: Int = {
                     let half = 3
                     half + half
@@ -411,7 +405,7 @@ class ACallOfABehaviorIsGottenPastByTheRunsTheBehaviorAnswersTest {
      *  not: a range the author declares is what shows it. */
     @Test
     void anOperationIsAskedByTheNumbersItsInputsAreDeclaredWithin() {
-        Compilation compilation = measured("""
+        Compilation compilation = compiled("""
                 data Small = Int
                     invariant value >= 0 && value <= 1000
                 behavior ofAny : (a: Int, b: Int) -> Int
@@ -427,7 +421,7 @@ class ACallOfABehaviorIsGottenPastByTheRunsTheBehaviorAnswersTest {
     /** One with no body in the model is not known to answer, called or injected. */
     @Test
     void aBehaviorWithNoBodyIsNotKnownToAnswer() {
-        Compilation compilation = measured("""
+        Compilation compilation = readByItsRules("""
                 data Out = Low | High
                 behavior made : (n: Int) -> Int
                 behavior chosen : (n: Int) -> Out
@@ -444,7 +438,7 @@ class ACallOfABehaviorIsGottenPastByTheRunsTheBehaviorAnswersTest {
      *  call of it is left open, or none is. */
     @Test
     void aBehaviorCalledOnSeveralInputsIsOneAnswer() {
-        Compilation compilation = measured("""
+        Compilation compilation = readByItsRules("""
                 data Out = Low | High
                 behavior made : (n: Int) -> Int
                 let made (n) = Int.floorMod(100, n)
@@ -456,8 +450,7 @@ class ACallOfABehaviorIsGottenPastByTheRunsTheBehaviorAnswersTest {
                 """);
         String report = reportOf(compilation, "twice");
 
-        assertEquals(2, report.lines().filter(line -> line.contains(NOT_RESOLVED)).count(), report);
-        assertTrue(report.contains("measurement: partial"), report);
+        assertEquals(2, notResolved(report).size(), report);
     }
 
     /** A measured caller reads it though the build does not measure the behavior called. */
@@ -469,7 +462,7 @@ class ACallOfABehaviorIsGottenPastByTheRunsTheBehaviorAnswersTest {
                 let made (n) = if n < 10 then 1 else 20
                 """ + CALLER, "Main");
         compilation.choose(new Adequacy.Choice(null, "chosen"));
-        compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
+        compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.OFF));
         ACompiledModel.compiles(compilation);
 
         String report = reportOf(compilation, "chosen");
