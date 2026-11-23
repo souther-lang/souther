@@ -120,6 +120,21 @@ class AStopShownAtAnOperationIsOneTheProgramRunsIntoTest {
         // and a helper choosing between arms, called on what the same helper answered
         FORMS.put("aChoiceOnAChoice", new Form("e == e",
                 "k(k(e, p), q) >= 2"));
+        // a rule that reads a quotient on each sign of its divisor holds its rows away from a
+        // divisor of nought, and the run that divides by nought stops all the same, where the
+        // quotient is worked out right of an && or in a helper on an arm
+        FORMS.put("aQuotientRightOfAnAnd", new Form("q == 0",
+                "e > 0 && Rational.toInt(DOWN, 4 / p) >= 2"));
+        FORMS.put("aQuotientInAHelperOnAnArm", new Form("q == 0",
+                "(if e > 0 then e else m(p)) >= 2"));
+        // a rule that reads a rounding on the number before it holds its rows within what an Int
+        // holds, and the run whose number rounds past that stops all the same
+        FORMS.put("aRoundingPastAnInt", new Form("p == 0",
+                "Rational.toInt(DOWN, (q / 1) * (q / 1)) >= 2"));
+        // the same on an arm, whose comparison the rule reads as nothing it can draw a line on:
+        // what a run taking the arm works out is kept by that reading all the same
+        FORMS.put("aRoundingPastAnIntOnAnArm", new Form("p == 0",
+                "(if e > 0 then e else Rational.toInt(DOWN, (q / 1) * (q / 1))) >= 2"));
     }
 
     static Stream<String> forms() {
@@ -148,6 +163,8 @@ class AStopShownAtAnOperationIsOneTheProgramRunsIntoTest {
 
                     let k (a: Int, b: Int): Int =
                         if a > 0 then a else Rational.toInt(DOWN, 1 / b)
+
+                    let m (b: Int): Int = Rational.toInt(DOWN, 4 / b)
                     """);
             for (Map.Entry<String, Form> each : FORMS.entrySet()) {
                 String behavior = behaviorOf(each.getKey());

@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
@@ -76,6 +77,23 @@ final class WhatAWayLeavesOfAValue {
 
     /** What each way of one input leaves; nothing where no row takes it. */
     private record OfEachWay(Map<List<OnTheWay>, Optional<WhatAWayLeavesOfAValue>> left) {}
+
+    /**
+     * Whether working out {@code value} ends no run of its own on any run along the way: its
+     * owner shows it, with every number of the input where the way leaves it
+     * ({@link WorkedOutToReachIt#within}). What a reading left untold at it is then no stop.
+     */
+    synchronized boolean endsNoRunAt(Denotation value) {
+        if (within == null) {
+            within = WorkedOutToReachIt.of(read).within(region);
+        }
+        return within.ownWorkingEndsNoRun(value);
+    }
+
+    /** What a run along the way works out, asked of the numbers the way leaves: one for the way,
+     *  so that what it has worked out of a name is worked out once however many stops ask. Asked
+     *  under this, since it keeps what it has worked out as it goes. */
+    private WorkedOutToReachIt within;
 
     /** Whether every value the way leaves keeps {@code operation} within its ends: no run along it
      *  stops there, the value a stop is shown at among them. */

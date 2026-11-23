@@ -575,9 +575,12 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.partition.AddedOfEachElement.heldOverEveryStep",
                     "works out where the answer so far lies after the most steps there are: what a"
                             + " step moves it by, times how many steps, added to the seed"),
-            new Held("souther.compiler.partition.WorkedOutToReachIt.aTotalWithinAnInt",
+            new Held("souther.compiler.partition.WorkedOutToReachIt.whatATotalComesTo",
                     "works out where a total lies: what each element comes to times the most"
                             + " elements there are"),
+            new Held("souther.compiler.partition.WorkedOutToReachIt.originNotYetAsked",
+                    "asks whether a value is a quotient by a whole number, which lies where what"
+                            + " it divides does divided by what it divides by"),
             new Held("souther.compiler.partition.WorkedOutToReachIt.answersOfAChoice",
                     "asks the enum whether the operator compares, and what relation it states,"
                             + " which is what a step of a walk that chooses by a comparison of"

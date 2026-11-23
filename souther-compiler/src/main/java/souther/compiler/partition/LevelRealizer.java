@@ -1931,6 +1931,14 @@ public final class LevelRealizer {
      */
     private static final class Steps {
         private int taken;
+        /**
+         * The pairs of bounds the eliminations of the item's searches have put together
+         * ({@link Search#eliminated}), held to the figure apart from {@link #taken}. An
+         * elimination only narrows what a walk tries, and a walk spends what it would without
+         * one: what it costs is never a step a walk could not take. One that finds the figure
+         * spent eliminates nothing, and its walk is as it was without it.
+         */
+        private long paired;
 
         /**
          * Whether the walks have taken every step there is between them, saying the figure into
@@ -2156,9 +2164,10 @@ public final class LevelRealizer {
          *
          * <p>Only the bounds that reach the positions are eliminated ({@link #reaching}): the rest
          * are of numbers nothing on the way to a position names, and leave every level as it is.
-         * The pairs the elimination puts together are steps of this search: they are its work,
-         * counted where its walks are. Where it stops short, the positions it did not reach are
-         * walked by what the region alone leaves them, as before.
+         * The pairs the elimination puts together are held to the figure apart from the steps the
+         * walks take ({@link Steps#paired}), so the walk is allowed every step it was without it.
+         * Where it stops short, the positions it did not reach are walked by what the region
+         * alone leaves them, as before.
          */
         private List<List<LaterNumbersEliminated.Bound<NumericTerm>>> eliminated() {
             List<NumericTerm> order = new ArrayList<>();
@@ -2170,8 +2179,8 @@ public final class LevelRealizer {
             after.removeAll(order);
             order.addAll(after);
             LaterNumbersEliminated<NumericTerm> eliminated = LaterNumbersEliminated.of(bounds,
-                    order, Math.max(0, STEPS_A_SEARCH_MAY_TAKE - steps.taken));
-            steps.taken += (int) Math.min(eliminated.pairsCombined(), Integer.MAX_VALUE);
+                    order, Math.max(0, STEPS_A_SEARCH_MAY_TAKE - steps.paired));
+            steps.paired += eliminated.pairsCombined();
             return levelsOf(eliminated);
         }
 

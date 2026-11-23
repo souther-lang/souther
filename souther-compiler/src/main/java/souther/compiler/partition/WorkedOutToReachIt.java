@@ -333,32 +333,43 @@ final class WorkedOutToReachIt {
      */
     private static final class ArmsTaken {
 
-        static final ArmsTaken NONE = new ArmsTaken(null, null);
+        static final ArmsTaken NONE = new ArmsTaken(null, null, null);
 
         /** The arm entered last, or null where none is. */
         private final ArmTaken last;
         /** These without the last arm, or null where there are none. */
         private final ArmsTaken past;
+        /** What the way to the expression leaves before any arm is entered, or null where that
+         *  is what the declarations leave. Held only by the first, which has no arm. */
+        private final RegionLeft root;
         private final int depth;
         private final int hash;
         private RegionLeft left;
         /** The reading {@code left} was asked under. */
         private InputReading leftOf;
 
-        private ArmsTaken(ArmTaken last, ArmsTaken past) {
+        private ArmsTaken(ArmTaken last, ArmsTaken past, RegionLeft root) {
             this.last = last;
             this.past = past;
+            this.root = root;
             this.depth = past == null ? 0 : past.depth + 1;
-            this.hash = past == null ? 0 : past.hash * 31 + last.hashCode();
+            this.hash = past == null ? System.identityHashCode(root)
+                    : past.hash * 31 + last.hashCode();
         }
 
+        /** No arm entered, on a way that leaves {@code region}. */
+        static ArmsTaken within(SearchRegion region) {
+            return new ArmsTaken(null, null, new RegionLeft(region));
+        }
+
+        /** Whether no arm is entered and the way leaves what the declarations do. */
         boolean isEmpty() {
-            return last == null;
+            return last == null && root == null;
         }
 
         /** These, and arm {@code part} of {@code fork} read at {@code at} past them. */
         ArmsTaken entering(Core fork, int part, InputReads at) {
-            return new ArmsTaken(new ArmTaken(fork, part, at), this);
+            return new ArmsTaken(new ArmTaken(fork, part, at), this, null);
         }
 
         /** Whether these are {@code earlier}, or were entered past it: the very arms taken on
@@ -388,8 +399,8 @@ final class WorkedOutToReachIt {
          *  one before keeps for the last arm. Kept with these, but for no arm, which stands for
          *  every reading. */
         private RegionLeft left(InputReading read) {
-            if (isEmpty()) {
-                return read.derived(RegionLeft.class,
+            if (last == null) {
+                return root != null ? root : read.derived(RegionLeft.class,
                         _ -> new RegionLeft(read.quantities().region()));
             }
             if (left == null || leftOf != read) {
@@ -407,7 +418,8 @@ final class WorkedOutToReachIt {
             Object two = other;
             while (one != two) {
                 if (!(two instanceof ArmsTaken that) || one.depth != that.depth
-                        || one.hash != that.hash || !Objects.equals(one.last, that.last)) {
+                        || one.hash != that.hash || !Objects.equals(one.last, that.last)
+                        || one.root != that.root) {
                     return false;
                 }
                 one = one.past;
@@ -531,6 +543,16 @@ final class WorkedOutToReachIt {
         return new WorkedOutToReachIt(read, beyond, closuresApart, toldElsewhere,
                 ownStopsSaidOnTheirWays, onTheWay.entering(Core.withoutStanding(fork), part, at),
                 numbersAsked);
+    }
+
+    /**
+     * The same, of what only the runs a way leaves {@code region} to work out, with no arm entered
+     * yet: what the way states holds on every one of them, so the numbers they hold lie where
+     * {@code region} leaves them ({@link ArmsTaken#within}).
+     */
+    WorkedOutToReachIt within(SearchRegion region) {
+        return new WorkedOutToReachIt(read, beyond, closuresApart, toldElsewhere,
+                ownStopsSaidOnTheirWays, ArmsTaken.within(region), numbersAsked);
     }
 
     /** The same, of {@code part} of {@code written} read at {@code at}: on its arm where it is
@@ -1106,11 +1128,22 @@ final class WorkedOutToReachIt {
      * out holds, every one of them there.
      */
     boolean aTotalWithinAnInt(Denotation value) {
+        FormRange total = whatATotalComesTo(value);
+        return total != null && total.liesWithin(AN_INT.least(), AN_INT.greatest());
+    }
+
+    /**
+     * The numbers {@code value}, a total of whole numbers held to an {@code Int}
+     * ({@link GetsPast.WhereTheTotalFits}), comes to as it is added up, before its type holds it:
+     * from what each element comes to times as many as there may be, and nought, or the sum of a
+     * list written out. Null where it is no such total, or that is not known.
+     */
+    FormRange whatATotalComesTo(Denotation value) {
         if (!(Core.withoutStanding(value.value()) instanceof Core.PreservedCall call)
                 || !(WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(call)
                         instanceof GetsPast.WhereTheTotalFits(int list))
                 || list >= call.args().size()) {
-            return false;
+            return null;
         }
         Denotation listed = new Denotation(call.args().get(list), value.at());
         Worth each = whatEachElementIsWorth(listed, new Question(onTheWay));
@@ -1118,23 +1151,22 @@ final class WorkedOutToReachIt {
             FormRange one = each.added().answerHeldWithin(each.rangeOf(), AN_INT.least(),
                     AN_INT.greatest());
             if (one == null || each.most() == null) {
-                return false;
+                return null;
             }
-            ExactRatio most = ExactRatio.of(each.most());
             FormRange total = FormRange.combined(BinOp.MUL, one,
-                    new FormRange(ExactRatio.ZERO, most));
-            return total != null && total.hull(new FormRange(ExactRatio.ZERO, ExactRatio.ZERO))
-                    .liesWithin(AN_INT.least(), AN_INT.greatest());
+                    new FormRange(ExactRatio.ZERO, ExactRatio.of(each.most())));
+            return total == null ? null
+                    : total.hull(new FormRange(ExactRatio.ZERO, ExactRatio.ZERO));
         }
-        return aListWrittenOutWithinAnInt(listed);
+        return theSumOfAListWrittenOut(listed);
     }
 
-    /** Whether {@code listed} is a list written out, every element there and a number the fold
-     *  works out, whose sum lies within an {@code Int}. */
-    private boolean aListWrittenOutWithinAnInt(Denotation listed) {
+    /** The sum of {@code listed}, a list written out, every element there and a number the fold
+     *  works out; null where it is not that. */
+    private FormRange theSumOfAListWrittenOut(Denotation listed) {
         if (!(WrittenOutElements.of(listed, read.rules().symbols(), read.rules().newtypes())
                 instanceof WrittenOutElements.Walked.Each written)) {
-            return false;
+            return null;
         }
         BigInteger sum = BigInteger.ZERO;
         for (ReadMeaning.Occurrence each : written.asWritten()) {
@@ -1142,11 +1174,11 @@ final class WorkedOutToReachIt {
             if (!each.keptWhere().isEmpty()
                     || !(element.at().folded(element.value(), read.rules().symbols(),
                             read.rules().newtypes()).orElse(null) instanceof Long number)) {
-                return false;
+                return null;
             }
             sum = sum.add(BigInteger.valueOf(number));
         }
-        return sum.compareTo(AN_INT.least()) >= 0 && sum.compareTo(AN_INT.greatest()) <= 0;
+        return new FormRange(ExactRatio.of(sum), ExactRatio.of(sum));
     }
 
     /**
@@ -1222,9 +1254,9 @@ final class WorkedOutToReachIt {
     }
 
     /**
-     * Whether {@code value} is a sum, a difference, a product or a negation of whole numbers whose
-     * operands come to numbers ({@link #numbersOf}), on the runs that entered {@code arms}, it
-     * takes to no number past an {@code Int}.
+     * Whether {@code value} is a whole number worked out of operands that come to numbers
+     * ({@link #numbersOf}), on the runs that entered {@code arms}, by an operation that ends a run
+     * only past an {@code Int} ({@link #whatItComesTo}), and it takes them to no number past one.
      */
     private boolean anOperatorWithinAnInt(Denotation value, ArmsTaken arms) {
         FormRange range = Core.withoutStanding(value.value()).type() == Type.INT
@@ -1235,9 +1267,10 @@ final class WorkedOutToReachIt {
     /**
      * The numbers {@code value} works out, on the runs that entered {@code arms}, from the numbers
      * its operands come to, before its type holds them: a sum, a difference, a product or a
-     * negation, or what a call of the library answers in each case it is defined in
-     * ({@link Choice#casesOf}) where all it ends a run for is that answer having no place. Null
-     * where it is none of these or that is not known.
+     * negation, a number rounded to a whole one ({@link GetsPast.WhereTheRoundedNumberFits}), or
+     * what a call of the library answers in each case it is defined in ({@link Choice#casesOf})
+     * where all it ends a run for is that answer having no place. Null where it is none of these
+     * or that is not known.
      */
     private FormRange whatItComesTo(Denotation value, ArmsTaken arms) {
         Function<Core, FormRange> operand = each -> numbersOf(new Denotation(each, value.at()),
@@ -1249,6 +1282,12 @@ final class WorkedOutToReachIt {
             case Core.Neg negated -> FormRange.combined(BinOp.SUB,
                     new FormRange(ExactRatio.ZERO, ExactRatio.ZERO),
                     operand.apply(negated.operand()));
+            case Core.PreservedCall call when WhatARunMayEndFor
+                    .completionApartFromTheClosuresWrittenAtIt(call)
+                    instanceof GetsPast.WhereTheRoundedNumberFits(int rounded) ->
+                    rounded < call.args().size()
+                            ? FormRange.roundedEitherWay(operand.apply(call.args().get(rounded)))
+                            : null;
             case Core.PreservedCall call when endsOnlyWhereItsOwnAnswerHasNoPlace(call) -> {
                 FormRange hull = null;
                 List<Choice.ADefinitionCase> cases = Choice.casesOf(call);
@@ -1385,7 +1424,8 @@ final class WorkedOutToReachIt {
      * ({@link ResultRange}), what an operation makes of its operands' numbers, an element of a
      * container a call answered and an arm opened, what a walk keeping its seed or an element
      * comes to, and any arm of a choice, each on the runs that enter it with the names it binds.
-     * Each expression is asked once
+     * Where none of these says, an {@code Int} comes to what an {@code Int} holds on a run that
+     * got it. Each expression is asked once
      * ({@link #numbersAsked}), where it is written, as an expression {@link #endsNoRun} meets is.
      * On the runs that entered the arms this is asked past ({@link #onTheArm}).
      */
@@ -1663,7 +1703,10 @@ final class WorkedOutToReachIt {
 
     private FormRange numbersOf(Denotation value, ArmsTaken arms) {
         WhereAValueComesFrom origin = originOf(value, arms);
-        return origin == null ? null : origin.range();
+        FormRange range = origin == null ? null : origin.range();
+        return range == null && Core.withoutStanding(value.value()).type() == Type.INT
+                ? new FormRange(ExactRatio.of(AN_INT.least()), ExactRatio.of(AN_INT.greatest()))
+                : range;
     }
 
     private WhereAValueComesFrom originOf(Denotation value, ArmsTaken arms) {
@@ -1709,6 +1752,8 @@ final class WorkedOutToReachIt {
             }
             case Core.PreservedCall _ when originOfAWalkKept(value, arms)
                     instanceof WhereAValueComesFrom kept -> kept;
+            case Core.PreservedCall _ when whatATotalComesTo(value) instanceof FormRange total ->
+                    derived(heldToAnInt(total));
             case Core.PreservedCall call when AnOperationApplied.of(call) instanceof AnOperationApplied
                     applied -> {
                 NumericDomain.Bounds runs = ResultRange.of(
@@ -1761,8 +1806,19 @@ final class WorkedOutToReachIt {
                 }
                 yield derived(hull == null ? left : left == null ? hull : hull.meet(left));
             }
+            // A quotient comes to what it is on a run that gets past a divisor of nought.
+            case Core.Binary quotient when quotient.op() == BinOp.DIV
+                    && quotient.right().type() == Type.INT -> {
+                FormRange divided = FormRange.quotientByAWholeNumber(
+                        numbersOf(new Denotation(quotient.left(), value.at()), arms),
+                        numbersOf(new Denotation(quotient.right(), value.at()), arms));
+                yield derived(written.type() == Type.INT ? heldToAnInt(divided) : divided);
+            }
+            // An operator over rationals works its number out exactly, and no type holds it.
             case Core.Binary _, Core.Neg _ -> written.type() == Type.INT
-                    ? derived(heldToAnInt(whatItComesTo(value, arms))) : null;
+                    ? derived(heldToAnInt(whatItComesTo(value, arms)))
+                    : written.type() == Type.RATIONAL ? derived(whatItComesTo(value, arms))
+                    : null;
             // Any arm a run enters, read with the names it binds: one no run enters adds nothing.
             case Core.If _, Core.Match _ -> {
                 List<WhereAValueComesFrom> candidates = new ArrayList<>();

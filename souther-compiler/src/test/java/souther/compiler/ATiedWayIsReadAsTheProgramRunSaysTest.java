@@ -289,7 +289,9 @@ class ATiedWayIsReadAsTheProgramRunSaysTest {
     /**
      * Where the input holds nothing of its values a run is shown to stop at a divisor of nought:
      * the report says it, in the division and at the value the run stops at, and a divisor the
-     * way keeps from nought is said to stop no run.
+     * way keeps from nought is said to stop no run. What is divided here is never below nought,
+     * so the quotient rounds to an {@code Int} on every run that gets past the division: the
+     * least {@code Int} divided by minus one rounds past it, a stop of its own.
      */
     @Test
     void aDivisionByNoughtIsToldAsAStopWhereTheInputIsShownToHoldOne() throws Exception {
@@ -297,10 +299,12 @@ class ATiedWayIsReadAsTheProgramRunSaysTest {
                 module demo
 
                 data Out = Int
+                data Count = Int
+                    invariant value >= 0
 
-                behavior b : (e: Int, p: Int) -> Out
+                behavior b : (e: Count, p: Int) -> Out
                 let b (e, p) = Out { value =
-                    if Rational.toInt(UP, e / p) >= 2 then 1 else 2 }
+                    if Rational.toInt(UP, e.value / p) >= 2 then 1 else 2 }
                 """);
         assertTrue(stops.contains("· may stop a run: comparison"), stops);
         assertFalse(stops.contains("stop not resolved"), stops);

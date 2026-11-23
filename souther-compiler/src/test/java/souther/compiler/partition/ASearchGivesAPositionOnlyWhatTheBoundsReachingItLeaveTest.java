@@ -6,7 +6,6 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LaterNumbersEliminated;
-import souther.compiler.numeric.LaterNumbersEliminated.Bound;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 
@@ -30,10 +29,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ASearchGivesAPositionOnlyWhatTheBoundsReachingItLeaveTest {
 
     /** {@code x + y <= 0} and the like: one weight per number, and the constant. */
-    private static Bound<String> bound(long constant, Map<String, Long> weights) {
+    private static LaterNumbersEliminated.Bound<String> bound(long constant,
+                                                             Map<String, Long> weights) {
         Map<String, ExactRatio> coefs = new LinkedHashMap<>();
         weights.forEach((number, weight) -> coefs.put(number, ExactRatio.of(weight)));
-        return new Bound<>(new LinearForm<>(ExactRatio.of(constant), coefs), false);
+        return new LaterNumbersEliminated.Bound<>(
+                new LinearForm<>(ExactRatio.of(constant), coefs), false);
     }
 
     private static ExactRatio half() {
@@ -46,9 +47,9 @@ class ASearchGivesAPositionOnlyWhatTheBoundsReachingItLeaveTest {
 
     @Test
     void aBoundIsEliminatedOnlyWhereItReachesThePositions() {
-        Bound<String> onY = bound(0, Map.of("y", 1L, "z", -1L));
-        Bound<String> onX = bound(0, Map.of("x", 1L, "y", 1L));
-        Bound<String> apart = bound(4, Map.of("u", 1L, "v", 1L));
+        LaterNumbersEliminated.Bound<String> onY = bound(0, Map.of("y", 1L, "z", -1L));
+        LaterNumbersEliminated.Bound<String> onX = bound(0, Map.of("x", 1L, "y", 1L));
+        LaterNumbersEliminated.Bound<String> apart = bound(4, Map.of("u", 1L, "v", 1L));
         // y - z is listed before the bound that reaches y from x, and is reached all the same
         assertEquals(List.of(onY, onX), LevelRealizer.reaching(List.of("x"), List.of(onY, apart,
                 onX)));
@@ -57,8 +58,8 @@ class ASearchGivesAPositionOnlyWhatTheBoundsReachingItLeaveTest {
     @Test
     void onlyNoRationalValuesIsAProofThatNothingIsLeft() {
         assertNull(LevelRealizer.levelsOf(new LaterNumbersEliminated.NoneLeft<String>(0)));
-        Bound<String> onZ = bound(0, Map.of("z", 1L));
-        List<List<Bound<String>>> stopped = LevelRealizer.levelsOf(
+        LaterNumbersEliminated.Bound<String> onZ = bound(0, Map.of("z", 1L));
+        List<List<LaterNumbersEliminated.Bound<String>>> stopped = LevelRealizer.levelsOf(
                 new LaterNumbersEliminated.StoppedShort<>(2, List.of(List.of(onZ)),
                         LaterNumbersEliminated.Why.PAIRS, 0));
         assertNotNull(stopped, "an elimination stopped short proves nothing is left of nothing");

@@ -817,6 +817,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     earlier.leftUntold.join(leftUntold));
         }
 
+        /**
+         * The same, where a run may also stop at what {@code untold} holds, which no row of a line
+         * is at: the stop of an operation the rows were held to where it answers. What a row gets
+         * past is as told.
+         */
+        Working leavingUntold(NotAccountedFor untold) {
+            return new Working(operations, told, onEveryRun, partials, true,
+                    leftUntold.join(untold));
+        }
+
         /** The same operations, for a relation not every run that gets to the comparison reaches. */
         Working notOnEveryRun() {
             return new Working(operations, told, false, partials, aStopUntold, leftUntold);
