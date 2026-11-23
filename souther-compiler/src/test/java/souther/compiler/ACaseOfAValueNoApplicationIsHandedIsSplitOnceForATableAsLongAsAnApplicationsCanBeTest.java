@@ -2,9 +2,6 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.partition.CompositionBudget;
-import souther.test.Nightly;
-
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -14,18 +11,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * two cases for each: the same cases on every application, each case another quantity, and so no
  * more lines on any one quantity than there are applications.
  *
- * <p>Nightly, for what it costs: the table is as long as the figure allows its cases to be
- * applied to, and saying where each of that many lines decides is most of a minute. A shorter
- * table is under the figure whether or not the readings are shared, so none asks the question
- * {@link AComparisonInAClosureIsReadOnceForTheWaysOfATotalThatDoesNotTurnOnTheElementTest} asks
- * of one that depends on the application.
+ * <p>The figure is the one the compilations of
+ * {@link AComparisonInAClosureIsReadOnceForTheWaysOfATotalThatDoesNotTurnOnTheElementTest} are
+ * held to, and the table is the shortest one whose cases, split again on every application, would
+ * be more readings than that. A shorter table is under the figure whether or not the readings are
+ * shared, so none asks the question that test asks of one that depends on the application.
  */
-@Nightly
 class ACaseOfAValueNoApplicationIsHandedIsSplitOnceForATableAsLongAsAnApplicationsCanBeTest {
 
     @Test
     void theCasesOfAnOperationOverTwoPositionsAreReadForEveryConstantOfTheTable() {
-        int rows = CompositionBudget.READINGS_OF_ONE_CONDITION.maximum() / 2 + 1;
+        int rows = AComparisonInAClosureIsReadOnceForTheWaysOfATotalThatDoesNotTurnOnTheElementTest.MOST
+                / 2 + 1;
         String report = AComparisonInAClosureIsReadOnceForTheWaysOfATotalThatDoesNotTurnOnTheElementTest
                 .reachedBy("Int.max(w.first.pay, w.second.pay)", rows);
         assertFalse(report.contains("READINGS_OF_ONE_CONDITION"), report);

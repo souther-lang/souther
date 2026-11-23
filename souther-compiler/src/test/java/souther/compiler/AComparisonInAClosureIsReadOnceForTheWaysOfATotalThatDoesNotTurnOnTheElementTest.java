@@ -46,7 +46,7 @@ class AComparisonInAClosureIsReadOnceForTheWaysOfATotalThatDoesNotTurnOnTheEleme
     /** The readings of one condition the compilations here are held to, a quarter of the figure
      *  declared, and in all twice that as the figure declared has them. The claims are about the
      *  ways a total is split, which the declared figure is asked of elsewhere. */
-    private static final int MOST = 64;
+    static final int MOST = 64;
 
     private static final Allowances HELD = Allowances.DECLARED
             .with(CompositionBudget.READINGS_OF_ONE_CONDITION, MOST)
