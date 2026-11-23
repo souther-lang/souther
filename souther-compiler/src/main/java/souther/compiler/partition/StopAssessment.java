@@ -241,16 +241,16 @@ final class StopAssessment {
     }
 
     /**
-     * Where a stop {@code working} leaves untold is, of those the quotients {@code each} asks do
-     * not account for, as a report names it ({@link StopOrigin#of}): chosen with the quotients
+     * Where a stop {@code untold} leaves is, of those the quotients {@code each} asks do not
+     * account for, as a report names it ({@link StopOrigin#of}): chosen with the quotients
      * whether anything is left is asked with ({@link NotAccountedFor#whereUnaccountedFor}), so the
      * place told is one of what leaves the stop unresolved.
      */
-    private static Optional<StopOrigin> untoldIn(UndividedByARelation.Working working,
+    private static Optional<StopOrigin> untoldIn(NotAccountedFor untold,
                                                  ComparisonReadings.Reading each,
                                                  InputReading read) {
         BehaviorAnswers answers = read.rules().declarations().answers();
-        return working.leftUntold().whereUnaccountedFor(each.quotients())
+        return untold.whereUnaccountedFor(each.quotients())
                 .map(at -> StopOrigin.of(at, answers));
     }
 
@@ -282,10 +282,12 @@ final class StopAssessment {
             UndividedByARelation.Working working = place.worked().stops().operations();
             WhatAWayLeavesOfAValue left = place.aRowArrives()
                     ? WhatAWayLeavesOfAValue.along(read, place.way()) : null;
-            if (left != null && working.aStopUntold()
-                    && working.leavesUntoldBeyond(each.quotients())) {
+            // A stop left untold where the way shows working its node out ends no run is none.
+            NotAccountedFor untold = left == null || !working.aStopUntold() ? null
+                    : working.leftUntold().besideWhatEndsNoRun(left::endsNoRunAt);
+            if (untold != null && !untold.isAccountedForBy(each.quotients())) {
                 out.add(new Judgement.Unresolved(null, WhyAStopIsNotShown.NO_OPERATION_TOLD,
-                        untoldIn(working, each, read)));
+                        untoldIn(untold, each, read)));
             }
             List<UndividedByARelation.IntOperation> operations = working.operations();
             for (int at = 0; at < operations.size(); at++) {

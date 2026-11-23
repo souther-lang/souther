@@ -31,7 +31,7 @@ class AnAbsorbedCandidateKeepsEveryComparisonItsArmsWereReadAsTest {
                 List.of());
         Pullback.Trial kept = new Pullback.Trial();
         kept.readOnAnArm(new Pullback.ArmRead.OfARelation(relation), arm);
-        kept.readOnAnArm(new Pullback.ArmRead.OfACutThatCutsNothing(cut), arm);
+        kept.readOnAnArm(new Pullback.ArmRead.OfAComparisonThatDrawsNoLine(cut), arm);
         kept.readOnAnArm(new Pullback.ArmRead.OfTheAnswerOfAnArm(cut), arm);
 
         Pullback.Trial absorbing = new Pullback.Trial();
@@ -39,12 +39,12 @@ class AnAbsorbedCandidateKeepsEveryComparisonItsArmsWereReadAsTest {
 
         assertEquals(List.of(arm), absorbing.onTheArms(new Pullback.ArmRead.OfARelation(relation)));
         assertEquals(List.of(arm),
-                absorbing.onTheArms(new Pullback.ArmRead.OfACutThatCutsNothing(cut)));
+                absorbing.onTheArms(new Pullback.ArmRead.OfAComparisonThatDrawsNoLine(cut)));
         assertEquals(List.of(arm),
                 absorbing.onTheArms(new Pullback.ArmRead.OfTheAnswerOfAnArm(cut)));
         // Two arms can cut nothing alike and work different things out: a step is its own.
         assertEquals(List.of(),
-                absorbing.onTheArms(new Pullback.ArmRead.OfACutThatCutsNothing(alike)));
+                absorbing.onTheArms(new Pullback.ArmRead.OfAComparisonThatDrawsNoLine(alike)));
         assertEquals(List.of(), absorbing.onTheArms(new Pullback.ArmRead.OfTheAnswerOfAnArm(alike)));
     }
 }

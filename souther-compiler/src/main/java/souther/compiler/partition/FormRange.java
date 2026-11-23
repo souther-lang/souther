@@ -390,13 +390,37 @@ record FormRange(ExactRatio least, ExactRatio greatest) {
 
     /**
      * The numbers a quotient by a whole number comes to where {@code dividend} holds what it
-     * divides, or null where those are not known. A whole number other than nought is at least one
-     * from nought, so no quotient lies farther from nought than the dividend does; a run whose
-     * divisor is nought stops and comes to none.
+     * divides and {@code divisor} what it divides by, or null where what it divides is not known.
+     * A run whose divisor is nought stops and comes to none, so a divisor at nought at an end is
+     * at one past it. Where every other divisor lies on one side of nought, a quotient lies
+     * between the quotients of the ends, since it moves one way with each. Otherwise, or where the
+     * divisor is not known, a whole number other than nought is at least one from nought, so no
+     * quotient lies farther from nought than the dividend does.
      */
-    static FormRange quotientByAWholeNumber(FormRange dividend) {
+    static FormRange quotientByAWholeNumber(FormRange dividend, FormRange divisor) {
         if (dividend == null) {
             return null;
+        }
+        FormRange away = divisor == null ? null
+                : divisor.least.signum() == 0 && divisor.greatest.signum() > 0
+                ? new FormRange(ExactRatio.ONE, divisor.greatest)
+                : divisor.greatest.signum() == 0 && divisor.least.signum() < 0
+                ? new FormRange(divisor.least, ExactRatio.ONE.negated())
+                : divisor;
+        if (away != null && (away.least.signum() > 0 || away.greatest.signum() < 0)) {
+            ExactRatio least = null;
+            ExactRatio greatest = null;
+            for (ExactRatio divided : List.of(dividend.least, dividend.greatest)) {
+                for (ExactRatio by : List.of(away.least, away.greatest)) {
+                    if (!(divided.dividedBy(by) instanceof ExactAnswer.Held<ExactRatio>(
+                            ExactRatio end))) {
+                        return quotientByAWholeNumber(dividend, null);
+                    }
+                    least = least == null || end.compareTo(least) < 0 ? end : least;
+                    greatest = greatest == null || end.compareTo(greatest) > 0 ? end : greatest;
+                }
+            }
+            return new FormRange(least, greatest);
         }
         ExactRatio below = dividend.least.negated();
         ExactRatio farthest = below.compareTo(dividend.greatest) > 0 ? below : dividend.greatest;

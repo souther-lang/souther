@@ -1084,6 +1084,18 @@ public final class InputReads {
         return taking(node, new TakenAs.AFormOfItsArguments(form), readings);
     }
 
+    /**
+     * The same reading, with no value taken as another: each choice on the way down stands for
+     * itself again, and is read by its cases wherever it is reached. What holds of the arms a run
+     * entered, asked here, holds on every arm of the choices before it, so it is one question for
+     * all of them and asked once.
+     */
+    public InputReads untaken() {
+        return applied.taken() == null ? this
+                : new InputReads(names, alternatives, declared, dependencies,
+                        applied.as(applied.readings(), applied.widths(), null));
+    }
+
     private InputReads taking(Core node, TakenAs as, int readings) {
         return new InputReads(names, alternatives, declared, dependencies,
                 applied.as(applied.readings() * readings, applied.widths(),

@@ -1136,9 +1136,8 @@ final class Pullback {
                 out.add(new StopEvidence.OnAnArm(each.reached(), arm.stops()));
             }
         }
-        for (Meaning.StepOnAnArm each : stated.meaning().stepsDownTheArms(
-                ArmRead::isAComparisonThatCutsNothing)) {
-            for (OnThisArm arm : theRule.onTheArms(new ArmRead.OfACutThatCutsNothing(
+        for (Meaning.StepOnAnArm each : stated.meaning().stepsDownTheArms(ArmRead::drawsNoLine)) {
+            for (OnThisArm arm : theRule.onTheArms(new ArmRead.OfAComparisonThatDrawsNoLine(
                     each.step()))) {
                 out.add(new StopEvidence.OnAnArm(each.reached(), arm.stops()));
             }
@@ -1580,9 +1579,10 @@ final class Pullback {
      * That the written comparison {@code written}, read in {@code reads}, works out what the
      * comparisons the rule read it as do, where {@code read} is what the rule concluded: each of
      * those is of {@code operands} against a number, and what {@code operation}, the one operation
-     * on their side, itself may end a run for, the rule's statement says. A comparison over the
-     * operands reads all that working them out does, which a reading of the written one stopped
-     * at the operation does not.
+     * on their side, read where it is written ({@code operationAt}), itself may end a run for,
+     * the rule's statement says ({@link #heldToWhereItAnswers}). A comparison over the operands
+     * reads all that working them out does, which a reading of the written one stopped at the
+     * operation does not.
      *
      * <p>Only where nothing else the written comparison works out ends a run: the number on the
      * other side, which the rule took by what it folds to and not by working it out, and the
@@ -1590,12 +1590,13 @@ final class Pullback {
      */
     private Derivation worksOutWhatItIsRestatedAs(Derivation read, StatedComparison written,
                                                   InputReads reads, List<Core> operands,
-                                                  Core operation) {
+                                                  Core operation, InputReads operationAt) {
         Trial theRule = trial();
         if (read != null && !theRule.restated().isEmpty()
                 && besideTheOperandsNothingEndsARun(written, reads, operands, operation)) {
-            theRule.says(UndividedByARelation.Working.together(
-                    theRule.restated().stream().map(Supplier::get).toList()));
+            theRule.says(heldToWhereItAnswers(UndividedByARelation.Working.together(
+                    theRule.restated().stream().map(Supplier::get).toList()),
+                    new Denotation(operation, operationAt)));
         }
         return read;
     }
@@ -2589,7 +2590,8 @@ final class Pullback {
         if (here instanceof Core.Binary quotient && quotient.op() == BinOp.DIV
                 && quotient.right().type() == Type.INT) {
             return FormRange.quotientByAWholeNumber(
-                    exactRangeOf(quotient.left(), reads, known));
+                    exactRangeOf(quotient.left(), reads, known),
+                    exactRangeOf(quotient.right(), reads, known));
         }
         if (!isAnOperator(here)) {
             return null;
@@ -3524,22 +3526,25 @@ final class Pullback {
 
     /**
      * What a candidate read the written comparison as, which what a run taking an arm works out
-     * is kept by. One read as a relation is told by the relation. One read as cutting nothing
-     * draws none, and is told by the step that reads it; and what a run works out evaluating the
-     * answer of an arm is told by that answer. A step stands for itself and no other that reads
-     * alike: two arms can cut nothing alike and work different things out.
+     * is kept by. One read as a relation is told by the relation. One read as cutting nothing,
+     * or stopped at what the reading cannot read, draws none, and is told by the step that reads
+     * it; and what a run works out evaluating the answer of an arm is told by that answer. A step
+     * stands for itself and no other that reads alike: two arms can cut nothing alike and work
+     * different things out.
      */
     sealed interface ArmRead {
 
         /** The comparison read as {@code relation}. */
         record OfARelation(Relation relation) implements ArmRead {}
 
-        /** The step {@code step}, a comparison read as cutting nothing. */
-        record OfACutThatCutsNothing(Derivation step) implements ArmRead {
+        /** The step {@code step}, a comparison read as drawing no line
+         *  ({@link #drawsNoLine}). */
+        record OfAComparisonThatDrawsNoLine(Derivation step) implements ArmRead {
 
             @Override
             public boolean equals(Object other) {
-                return other instanceof OfACutThatCutsNothing(Derivation same) && same == step;
+                return other instanceof OfAComparisonThatDrawsNoLine(Derivation same)
+                        && same == step;
             }
 
             @Override
@@ -3577,9 +3582,12 @@ final class Pullback {
             }
         }
 
-        /** Whether {@code step} reads a comparison as cutting nothing. */
-        static boolean isAComparisonThatCutsNothing(Derivation step) {
-            return step instanceof Derivation.ACutThatCutsNothing;
+        /** Whether {@code step} reads a comparison as drawing no line: as cutting nothing, or
+         *  stopped at what the reading cannot read, which a run taking the arm works out all the
+         *  same. */
+        static boolean drawsNoLine(Derivation step) {
+            return step instanceof Derivation.ACutThatCutsNothing
+                    || step instanceof Derivation.Stopped;
         }
 
         /** Every comparison read in {@code derivation} that a run taking an arm works things out
@@ -3587,8 +3595,8 @@ final class Pullback {
         static List<ArmRead> in(Derivation derivation) {
             List<ArmRead> out = new ArrayList<>();
             Meaning.relationsReadIn(derivation).forEach(each -> out.add(new OfARelation(each)));
-            Meaning.stepsIn(derivation, ArmRead::isAComparisonThatCutsNothing)
-                    .forEach(each -> out.add(new OfACutThatCutsNothing(each)));
+            Meaning.stepsIn(derivation, ArmRead::drawsNoLine)
+                    .forEach(each -> out.add(new OfAComparisonThatDrawsNoLine(each)));
             return out;
         }
     }
@@ -3710,6 +3718,31 @@ final class Pullback {
         if (theRule != null && theRule.working() != null) {
             return AffineReading.WorkedOut.ofWhatIsToldOf(theRule.working());
         }
+        return asRead(theRule, arithmetic);
+    }
+
+    /**
+     * {@code rows}, what a rule says the rows of the comparisons it read get past, where those
+     * rows are held to where {@code operation}, read where it is written, answers: a run off
+     * them stops at the operation, which no row is at, unless working it out ends no run of its
+     * own ({@link WorkedOutToReachIt#ownWorkingEndsNoRun}), as the reading asks of an operation
+     * it passes over. A quotient's own stop is not one of these: a comparison asks the quotients
+     * it works out of its own ({@link ComparisonReadings.Reading#quotients}).
+     */
+    private UndividedByARelation.Working heldToWhereItAnswers(UndividedByARelation.Working rows,
+                                                              Denotation operation) {
+        if (rows == null || operation.value() == null
+                || WorkedOutToReachIt.of(read).ownWorkingEndsNoRun(operation)) {
+            return rows;
+        }
+        return rows.leavingUntold(NotAccountedFor.aStopAt(operation.value(), operation.at()));
+    }
+
+    /** What {@link #worksOut} answers, off the reading of the arithmetic alone and not what the
+     *  rule said the rows get past: what a run works out where nothing asks apart the stops of
+     *  what the rule restated. */
+    private AffineReading.WorkedOut asRead(
+            Trial theRule, Supplier<AffineReading.OfAComparison> arithmetic) {
         AffineReading.OfAComparison read = arithmetic.get();
         if (theRule == null || !(read instanceof AffineReading.OfAComparison.Stopped stopped)) {
             return AffineReading.OfAComparison.worksOut(read);
@@ -11680,7 +11713,7 @@ final class Pullback {
         UndividedByARelation.Working untold() {
             return new UndividedByARelation.Working(List.of(),
                     WhatARelationLeavesUndivided.Told.EVERY, true, List.of(), true,
-                    NotAccountedFor.aStopAt(total));
+                    NotAccountedFor.aStopAt(total, null));
         }
     }
 
@@ -13755,8 +13788,16 @@ final class Pullback {
         StatedComparison stated = armsOfAComparison.newest();
         Trial concluded = triedAndConcluded.get(read);
         Trial theRule = concluded != null ? concluded : trial();
-        Once<AffineReading.WorkedOut> worksOut =
-                new Once<>(() -> worksOut(theRule, arithmeticOf(stated, there)));
+        // What a row taking the arm gets past is what the rule says; where a run taking it stops
+        // is what the reading says. A rule that read the comparison again leaves the stop of
+        // each operation it restated to where the comparison asks it apart
+        // ({@link ComparisonReadings.Reading#quotients}), which asks only what every run works
+        // out, and nothing on an arm.
+        Once<AffineReading.WorkedOut> worksOut = new Once<>(() -> {
+            AffineReading.WorkedOut asItIsRead = asRead(theRule, arithmeticOf(stated, there));
+            return theRule.working() == null ? asItIsRead
+                    : new AffineReading.WorkedOut(theRule.working(), asItIsRead.stops());
+        });
         Once<StopEvidence> evaluated = new Once<>(() -> answered == null
                 ? StopEvidence.ofWhatIsToldOf(UndividedByARelation.Working.AS_THE_FORM)
                 : AffineReading.stopsOfEvaluating(answered.value(), answered.at(), this.read,
@@ -15276,7 +15317,7 @@ final class Pullback {
         // Where taking the year of a date ends no run, the date is what the written comparison
         // works out of it, and the comparisons of it with where years begin read it.
         return WhatARunMayEndFor.itself(taking).endsNone()
-                ? worksOutWhatItIsRestatedAs(read, stated, reads, taking.args(), taking)
+                ? worksOutWhatItIsRestatedAs(read, stated, reads, taking.args(), taking, reads)
                 : read;
     }
 
@@ -15380,7 +15421,7 @@ final class Pullback {
         // The statement holds the rounding to the ends of what it answers, past which it aborts.
         return worksOutWhatItIsRestatedAs(theStatementStands(rounded.statement(),
                 rounded.rounded(), at, fixed, rounded.at()), stated, reads,
-                List.of(rounded.rounded()), rounded.rounding());
+                List.of(rounded.rounded()), rounded.rounding(), rounded.at());
     }
 
     /**

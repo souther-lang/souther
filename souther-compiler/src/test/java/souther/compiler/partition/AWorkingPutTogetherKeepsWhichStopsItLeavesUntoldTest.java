@@ -95,13 +95,13 @@ class AWorkingPutTogetherKeepsWhichStopsItLeavesUntoldTest {
 
         AffineReading.WhatWasTold both = new AffineReading.WhatWasTold();
         both.ownStopOfAQuotientByAValueUntold(q);
-        both.aStopWhereNoRowIs(quotient());
+        both.aStopWhereNoRowIs(quotient(), null);
         assertTrue(both.working().leavesUntoldBeyond(List.of(q)));
 
         AffineReading.WhatWasTold absorbing = new AffineReading.WhatWasTold();
         absorbing.ownStopOfAQuotientByAValueUntold(q);
         AffineReading.WhatWasTold apart = new AffineReading.WhatWasTold();
-        apart.aStopWhereNoRowIs(quotient());
+        apart.aStopWhereNoRowIs(quotient(), null);
         absorbing.absorb(apart);
         assertTrue(absorbing.working().leavesUntoldBeyond(List.of(q)));
     }
@@ -130,7 +130,7 @@ class AWorkingPutTogetherKeepsWhichStopsItLeavesUntoldTest {
         Core c = at(2);
         AffineReading.WhatWasTold both = new AffineReading.WhatWasTold();
         both.ownStopOfAQuotientByAValueUntold(q);
-        both.aStopWhereNoRowIs(c);
+        both.aStopWhereNoRowIs(c, null);
         NotAccountedFor left = both.working().leftUntold();
 
         assertTrue(both.working().leavesUntoldBeyond(List.of(q)));
@@ -145,7 +145,7 @@ class AWorkingPutTogetherKeepsWhichStopsItLeavesUntoldTest {
     /** Some operation left untold, and a stop left untold at {@code node}. */
     private static UndividedByARelation.Working leavingAStopAt(Core node) {
         return new UndividedByARelation.Working(List.of(), Told.SOME, true, List.of(), true,
-                NotAccountedFor.aStopAt(node));
+                NotAccountedFor.aStopAt(node, null));
     }
 
     /** Where a reading left a stop untold is kept by the readings together, whether or not they
@@ -185,10 +185,10 @@ class AWorkingPutTogetherKeepsWhichStopsItLeavesUntoldTest {
                 Placement.aFileOfThisCompile(new SourceId("one")).at(0, 0));
         Core inAnother = new Core.Int(1, Type.INT,
                 Placement.aFileOfThisCompile(new SourceId("another")).at(0, 0));
-        NotAccountedFor oneFirst = NotAccountedFor.aStopAt(inOne)
-                .join(NotAccountedFor.aStopAt(inAnother));
-        NotAccountedFor anotherFirst = NotAccountedFor.aStopAt(inAnother)
-                .join(NotAccountedFor.aStopAt(inOne));
+        NotAccountedFor oneFirst = NotAccountedFor.aStopAt(inOne, null)
+                .join(NotAccountedFor.aStopAt(inAnother, null));
+        NotAccountedFor anotherFirst = NotAccountedFor.aStopAt(inAnother, null)
+                .join(NotAccountedFor.aStopAt(inOne, null));
 
         assertEquals(oneFirst, anotherFirst);
         assertEquals(oneFirst.whereUnaccountedFor(List.of()),

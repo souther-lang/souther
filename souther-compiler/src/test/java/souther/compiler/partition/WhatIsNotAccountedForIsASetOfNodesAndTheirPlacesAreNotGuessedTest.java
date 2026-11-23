@@ -4,17 +4,24 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.inputs.DeclaredInput;
+import souther.compiler.inputs.Denotation;
+import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.WhatARelationLeavesUndivided.Told;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.types.BinOp;
+import souther.compiler.types.BindingId;
+import souther.compiler.types.BindingOwner;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.Type;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.function.Predicate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -144,8 +151,8 @@ class WhatIsNotAccountedForIsASetOfNodesAndTheirPlacesAreNotGuessedTest {
         Core.Binary q2 = binary(BinOp.DIV, one(), one());
         Core c = one();
         List<NotAccountedFor> pieces = List.of(NotAccountedFor.quotients(List.of(q1)),
-                NotAccountedFor.quotients(List.of(q2)), NotAccountedFor.aStopAt(c),
-                NotAccountedFor.aStopAt(q1), NotAccountedFor.NOTHING.andSomethingElse());
+                NotAccountedFor.quotients(List.of(q2)), NotAccountedFor.aStopAt(c, null),
+                NotAccountedFor.aStopAt(q1, null), NotAccountedFor.NOTHING.andSomethingElse());
         List<List<Core.Binary>> askings = List.of(List.of(), List.of(q1), List.of(q2),
                 List.of(q1, q2));
         List<NotAccountedFor> values = new ArrayList<>();
@@ -169,7 +176,7 @@ class WhatIsNotAccountedForIsASetOfNodesAndTheirPlacesAreNotGuessedTest {
                 if (value.isAccountedForBy(asked)) {
                     assertTrue(told.isEmpty(), "nothing is told where nothing is left");
                 }
-                if (value.join(NotAccountedFor.aStopAt(c)).equals(value)) {
+                if (value.join(NotAccountedFor.aStopAt(c, null)).equals(value)) {
                     assertTrue(told.isPresent(), "a place held that nothing accounts for is told");
                 }
                 // Asked by the node it is: two quotients written alike are equal as values and
@@ -177,7 +184,7 @@ class WhatIsNotAccountedForIsASetOfNodesAndTheirPlacesAreNotGuessedTest {
                 told.ifPresent(node -> assertFalse(asked.stream().anyMatch(one -> one == node)
                         && NotAccountedFor.quotients(List.of((Core.Binary) node))
                                 .join(value).equals(value) && !value.join(
-                                        NotAccountedFor.aStopAt(node)).equals(value),
+                                        NotAccountedFor.aStopAt(node, null)).equals(value),
                         "the place told is no stop the quotients asked account for"));
                 assertEquals(told, value.andSomethingElse().whereUnaccountedFor(asked),
                         "widening keeps every place");
@@ -194,7 +201,7 @@ class WhatIsNotAccountedForIsASetOfNodesAndTheirPlacesAreNotGuessedTest {
         assertEquals(Optional.of(q2), both.whereUnaccountedFor(List.of(q1)),
                 "two quotients at one place are two stops");
         assertEquals(Optional.of(q1), NotAccountedFor.quotients(List.of(q1))
-                .join(NotAccountedFor.aStopAt(q1)).whereUnaccountedFor(List.of(q1)),
+                .join(NotAccountedFor.aStopAt(q1, null)).whereUnaccountedFor(List.of(q1)),
                 "a stop left untold at a quotient for something else is no stop asking it accounts"
                         + " for");
     }
@@ -209,7 +216,7 @@ class WhatIsNotAccountedForIsASetOfNodesAndTheirPlacesAreNotGuessedTest {
         for (int at = 0; at < 20_000; at++) {
             Core.Binary quotient = binary(BinOp.DIV, one(), one());
             gathered.quotient(quotient);
-            other.stopAt(one());
+            other.stopAt(one(), null);
             asked.add(quotient);
         }
         NotAccountedFor quotients = gathered.done();
@@ -217,5 +224,34 @@ class WhatIsNotAccountedForIsASetOfNodesAndTheirPlacesAreNotGuessedTest {
         NotAccountedFor together = quotients.join(other.done());
         assertFalse(together.isAccountedForBy(asked));
         assertTrue(together.whereUnaccountedFor(asked).isPresent());
+    }
+
+    /** A reading of nothing declared, under a name of its own, so that two are two places. */
+    private static InputReads aPlace(int name) {
+        return InputReads.ofWhatIsDeclared(
+                Map.of(new BindingId(new BindingOwner.OfValue("demo", "f"), name), "x"),
+                DeclaredInput.NONE);
+    }
+
+    /**
+     * A stop is no stop only where every place its node was read at is shown to end no run, and a
+     * node read where nothing says is kept, whichever order the places were put together in.
+     */
+    @Test
+    void aStopIsLeftOnlyWhereSomePlaceItWasReadAtMayEndARun() {
+        Core.Int node = one();
+        InputReads safe = aPlace(0);
+        InputReads unsafe = aPlace(1);
+        Predicate<Denotation> endsNoRunAtTheSafePlace = value -> value.at().equals(safe);
+        NotAccountedFor atTheSafePlace = NotAccountedFor.aStopAt(node, safe);
+        assertTrue(atTheSafePlace.besideWhatEndsNoRun(endsNoRunAtTheSafePlace)
+                .isAccountedForBy(List.of()));
+        for (NotAccountedFor both : List.of(
+                atTheSafePlace.join(NotAccountedFor.aStopAt(node, unsafe)),
+                atTheSafePlace.join(NotAccountedFor.aStopAt(node, null)),
+                NotAccountedFor.aStopAt(node, null).join(atTheSafePlace))) {
+            assertFalse(both.besideWhatEndsNoRun(endsNoRunAtTheSafePlace)
+                    .isAccountedForBy(List.of()), both::toString);
+        }
     }
 }

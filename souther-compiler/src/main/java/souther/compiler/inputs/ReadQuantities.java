@@ -27,6 +27,7 @@ import souther.compiler.numeric.ExactCut;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumberSpace;
+import souther.compiler.numeric.LaterNumbersEliminated;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedRuns;
@@ -1185,6 +1186,18 @@ final class ReadQuantities implements Quantities {
     @Override
     public SearchRegion region() {
         return new ReadRegion(this);
+    }
+
+    /** The bounds the forms taken in state, each as it was said ({@link
+     *  SearchRegion#boundsTakenIn}). */
+    List<LaterNumbersEliminated.Bound<NumericTerm>> boundsTakenIn() {
+        List<LaterNumbersEliminated.Bound<NumericTerm>> out = new ArrayList<>();
+        for (Assumed each : assumed) {
+            if (each instanceof Assumed.OverAForm(LinearForm<NumericTerm> form, Rel rel)) {
+                out.addAll(LaterNumbersEliminated.Bound.stated(form, rel));
+            }
+        }
+        return out;
     }
 
     /**
