@@ -2939,11 +2939,14 @@ public final class Adequacy {
      * <p>The reading of the input itself is not here. It holds a way of asking the declarations a
      * further question, so it compares by which of them built it — held in an answer, it would make
      * the answer a thing two compilations of one source could not find equal.
+     *
+     * <p>{@code leftAt} is the figure the body was left for its author to change at, where it was
+     * ({@link ToBeChangedFirst}): what is divided is then a body nothing read.
      */
     record BodyDivided(souther.compiler.partition.Partitions.Partitioning geometry,
                        java.util.Map<souther.compiler.partition.ConditionOccurrence,
                                souther.compiler.diag.Citation> conditionsMet,
-                       Map<Integer, Citation> rulesReachedAt) {}
+                       Map<Integer, Citation> rulesReachedAt, Optional<Figure> leftAt) {}
 
     /**
      * Where the reading that divided one behavior met each condition it places itself.
@@ -3046,19 +3049,29 @@ public final class Adequacy {
 
         @Override
         public Answer<BodyDivided> compute(Db db) {
-            // A body some change is told for was divided to say whether it is left for the change,
-            // and that division is the one there is.
-            if (ToBeChangedFirst.told(db, name, behavior).isEmpty()
-                    || conditionsReadToAStop(db, name, behavior).isPresent()) {
-                return over(db, name, behavior, null);
+            ToDivide held = toDivideAsHeld(db, name, behavior);
+            if (held == null) {
+                return Answer.absent();
             }
-            Answer<DividedToAStop.Came> came = db.ask(new DividedToAStop(name, behavior));
-            return came.present() && came.value() instanceof DividedToAStop.ToTheEnd(var divided)
-                    ? Answer.of(divided) : over(db, name, behavior, null);
+            // Where its conditions are read no further it is not divided, and where a line of it
+            // is not worked out in a construct some change is told of it is divided no further:
+            // either way it is the body left for the change that is divided, which is unread.
+            Optional<Figure> figure = conditionsReadToAStop(db, name, behavior);
+            if (figure.isEmpty()) {
+                WhatStopsMeasuring stops = WhatStopsMeasuring.atTheFirstOf(
+                        ToBeChangedFirst.told(db, name, behavior));
+                Optional<BodyDivided> toItsEnd = divided(db, name, held, stops);
+                if (toItsEnd.isPresent()) {
+                    return Answer.of(toItsEnd.get());
+                }
+                figure = stops.figure();
+            }
+            return Answer.of(divided(db, name, held.left(figure.orElseThrow()),
+                    WhatStopsMeasuring.nowhere()).orElseThrow());
         }
 
         /**
-         * The same, divided over {@code builtAgainst} where there is one: the reading a value is
+         * A body divided over {@code builtAgainst} where there is one: the reading a value is
          * built against, closed over more paths than the measurement's is ({@link InputsOf}).
          */
         static Answer<BodyDivided> over(Db db, String name, String behavior,
@@ -3083,7 +3096,9 @@ public final class Adequacy {
                     db.ask(new Front.Adequacy()).value().measures()
                             .allowanceForBehaviorDistinctions(),
                     divided.witnesses(), stops).map(read -> new BodyDivided(read.geometry(),
-                            read.conditionsMet(), read.rulesReachedAt()));
+                            read.conditionsMet(), read.rulesReachedAt(),
+                            divided.body() instanceof BodyReading.ToBeChangedFirst(var figure)
+                                    ? Optional.of(figure) : Optional.empty()));
         }
     }
 
@@ -3126,47 +3141,6 @@ public final class Adequacy {
     }
 
     /**
-     * One behavior's body divided up to the first construct some change is told of that where its
-     * lines decide is not worked out in, at a figure, or to its end where there is none
-     * ({@link WhatStopsMeasuring}).
-     *
-     * <p>The division {@link Dividing} answers with and not one made beside it, so a body is
-     * divided once whether or not it is left, and what it is left on is what dividing it came to.
-     * Of the body whether or not it is left for its author to change, since that is what it decides
-     * ({@link ToBeChangedFirst}); and of nothing that turns on it, which is why what arrives where
-     * is asked of every body whose conditions are read ({@link PathReached}).
-     */
-    record DividedToAStop(String name, String behavior) implements Key<DividedToAStop.Came> {
-
-        /** What dividing the body came to. */
-        sealed interface Came {}
-
-        /** It ended at {@code figure}. */
-        record AtAFigure(Figure figure) implements Came {}
-
-        /** It was divided to its end. */
-        record ToTheEnd(BodyDivided divided) implements Came {}
-
-        @Override
-        public String module() {
-            return name;
-        }
-
-        @Override
-        public Answer<Came> compute(Db db) {
-            ToDivide divided = toDivideAsHeld(db, name, behavior);
-            if (divided == null) {
-                return Answer.absent();
-            }
-            WhatStopsMeasuring stops = WhatStopsMeasuring.atTheFirstOf(
-                    ToBeChangedFirst.told(db, name, behavior));
-            Optional<BodyDivided> made = Dividing.divided(db, name, divided, stops);
-            return Answer.of(stops.figure().<Came>map(AtAFigure::new)
-                    .orElseGet(() -> new ToTheEnd(made.orElseThrow())));
-        }
-    }
-
-    /**
      * What one behavior's body is divided over: the behavior, the reading of its input, the body,
      * the plan its comparisons are numbered by, and where a reading asks for a row showing it gets
      * somewhere.
@@ -3177,7 +3151,14 @@ public final class Adequacy {
     record ToDivide(Hir.SpecBehavior spec, souther.compiler.inputs.InputReading read,
                     souther.compiler.partition.BodyReading body,
                     souther.compiler.coverage.CoverageSites.Plan plan,
-                    Coverages.WitnessesAtSites witnesses) {}
+                    Coverages.WitnessesAtSites witnesses) {
+
+        /** The same, the body left for its author to change at {@code figure}. */
+        ToDivide left(Figure figure) {
+            return new ToDivide(spec, read, new BodyReading.ToBeChangedFirst(figure), plan,
+                    witnesses);
+        }
+    }
 
     /**
      * What {@code behavior}'s body is divided over, read against {@code builtAgainst} where there

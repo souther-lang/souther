@@ -12,9 +12,13 @@ import souther.compiler.report.AdequacyReport;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -235,6 +239,34 @@ class ABehaviorIsLeftToBeChangedWhereAChangeIsToldAndMeasuringIsDearTest {
         assertEquals(List.of("beside"), List.copyOf(
                 leaving(CHOICES_THAT_MULTIPLY + beside, FEW_READINGS).db()
                         .ask(new Adequacy.PathReached("m")).value().keySet()));
+    }
+
+    /** Dividing the body is the last thing asked for it, whether or not it is left: the searches
+     *  for rows, which are what measuring costs most, are asked for by none of it. */
+    @Test
+    void itIsDecidedBeforeAnyRowIsSearchedFor() {
+        for (Allowances allowances : List.of(ONE_QUESTION, Allowances.DECLARED)) {
+            Compilation compilation = leaving(NUMBERS, allowances);
+            assertEquals(allowances == ONE_QUESTION, figure(compilation).isPresent());
+            Db db = compilation.db();
+            Set<Key<?>> asked = new LinkedHashSet<>();
+            Deque<Key<?>> toRead = new ArrayDeque<>(
+                    List.of(new ToBeChangedFirst("m", "asked")));
+            while (!toRead.isEmpty()) {
+                Key<?> key = toRead.poll();
+                if (asked.add(key)) {
+                    toRead.addAll(db.dependenciesOf(key));
+                }
+            }
+
+            assertTrue(asked.contains(new Adequacy.Dividing("m", "asked")), asked.toString());
+            assertEquals(List.of(), asked.stream().filter(each ->
+                    each instanceof Adequacy.BoundarySearch
+                            || each instanceof Adequacy.MeetingsSearchedFor
+                            || each instanceof Adequacy.DecisionSearch
+                            || each instanceof Adequacy.CaseSearch
+                            || each instanceof Adequacy.Readings).toList());
+        }
     }
 
     /** Nothing was shown of its rows, so the verdict is open and no gap is told; what is told is

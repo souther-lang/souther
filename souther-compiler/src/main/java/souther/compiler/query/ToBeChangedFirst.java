@@ -30,9 +30,10 @@ import java.util.Set;
  * however long.
  *
  * <p>A condition is read before anything is asked of the ways to it
- * ({@link Adequacy.ConditionsReadToAStop}), and where its lines decide is asked once they are known
- * ({@link Adequacy.DividedToAStop}); each says the stop the reader that spent the figure says. The
- * search for rows comes after both, and a figure met there ends nothing.
+ * ({@link Adequacy.ConditionsReadToAStop}), and where its lines decide is asked once they are known,
+ * in dividing the body ({@link Adequacy.Dividing}); each says the stop the reader that spent the
+ * figure says. The search for rows comes after both and is asked for neither, and a figure met
+ * there ends nothing.
  *
  * <p>Asked only where the build leaves such behaviors ({@link Adequacy.LeavingWhatIsToBeChanged}).
  *
@@ -111,21 +112,13 @@ public record ToBeChangedFirst(String name, String behavior)
         return read == null ? List.of() : read;
     }
 
-    /** The figure measuring the body as written stopped at, in a construct a change is told of. */
-    private Optional<Figure> stoppedAt(Db db) {
-        Optional<Figure> reading = Adequacy.conditionsReadToAStop(db, name, behavior);
-        if (reading.isPresent()) {
-            return reading;
-        }
-        return !told(db, name, behavior).isEmpty()
-                && db.ask(new Adequacy.DividedToAStop(name, behavior)).value()
-                        instanceof Adequacy.DividedToAStop.AtAFigure(Figure figure)
-                ? Optional.of(figure) : Optional.empty();
-    }
-
     @Override
     public Answer<Left> compute(Db db) {
-        Optional<Figure> figure = stoppedAt(db);
+        // Dividing the body is where the measuring ends, so a body no change is told of is not
+        // divided for this.
+        Adequacy.BodyDivided divided = told(db, name, behavior).isEmpty() ? null
+                : db.ask(new Adequacy.Dividing(name, behavior)).value();
+        Optional<Figure> figure = divided == null ? Optional.empty() : divided.leftAt();
         if (figure.isEmpty()) {
             return Answer.of(Left.NOTHING);
         }
