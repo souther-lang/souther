@@ -2815,9 +2815,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         private final int[] elementsRead;
         private boolean exact = true;
         /** What was left untold, in an operation or a stop: every way {@link #exact} is made false
-         *  or {@link #aStopUntold} made true joins its cause here
+         *  or {@link #aStopUntold} made true adds its cause here, as it is met
          *  ({@link UndividedByARelation.Working#leftUntold}). */
-        private NotAccountedFor untold = NotAccountedFor.NOTHING;
+        private final NotAccountedFor.Gathered untold = new NotAccountedFor.Gathered();
         /** Whether a run may stop where an answer read here has no place, which no operation
          *  told and no row of a line is at ({@link UndividedByARelation.Working#aStopUntold}). */
         private boolean aStopUntold;
@@ -3052,7 +3052,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             keptOnce.addAll(apart.keptOnce);
             keptAt.addAll(apart.keptAt);
             exact &= apart.exact;
-            untold = untold.join(apart.untold);
+            untold.take(apart.untold);
             partials.addAll(apart.partials);
         }
 
@@ -3084,7 +3084,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             apart.keptElsewhere = true;
             aStopUntold |= apart.aStopUntold;
             aStopSaidElsewhere |= apart.aStopSaidElsewhere;
-            untold = untold.join(apart.untold);
+            untold.take(apart.untold);
             keptOnce.addAll(apart.toldOnce);
             keptOnce.addAll(apart.keptOnce);
             keptAt.addAll(apart.lastToldAt.keySet());
@@ -3167,11 +3167,11 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             aStopUntoldAt(at);
         }
 
-        /** That a stop is left untold at {@code at} ({@link NotAccountedFor#untoldAt}): every way
-         *  a stop is left untold says where. */
+        /** That a stop is left untold at {@code at} ({@link NotAccountedFor#whereUnaccountedFor}):
+         *  every way a stop is left untold says where. */
         private void aStopUntoldAt(Core at) {
             aStopUntold = true;
-            untold = untold.join(NotAccountedFor.aStopAt(Core.withoutStanding(at)));
+            untold.stopAt(at);
         }
 
         /**
@@ -3190,12 +3190,12 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         void ownStopOfAQuotientByAValueUntold(Core.Binary quotient) {
             exact = false;
             aStopUntold = true;
-            untold = untold.join(NotAccountedFor.quotients(List.of(quotient)));
+            untold.quotient(quotient);
         }
 
         private void leavingSomethingUntold() {
             exact = false;
-            untold = untold.andSomethingElse();
+            untold.somethingElse();
         }
 
         /**
@@ -3375,15 +3375,16 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         /** {@code told} as the working: every operation is told where {@code everyOne}, and
          *  where not, what is left out is what was left untold, which the running totals and
          *  what is told beside the rows ({@code besideTheRows}) are not accounted for in. What
-         *  is left to something else is widened from what was left untold, so the calls it
-         *  names are kept. */
+         *  is left to something else is widened from what was left untold, so the places it
+         *  holds are kept. */
         private UndividedByARelation.Working working(
                 List<UndividedByARelation.IntOperation> told, boolean everyOne,
                 boolean besideTheRowsIsEmpty) {
+            NotAccountedFor gathered = untold.done();
             NotAccountedFor left = everyOne
-                    ? (aStopUntold ? untold.andSomethingElse() : NotAccountedFor.NOTHING)
-                    : (besideTheRowsIsEmpty && partials.isEmpty()) ? untold
-                    : untold.andSomethingElse();
+                    ? (aStopUntold ? gathered.andSomethingElse() : NotAccountedFor.NOTHING)
+                    : (besideTheRowsIsEmpty && partials.isEmpty()) ? gathered
+                    : gathered.andSomethingElse();
             return new UndividedByARelation.Working(told, everyOne
                     ? WhatARelationLeavesUndivided.Told.EVERY
                     : WhatARelationLeavesUndivided.Told.SOME,

@@ -12,7 +12,9 @@ import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.Type;
 
 import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -126,5 +128,94 @@ class WhatIsNotAccountedForIsASetOfNodesAndTheirPlacesAreNotGuessedTest {
         Core there = binary(BinOp.ADD, one(), one());
         assertEquals(workingWithAnOperationAt(here), workingWithAnOperationAt(here));
         assertNotEquals(workingWithAnOperationAt(here), workingWithAnOperationAt(there));
+    }
+
+    /**
+     * What is left once {@code asked} is taken as accounted for and where it is are one answer,
+     * over every value the pieces make in every order: where a node held is not accounted for, one
+     * is told and it is one that is not; where every node is, none is; and a value is accounted for
+     * only where nothing is left. Putting together is the same in either order, with itself, and
+     * however grouped, and so is what is told; widening keeps every place; equal values hash
+     * alike. Two quotients at one place are two stops, and asking one leaves the other told.
+     */
+    @Test
+    void whatIsLeftAndWhereItIsAreOneAnswerOverEveryValueInEveryOrder() {
+        Core.Binary q1 = binary(BinOp.DIV, one(), one());
+        Core.Binary q2 = binary(BinOp.DIV, one(), one());
+        Core c = one();
+        List<NotAccountedFor> pieces = List.of(NotAccountedFor.quotients(List.of(q1)),
+                NotAccountedFor.quotients(List.of(q2)), NotAccountedFor.aStopAt(c),
+                NotAccountedFor.aStopAt(q1), NotAccountedFor.NOTHING.andSomethingElse());
+        List<List<Core.Binary>> askings = List.of(List.of(), List.of(q1), List.of(q2),
+                List.of(q1, q2));
+        List<NotAccountedFor> values = new ArrayList<>();
+        for (int subset = 0; subset < 1 << pieces.size(); subset++) {
+            NotAccountedFor value = NotAccountedFor.NOTHING;
+            NotAccountedFor reversed = NotAccountedFor.NOTHING;
+            for (int at = 0; at < pieces.size(); at++) {
+                if ((subset & 1 << at) != 0) {
+                    value = value.join(pieces.get(at));
+                    reversed = pieces.get(at).join(reversed);
+                }
+            }
+            assertEquals(value, reversed, "in either order");
+            assertEquals(value.hashCode(), reversed.hashCode());
+            assertEquals(value, value.join(value), "with itself");
+            values.add(value);
+        }
+        for (NotAccountedFor value : values) {
+            for (List<Core.Binary> asked : askings) {
+                Optional<Core> told = value.whereUnaccountedFor(asked);
+                if (value.isAccountedForBy(asked)) {
+                    assertTrue(told.isEmpty(), "nothing is told where nothing is left");
+                }
+                if (value.join(NotAccountedFor.aStopAt(c)).equals(value)) {
+                    assertTrue(told.isPresent(), "a place held that nothing accounts for is told");
+                }
+                // Asked by the node it is: two quotients written alike are equal as values and
+                // are two stops.
+                told.ifPresent(node -> assertFalse(asked.stream().anyMatch(one -> one == node)
+                        && NotAccountedFor.quotients(List.of((Core.Binary) node))
+                                .join(value).equals(value) && !value.join(
+                                        NotAccountedFor.aStopAt(node)).equals(value),
+                        "the place told is no stop the quotients asked account for"));
+                assertEquals(told, value.andSomethingElse().whereUnaccountedFor(asked),
+                        "widening keeps every place");
+                for (NotAccountedFor other : values) {
+                    assertEquals(value.join(other).whereUnaccountedFor(asked),
+                            other.join(value).whereUnaccountedFor(asked),
+                            "what is told turns on no order of putting together");
+                }
+            }
+        }
+        NotAccountedFor both = NotAccountedFor.quotients(List.of(q1))
+                .join(NotAccountedFor.quotients(List.of(q2)));
+        assertFalse(both.isAccountedForBy(List.of(q1)));
+        assertEquals(Optional.of(q2), both.whereUnaccountedFor(List.of(q1)),
+                "two quotients at one place are two stops");
+        assertEquals(Optional.of(q1), NotAccountedFor.quotients(List.of(q1))
+                .join(NotAccountedFor.aStopAt(q1)).whereUnaccountedFor(List.of(q1)),
+                "a stop left untold at a quotient for something else is no stop asking it accounts"
+                        + " for");
+    }
+
+    /** A reading that leaves many stops untold gathers each at the same cost however many it
+     *  holds: twenty thousand, gathered and put together, are all held and all told of. */
+    @Test
+    void manyStopsGatheredAreEachHeldAtTheCostOfOne() {
+        NotAccountedFor.Gathered gathered = new NotAccountedFor.Gathered();
+        NotAccountedFor.Gathered other = new NotAccountedFor.Gathered();
+        List<Core.Binary> asked = new ArrayList<>();
+        for (int at = 0; at < 20_000; at++) {
+            Core.Binary quotient = binary(BinOp.DIV, one(), one());
+            gathered.quotient(quotient);
+            other.stopAt(one());
+            asked.add(quotient);
+        }
+        NotAccountedFor quotients = gathered.done();
+        assertTrue(quotients.isAccountedForBy(asked));
+        NotAccountedFor together = quotients.join(other.done());
+        assertFalse(together.isAccountedForBy(asked));
+        assertTrue(together.whereUnaccountedFor(asked).isPresent());
     }
 }

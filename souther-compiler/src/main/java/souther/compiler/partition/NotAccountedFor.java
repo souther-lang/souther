@@ -3,96 +3,92 @@ package souther.compiler.partition;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 
-import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
- * What a working says it does not account for: nothing, the stops of some quotients by a value
- * and nothing else, or something no reader can name; and, beside any of these, every place a
- * stop is left untold, where the readings that left them found the expressions.
+ * What a working says it does not account for: each stop it leaves untold at a node of the tree,
+ * held by the node it is and with whether asking that node as a quotient by a value accounts for
+ * it, and whether anything is left untold that no node is said for.
  *
- * <p>The quotients are named by the node of the expression they are, so that a reader that judges
- * the quotients a comparison always works out ({@link QuotientsEveryRunWorksOut}) can take what
- * is left to them as accounted for, and only those. A quotient is accounted for by being asked, so
- * what a working leaves to a quotient that is not asked is left to something else.
+ * <p>One set answers both questions asked of it, by the same nodes and the same quotients asked:
+ * whether anything is left once the quotients a reader asks are taken as accounted for
+ * ({@link #isAccountedForBy}), and where what is left is ({@link #whereUnaccountedFor}). So a
+ * stop left unresolved is never told at a place that was accounted for, and never told at no
+ * place while a place of it is held.
  *
- * <p>Two of these put together are their join: nothing is the identity, something else absorbs
- * everything, and quotients with quotients are the quotients of both. No other combination is
- * made, so what one working leaves to something else cannot be recovered by putting it beside one
- * that leaves only quotients.
+ * <p>A quotient is accounted for by being asked, and only a stop that is the quotient's own
+ * ({@link #quotients}): a stop left untold at the same node for anything else
+ * ({@link #aStopAt}) is not, so a node held both ways is accounted for by nothing. Something
+ * left untold that no node is said for ({@link #andSomethingElse}) is accounted for by nothing
+ * either, and keeps every node held beside it.
  *
- * <p>The places a stop is left untold are kept whole, and the places of two put together are the
- * places of both, so nothing is chosen of them before what is accounted for is known. Which one a
- * reader is told is asked with what accounts for the rest ({@link #whereUnaccountedFor}), as
- * whether anything is left is ({@link #isAccountedForBy}). Something else is only ever made from
- * what was left before ({@link #andSomethingElse}), so no reader widening what is left drops a
- * place it held.
+ * <p>Two put together are the union of what each holds, so putting them together is the same in
+ * either order and putting one together with itself changes nothing. Two are equal where they hold
+ * the same nodes the same way.
  */
 final class NotAccountedFor {
 
     /** How much a working leaves unaccounted for. */
     enum Kind {
         NOTHING,
-        /** The stops of the quotients {@link #quotients}, and nothing else. */
+        /** The stops of some quotients by a value, each the quotient's own, and nothing else. */
         QUOTIENTS,
         /** Something that is not the stop of a quotient a reader asks. */
         SOMETHING_ELSE
     }
 
-    static final NotAccountedFor NOTHING = new NotAccountedFor(Kind.NOTHING, List.of(),
-            List.of());
+    static final NotAccountedFor NOTHING = new NotAccountedFor(new IdentityHashMap<>(), false);
 
-    /** Something else and no place: not handed out, for the reason the class says. */
-    private static final NotAccountedFor SOMETHING_ELSE = new NotAccountedFor(
-            Kind.SOMETHING_ELSE, List.of(), List.of());
-
-    /** Places a stop is left untold, in an order that holds whichever texts they are in and
-     *  whatever order they were met in. */
+    /** Places a stop is left untold, in an order that holds whichever texts they are in, and
+     *  among two at one place by the node, so that which one is told turns on no order of
+     *  putting together. */
     private static final Comparator<Core> STEADILY =
-            Comparator.comparing(Core::pos, SourcePos.IN_A_STEADY_ORDER);
+            Comparator.comparing(Core::pos, SourcePos.IN_A_STEADY_ORDER)
+                    .thenComparingInt(System::identityHashCode);
 
+    /** Each node a stop is left untold at, and whether asking it as a quotient accounts for it.
+     *  Never changed once made. */
+    private final IdentityHashMap<Core, Boolean> at;
+    /** Whether anything is left untold that no node is said for. */
+    private final boolean somethingElse;
+    /** What {@link #at} and {@link #somethingElse} come to, said once as they are made. */
     private final Kind kind;
-    private final List<Core.Binary> quotients;
-    private final List<Core> untoldAt;
 
-    /** The quotients are a set of nodes, each once by the node it is; the places a set of where
-     *  each is written, each once by its place, since that is what is said of one. */
-    private NotAccountedFor(Kind kind, List<Core.Binary> quotients, List<? extends Core> at) {
-        this.kind = kind;
-        List<Core.Binary> distinct = new ArrayList<>();
-        for (Core.Binary each : quotients) {
-            if (distinct.stream().noneMatch(one -> one == each)) {
-                distinct.add(each);
-            }
-        }
-        this.quotients = List.copyOf(distinct);
-        List<Core> places = new ArrayList<>();
-        for (Core each : at) {
-            if (places.stream().noneMatch(one -> one.pos().equals(each.pos()))) {
-                places.add(each);
-            }
-        }
-        this.untoldAt = List.copyOf(places);
+    private NotAccountedFor(IdentityHashMap<Core, Boolean> at, boolean somethingElse) {
+        this.at = at;
+        this.somethingElse = somethingElse;
+        this.kind = (somethingElse || at.containsValue(Boolean.FALSE)) ? Kind.SOMETHING_ELSE
+                : at.isEmpty() ? Kind.NOTHING : Kind.QUOTIENTS;
     }
 
-    /** The stops of {@code nodes}, quotients by a value, and nothing else; something else where
-     *  there are none. Each is where a stop is left untold. */
+    /** The stops of {@code nodes}, quotients by a value, each the quotient's own; something else
+     *  where there are none. */
     static NotAccountedFor quotients(List<Core.Binary> nodes) {
-        return nodes.isEmpty() ? SOMETHING_ELSE
-                : new NotAccountedFor(Kind.QUOTIENTS, nodes, List.copyOf(nodes));
+        Gathered out = new Gathered();
+        nodes.forEach(out::quotient);
+        if (nodes.isEmpty()) {
+            out.somethingElse();
+        }
+        return out.done();
     }
 
-    /** A stop left untold at {@code node}, which is something else. */
+    /** A stop left untold at {@code node}, which asking no quotient accounts for. */
     static NotAccountedFor aStopAt(Core node) {
-        return new NotAccountedFor(Kind.SOMETHING_ELSE, List.of(), List.of(node));
+        Gathered out = new Gathered();
+        out.stopAt(node);
+        return out.done();
     }
 
-    /** This, and something else beside it: what a reader leaves where it cannot name what is
-     *  left, with every place this holds still held. */
+    /** This, and something else beside it that no node is said for, with every node this holds
+     *  still held. */
     NotAccountedFor andSomethingElse() {
-        return join(SOMETHING_ELSE);
+        return somethingElse ? this : new NotAccountedFor(at, true);
     }
 
     Kind kind() {
@@ -101,87 +97,142 @@ final class NotAccountedFor {
 
     /** Both put together. */
     NotAccountedFor join(NotAccountedFor other) {
-        if (kind == Kind.NOTHING && untoldAt.isEmpty()) {
-            return other;
-        }
-        if (other.kind == Kind.NOTHING && other.untoldAt.isEmpty()) {
+        if (other.holdsNothingBeyond(this)) {
             return this;
         }
-        List<Core> at = both(untoldAt, other.untoldAt);
-        if (kind == Kind.SOMETHING_ELSE || other.kind == Kind.SOMETHING_ELSE) {
-            return at.isEmpty() ? SOMETHING_ELSE
-                    : new NotAccountedFor(Kind.SOMETHING_ELSE, List.of(), at);
-        }
-        return new NotAccountedFor(Kind.QUOTIENTS, both(quotients, other.quotients), at);
-    }
-
-    private static <T> List<T> both(List<T> one, List<T> other) {
-        if (other.isEmpty()) {
-            return one;
-        }
-        if (one.isEmpty()) {
+        if (holdsNothingBeyond(other)) {
             return other;
         }
-        List<T> out = new ArrayList<>(one);
-        out.addAll(other);
-        return out;
+        Gathered out = new Gathered();
+        out.take(this);
+        out.take(other);
+        return out.done();
     }
 
-    /** Whether this is accounted for by {@code asked}: nothing is left, or only the stops of
-     *  quotients every one of which is among them. */
+    /** Whether everything {@code this} holds is held by {@code other} as it holds it. */
+    private boolean holdsNothingBeyond(NotAccountedFor other) {
+        if (somethingElse && !other.somethingElse) {
+            return false;
+        }
+        for (Map.Entry<Core, Boolean> each : at.entrySet()) {
+            Boolean there = other.at.get(each.getKey());
+            if (there == null || (there && !each.getValue())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Whether this is accounted for by {@code asked}: nothing is left untold but the stops of
+     *  quotients that are their own and among {@code asked}. */
     boolean isAccountedForBy(List<Core.Binary> asked) {
-        return switch (kind) {
-            case NOTHING -> true;
-            case QUOTIENTS -> quotients.stream().allMatch(each -> asked.stream()
-                    .anyMatch(one -> one == each));
-            case SOMETHING_ELSE -> false;
-        };
+        Set<Core> askedOnce = byNode(asked);
+        return !somethingElse && at.keySet().stream()
+                .allMatch(each -> accountedFor(each, askedOnce));
     }
 
     /**
-     * Where a stop is left untold that {@code asked} does not account for, which is the one a
-     * reader is told where {@link #isAccountedForBy} says something is left: of the places, the
-     * first {@link #STEADILY} that is no quotient among {@code asked}. Asked of the same quotients
-     * as whether anything is left, so the place told is one of what is left and never a stop
-     * already accounted for. None where every place is one of them, or none was found.
+     * Where a stop is left untold that {@code asked} does not account for: of the nodes held, the
+     * first {@link #STEADILY} that is not accounted for as {@link #isAccountedForBy} asks it. None
+     * where every node is, though something else may still be left that no node is said for.
      */
     Optional<Core> whereUnaccountedFor(List<Core.Binary> asked) {
-        return untoldAt.stream()
-                .filter(each -> asked.stream().noneMatch(one -> one == each))
-                .min(STEADILY);
+        Set<Core> askedOnce = byNode(asked);
+        return at.keySet().stream().filter(each -> !accountedFor(each, askedOnce)).min(STEADILY);
     }
 
-    /** Whether this names {@code node}, a quotient, as one of those it leaves. */
-    boolean names(Core.Binary node) {
-        return kind == Kind.QUOTIENTS && quotients.stream().anyMatch(one -> one == node);
+    private boolean accountedFor(Core node, Set<Core> asked) {
+        return at.get(node) && asked.contains(node);
     }
 
-    /** The places are told apart by where each is written, which is what is said of one. */
+    /** {@code asked}, by the node each is, to be asked of each node held at the same cost. */
+    private static Set<Core> byNode(List<Core.Binary> asked) {
+        Set<Core> out = Collections.newSetFromMap(new IdentityHashMap<>());
+        out.addAll(asked);
+        return out;
+    }
+
     @Override
     public boolean equals(Object other) {
-        return other instanceof NotAccountedFor that && kind == that.kind
-                && quotients.size() == that.quotients.size()
-                && quotients.stream().allMatch(that::names)
-                && untoldAt.size() == that.untoldAt.size()
-                && untoldAt.stream().allMatch(each -> that.untoldAt.stream()
-                        .anyMatch(one -> one.pos().equals(each.pos())));
+        return other instanceof NotAccountedFor that && somethingElse == that.somethingElse
+                && at.equals(that.at);
     }
 
     @Override
     public int hashCode() {
-        int sum = kind.hashCode();
-        for (Core.Binary each : quotients) {
-            sum += System.identityHashCode(each);
-        }
-        for (Core each : untoldAt) {
-            sum += each.pos().hashCode();
-        }
-        return sum;
+        return at.hashCode() * 2 + (somethingElse ? 1 : 0);
     }
 
     @Override
     public String toString() {
-        String said = kind == Kind.QUOTIENTS ? "quotients " + quotients.size() : kind.toString();
-        return untoldAt.isEmpty() ? said : said + ", untold at " + untoldAt.size();
+        return kind() + (at.isEmpty() ? "" : ", untold at " + at.size());
+    }
+
+    /**
+     * What a reading leaves untold as it goes, gathered one stop at a time and taken as a
+     * {@link NotAccountedFor} where the reading is done: each stop added costs the same however
+     * many are held, where a value made again for each would cost all of them.
+     */
+    static final class Gathered {
+
+        private IdentityHashMap<Core, Boolean> at = new IdentityHashMap<>();
+        private boolean somethingElse;
+        /** What was last taken, while nothing has been added since; null otherwise. */
+        private NotAccountedFor taken;
+
+        /** That a stop is left untold at {@code node}, which asking no quotient accounts for. */
+        void stopAt(Core node) {
+            put(Core.withoutStanding(node), false);
+        }
+
+        /** That the stop of {@code quotient}, its own, is left untold. */
+        void quotient(Core.Binary quotient) {
+            put(quotient, true);
+        }
+
+        /** That something is left untold that no node is said for. */
+        void somethingElse() {
+            if (!somethingElse) {
+                changing();
+                somethingElse = true;
+            }
+        }
+
+        /** Everything {@code other} holds, as it holds it. */
+        void take(NotAccountedFor other) {
+            other.at.forEach(this::put);
+            if (other.somethingElse) {
+                somethingElse();
+            }
+        }
+
+        /** Everything {@code other} holds, as it holds it. */
+        void take(Gathered other) {
+            take(other.done());
+        }
+
+        private void put(Core node, boolean accountable) {
+            Boolean had = at.get(node);
+            boolean now = had == null ? accountable : had && accountable;
+            if (had == null || had != now) {
+                changing();
+                at.put(node, now);
+            }
+        }
+
+        private void changing() {
+            if (taken != null) {
+                at = new IdentityHashMap<>(at);
+                taken = null;
+            }
+        }
+
+        /** What has been gathered, as it stands. */
+        NotAccountedFor done() {
+            if (taken == null) {
+                taken = new NotAccountedFor(at, somethingElse);
+            }
+            return taken;
+        }
     }
 }
