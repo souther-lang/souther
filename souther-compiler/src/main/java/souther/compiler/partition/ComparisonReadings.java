@@ -643,6 +643,12 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
 
         void met(Core e, ConstructOccurrence occurrence, ClosureApplications applying,
                  InputReads reads, Body in);
+
+        /** Whether no construct met from here on is asked anything of, so the walk goes into none
+         *  of what is left. */
+        default boolean asksNoMore() {
+            return false;
+        }
     }
 
     /**
@@ -693,14 +699,21 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
     static void conditionsRead(String behavior, AnalysisBody analysis, InputReading read,
                                InputReads reads, WhatStopsMeasuring stops) {
         read(behavior, analysis, read, reads, ComparisonWitnesses.AtComparisons.NONE, Optional.of(
-                (e, occurrence, _, names, in) -> {
-                    Optional<ModelOccurrence> stands = ModelOccurrence.statedAt(occurrence)
-                            .filter(stops::isTold);
-                    if (stands.isPresent() && !stops.isShown()) {
-                        BooleanMeaning.asAComparison(e).ifPresent(comparison ->
-                                stops.reading(stands.get(), in.conditions()
-                                        .comparison(comparison, names, read).stated()
-                                        .proposition()));
+                new AtAConstruct() {
+
+                    @Override
+                    public void met(Core e, ConstructOccurrence occurrence,
+                                    ClosureApplications applying, InputReads names, Body in) {
+                        ModelOccurrence.statedAt(occurrence).filter(stops::isTold).ifPresent(
+                                stands -> BooleanMeaning.asAComparison(e).ifPresent(comparison ->
+                                        stops.reading(stands, in.conditions()
+                                                .comparison(comparison, names, read).stated()
+                                                .proposition())));
+                    }
+
+                    @Override
+                    public boolean asksNoMore() {
+                        return stops.isShown();
                     }
                 }));
     }
@@ -2013,6 +2026,10 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                              LiveFlow flow, List<OnTheWay> assumed, boolean live,
                              List<Reading> out, List<ForkMet> forks,
                              ConditionNumbering numbering) {
+        // Here and nowhere inside: what a step enters around what it walks, it leaves after it.
+        if (in.metOnly().filter(AtAConstruct::asksNoMore).isPresent()) {
+            return;
+        }
         Symbols symbols = in.symbols();
         // The way this node is reached on, for whoever asks whether a part of a fork's condition is
         // evaluated at all.
