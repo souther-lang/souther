@@ -396,21 +396,17 @@ class ACallOfABehaviorIsGottenPastByTheRunsTheBehaviorAnswersTest {
      *  states: a construction on an arm whose condition keeps its invariant is got past. */
     @Test
     void whereAPassageIsLeftOpenIsAskedOnTheArmItIsWrittenOn() {
-        Compilation kept = compiled("""
+        Compilation compilation = compiled("""
                 data Points = Int
                     invariant value >= 0 && value <= 12
-                behavior scored : (n: Int) -> Points
-                let scored (n) = if n >= 0 && n <= 12 then Points(n) else Points(0)
-                """);
-        Compilation halfKept = compiled("""
-                data Points = Int
-                    invariant value >= 0 && value <= 12
-                behavior scored : (n: Int) -> Points
-                let scored (n) = if n >= 0 then Points(n) else Points(0)
+                behavior kept : (n: Int) -> Points
+                let kept (n) = if n >= 0 && n <= 12 then Points(n) else Points(0)
+                behavior halfKept : (n: Int) -> Points
+                let halfKept (n) = if n >= 0 then Points(n) else Points(0)
                 """);
 
-        assertTrue(rowsRunsGetPast(kept, "scored"));
-        assertInstanceOf(StopOrigin.AConstruction.class, mayStopAt(halfKept, "scored"));
+        assertTrue(rowsRunsGetPast(compilation, "kept"));
+        assertInstanceOf(StopOrigin.AConstruction.class, mayStopAt(compilation, "halfKept"));
     }
 
     /** Of two calls in one comparison that each leave it open, the one the proof gave out at is
@@ -507,22 +503,20 @@ class ACallOfABehaviorIsGottenPastByTheRunsTheBehaviorAnswersTest {
     /** The inputs it is asked over are the ones it declares, and not what a caller hands it. */
     @Test
     void theInputsItIsAskedOverAreTheBehaviorsOwn() {
-        Compilation declared = compiled("""
+        Compilation compilation = compiled("""
                 data Divisor = Int
                     invariant value >= 1
-                behavior made : (n: Divisor) -> Int
-                let made (n) = Int.floorMod(100, n.value)
-                """);
-        Compilation handedAConstant = compiled("""
+                behavior declared : (n: Divisor) -> Int
+                let declared (n) = Int.floorMod(100, n.value)
                 behavior made : (n: Int) -> Int
                 let made (n) = Int.floorMod(100, n)
                 behavior chosen : (n: Int) -> Int
                 let chosen (n) = made(7) + n
                 """);
 
-        assertTrue(rowsRunsGetPast(declared, "made"));
-        assertFalse(rowsRunsGetPast(handedAConstant, "made"));
-        assertFalse(rowsRunsGetPast(handedAConstant, "chosen"));
+        assertTrue(rowsRunsGetPast(compilation, "declared"));
+        assertFalse(rowsRunsGetPast(compilation, "made"));
+        assertFalse(rowsRunsGetPast(compilation, "chosen"));
     }
 
     /** A value the body builds is asked by its definition, which is run where it is built. */
