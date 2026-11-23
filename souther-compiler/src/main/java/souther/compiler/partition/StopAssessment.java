@@ -239,14 +239,17 @@ final class StopAssessment {
     }
 
     /**
-     * Where the first stop {@code working} leaves untold is, as a report names it
-     * ({@link StopOrigin#of}): where the reading that left it found it
-     * ({@link NotAccountedFor#untoldAt}), and not every one there may be.
+     * Where a stop {@code working} leaves untold is, of those the quotients {@code each} asks do
+     * not account for, as a report names it ({@link StopOrigin#of}): chosen with the quotients
+     * whether anything is left is asked with ({@link NotAccountedFor#whereUnaccountedFor}), so the
+     * place told is one of what leaves the stop unresolved.
      */
     private static Optional<StopOrigin> untoldIn(UndividedByARelation.Working working,
+                                                 ComparisonReadings.Reading each,
                                                  InputReading read) {
         BehaviorAnswers answers = read.rules().declarations().answers();
-        return working.leftUntold().untoldAt().map(at -> StopOrigin.of(at, answers));
+        return working.leftUntold().whereUnaccountedFor(each.quotients())
+                .map(at -> StopOrigin.of(at, answers));
     }
 
     /** {@code places}, each that works out what an earlier one does on the same way left out. */
@@ -280,7 +283,7 @@ final class StopAssessment {
             if (left != null && working.aStopUntold()
                     && working.leavesUntoldBeyond(each.quotients())) {
                 out.add(new Judgement.Unresolved(null, WhyAStopIsNotShown.NO_OPERATION_TOLD,
-                        untoldIn(working, read)));
+                        untoldIn(working, each, read)));
             }
             List<UndividedByARelation.IntOperation> operations = working.operations();
             for (int at = 0; at < operations.size(); at++) {
@@ -597,7 +600,7 @@ final class StopAssessment {
         Evaluated.WorkedOutAfter after = workedOutAfter(each, siteNode);
         if (!everythingBeforeIsAccountedFor(each, working, after, workingAccountsForTheRest)) {
             return new Judgement.Unresolved(site, WhyAStopIsNotShown.NOT_EVERY_OPERATION_TOLD,
-                    untoldIn(working, read));
+                    untoldIn(working, each, read));
         }
         Optional<UndividedByARelation.Working> earlier = each.workedOutBeforeIt();
         if (earlier.isEmpty()) {
