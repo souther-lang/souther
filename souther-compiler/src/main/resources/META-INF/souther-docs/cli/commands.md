@@ -55,7 +55,7 @@ version itself:
 
 ```kotlin
 souther {
-    southerVersion = "0.4.0"
+    southerVersion = "0.5.0"
 }
 ```
 
