@@ -13770,9 +13770,9 @@ final class Pullback {
         // ({@link ComparisonReadings.Reading#quotients}), which asks only what every run works
         // out, and nothing on an arm.
         Once<AffineReading.WorkedOut> worksOut = new Once<>(() -> {
-            Once<AffineReading.OfAComparison> arithmetic = arithmeticOf(stated, there);
-            return new AffineReading.WorkedOut(worksOut(theRule, arithmetic).toGetPast(),
-                    asRead(theRule, arithmetic).stops());
+            AffineReading.WorkedOut asItIsRead = asRead(theRule, arithmeticOf(stated, there));
+            return theRule.working() == null ? asItIsRead
+                    : new AffineReading.WorkedOut(theRule.working(), asItIsRead.stops());
         });
         Once<StopEvidence> evaluated = new Once<>(() -> answered == null
                 ? StopEvidence.ofWhatIsToldOf(UndividedByARelation.Working.AS_THE_FORM)

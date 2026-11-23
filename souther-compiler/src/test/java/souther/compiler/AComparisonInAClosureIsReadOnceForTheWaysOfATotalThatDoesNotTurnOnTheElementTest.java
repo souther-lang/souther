@@ -46,11 +46,14 @@ class AComparisonInAClosureIsReadOnceForTheWaysOfATotalThatDoesNotTurnOnTheEleme
     /** The readings of one condition the compilations here are held to, a quarter of the figure
      *  declared, and in all twice that as the figure declared has them. The claims are about the
      *  ways a total is split, which the declared figure is asked of elsewhere. */
-    static final int MOST = 64;
+    private static final int MOST = 64;
 
-    private static final Allowances HELD = Allowances.DECLARED
-            .with(CompositionBudget.READINGS_OF_ONE_CONDITION, MOST)
-            .with(CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION, 2 * MOST);
+    /** The readings of one condition held to {@code most}, and in all to twice that. */
+    private static Allowances heldTo(int most) {
+        return Allowances.DECLARED
+                .with(CompositionBudget.READINGS_OF_ONE_CONDITION, most)
+                .with(CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION, 2 * most);
+    }
 
     /** How many constants walked against the total are more readings than one condition is read
      *  in, once for each way. */
@@ -79,9 +82,14 @@ class AComparisonInAClosureIsReadOnceForTheWaysOfATotalThatDoesNotTurnOnTheEleme
      * with or without the rows recording where each went.
      */
     private static String report(String body) {
-        return REPORTS.computeIfAbsent(body, each -> {
-            Compilation compilation = Compilation.ofSource(PREAMBLE + each, "Main")
-                    .allowing(HELD);
+        return report(body, MOST);
+    }
+
+    /** The same, with the readings of one condition held to {@code most}. */
+    private static String report(String body, int most) {
+        return REPORTS.computeIfAbsent(most + "\n" + body, _ -> {
+            Compilation compilation = Compilation.ofSource(PREAMBLE + body, "Main")
+                    .allowing(heldTo(most));
             compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.OFF));
             ACompiledModel.compiles(compilation);
             return AdequacyReport.of(compilation)
@@ -108,7 +116,12 @@ class AComparisonInAClosureIsReadOnceForTheWaysOfATotalThatDoesNotTurnOnTheEleme
     }
 
     static String reachedBy(String total, int rows) {
-        return report(walked("", total, rows));
+        return reachedBy(total, rows, MOST);
+    }
+
+    /** The same, with the readings of one condition held to {@code most}. */
+    static String reachedBy(String total, int rows, int most) {
+        return report(walked("", total, rows), most);
     }
 
     @Test
