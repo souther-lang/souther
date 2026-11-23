@@ -186,6 +186,12 @@ final class StopAssessment {
             return at;
         }
 
+        /** The same value, shown of {@code written}: the site this one is, with each value a run
+         *  works out it is over put as one way a row makes it, as it is written. */
+        Shown ofTheSiteAsWritten(Site written) {
+            return new Shown(written, at);
+        }
+
         @Override
         public String toString() {
             return site.written() + " at " + at;

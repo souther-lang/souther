@@ -23,10 +23,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * may pass an {@code Int} there: the stop is said of the rule, as one not resolved, and no reader
  * says a run may stop where nothing here says.
  *
- * <p>Kept only below a hundred, no way a run takes passes the type, and nothing is told: a stop
- * said on rows wider than the way's is found there, both where the total is read once for every
- * way and where it is read way by way, whose count splits inside each way. What a mean divides by
- * is no stop told here: the quotient is read as answering where the count is not nought.
+ * <p>Kept only below a hundred, no way a run takes passes the type in the total. A mean divides by
+ * how many are kept, though, and a {@code q} the filter keeps none of divides by nought: that stop
+ * is told at the division, whichever way the total is read.
  */
 class ATotalToldOnEachWayIsToldToEveryReaderOfWhatARunWorksOutTest {
 
@@ -57,9 +56,9 @@ class ATotalToldOnEachWayIsToldToEveryReaderOfWhatARunWorksOutTest {
         form("theConditionOfAChoice", "(if " + filtered(PAST) + " > 5 then 1 else 2) >= 2",
                 "told true, untold 0");
         form("aMean", meanOf(filtered(PAST), PAST), "told true, untold 0");
-        form("aMeanWithinTheType", meanOf(filtered(WITHIN), WITHIN), "told false, untold 0");
+        form("aMeanWithinTheType", meanOf(filtered(WITHIN), WITHIN), "told true, untold 0");
         form("aMeanOfChoicesWithinTheType", meanOf("List.sum(List.map(x -> if " + WITHIN
-                + " then x else 0, [q, q]))", WITHIN), "told false, untold 0");
+                + " then x else 0, [q, q]))", WITHIN), "told true, untold 0");
     }
 
     @Test

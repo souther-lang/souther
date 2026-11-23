@@ -2,9 +2,11 @@ package souther.compiler.partition;
 
 import souther.compiler.abort.AbortKind;
 import souther.compiler.abort.AbortSites;
+import souther.compiler.abort.GetsPast;
 import souther.compiler.check.ARowsRun;
 import souther.compiler.check.Choice;
 import souther.compiler.check.ClausesInOrder;
+import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.StopOrigin;
 import souther.compiler.check.ValueTemplates;
 import souther.compiler.check.WhatARunMayEndFor;
@@ -18,14 +20,19 @@ import souther.compiler.inputs.EveryRunStops;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.WhatKeepsEveryRunGoing;
 import souther.compiler.inputs.WhyAStopIsNotShown;
+import souther.compiler.inputs.WrittenOutElements;
+import souther.compiler.meaning.Proposition;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
+import souther.compiler.semantics.TakenAs;
+import souther.compiler.types.BinOp;
 import souther.compiler.types.Type;
 
 import java.math.BigInteger;
@@ -40,6 +47,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.BooleanSupplier;
+import java.util.function.Function;
 
 /**
  * Whether a run of a behavior stops at each step it may stop at: shown not to, shown to, or
@@ -475,6 +484,9 @@ final class StopsOfABody {
         List<StopAssessment.Site> out = new ArrayList<>();
         // An operation of two Ints is its operator over what its operands come to.
         UndividedByARelation.IntOperation own = ownOperation(node, reached.reads());
+        if (own == null) {
+            own = ownTotal(node, reached.reads());
+        }
         if (own != null) {
             return List.of(new StopAssessment.Site.PastItsEnds(own));
         }
@@ -497,7 +509,20 @@ final class StopsOfABody {
                     reached.reads(), read, new ElementsMet(),
                     AffineReading.Unkept.EVERY_NAME_AFRESH);
             if (divisor == null) {
-                return null;
+                // How many a list written out holds: one number, coming on each way of keeping
+                // its elements to how many are kept. Where every way keeps one, nothing stops.
+                Attainments count = ownCount(quotient.right(), reached.reads());
+                if (count == null) {
+                    return null;
+                }
+                if (!count.leftUnmade() && count.ways().stream().allMatch(way ->
+                        way.form().coefs().isEmpty() && !way.form().constant().isZero())) {
+                    return out;
+                }
+                NumericTerm held = heldAs(new Denotation(Core.withoutStanding(quotient.right()),
+                        reached.reads()));
+                countsHeld.put(held, count);
+                divisor = LinearForm.atom(held);
             }
             out.add(new StopAssessment.Site.ByNought(divisor));
         }
@@ -539,6 +564,252 @@ final class StopsOfABody {
         return new UndividedByARelation.IntOperation(worked,
                 BigInteger.valueOf(Long.MIN_VALUE), BigInteger.valueOf(Long.MAX_VALUE), List.of(),
                 true, new UndividedByARelation.IntOperation.Origin(node));
+    }
+
+    /** How many ways of keeping the elements of a list written out a total is read by
+     *  ({@link #ownTotal}) before the rest are said untried. */
+    private static final int MOST_WAYS_OF_KEEPING = 64;
+
+    /**
+     * The total {@code node} works out, where it is a total of whole numbers held to an
+     * {@code Int} ({@link GetsPast.WhereTheTotalFits}) over a list written out whose every element
+     * reads as a form of the input's numbers: one value, coming on each way of keeping the
+     * elements to the sum of those kept, under what keeping each and dropping the others asks of
+     * a row ({@link Attainment}), and lying within what each element kept comes to under what
+     * keeping it asks, or nought where it may be dropped. A way whose dropping is not read as
+     * relations is not made, and is said as left. Null where it is no such total.
+     */
+    private UndividedByARelation.IntOperation ownTotal(Core node, InputReads at) {
+        if (!(node instanceof Core.PreservedCall call) || call.type() != Type.INT
+                || !(WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(call)
+                        instanceof GetsPast.WhereTheTotalFits(int list))
+                || list >= call.args().size()) {
+            return null;
+        }
+        Keeping keeping = keeping(call.args().get(list), at, each -> AffineReading.formOf(
+                each.value(), each.at(), read, new ElementsMet(),
+                AffineReading.Unkept.EVERY_NAME_AFRESH));
+        if (keeping == null) {
+            return null;
+        }
+        // Every element kept on every row: the sum of them, as an addition written out is.
+        List<Attainment> ways = keeping.ways().ways();
+        LinearForm<UndividedByARelation.IntOperand> form = !keeping.ways().leftUnmade()
+                && ways.size() == 1 && ways.getFirst().holding().isEmpty()
+                ? ways.getFirst().form().over(term -> LinearForm.atom(
+                        new UndividedByARelation.IntOperand.OfTheInput(term)))
+                : LinearForm.atom(new UndividedByARelation.IntOperand.OfAValueWorkedOut(
+                        heldAs(new Denotation(node, at)),
+                        new WhereAValueComesFrom.Derived(keeping.range()), keeping.ways()));
+        return new UndividedByARelation.IntOperation(form,
+                BigInteger.valueOf(Long.MIN_VALUE), BigInteger.valueOf(Long.MAX_VALUE), List.of(),
+                true, new UndividedByARelation.IntOperation.Origin(node));
+    }
+
+    /**
+     * How many elements {@code node} says a list written out holds, where it is how many a list
+     * holds ({@link TakenAs.HowManyItHolds}): on each way of keeping them, as many as are kept
+     * ({@link #keeping}). Null where it is no such count.
+     */
+    private Attainments ownCount(Core node, InputReads at) {
+        if (!(Core.withoutStanding(node) instanceof Core.PreservedCall call)
+                || call.args().size() != 1
+                || !(DefaultBoundOperationFacts.get().takenAs(call.declared().operation())
+                        instanceof TakenAs.HowManyItHolds)) {
+            return null;
+        }
+        Keeping keeping = keeping(call.args().getFirst(), at,
+                _ -> LinearForm.constant(ExactRatio.ONE));
+        return keeping == null ? null : keeping.ways();
+    }
+
+    /**
+     * What a list written out comes to, each element worth what {@code worth} says, on each way
+     * of keeping its elements: the ways ({@link Attainment}), each the sum of what the elements
+     * kept are worth under what keeping each and dropping the others asks of a row, and the range
+     * that comes to.
+     */
+    private record Keeping(Attainments ways, FormRange range) {}
+
+    /**
+     * {@code listed}, a list written out, as {@link Keeping} says it, or null where it is no list
+     * written out, an element's worth is not read, or what keeping one asks is not read as
+     * relations of numbers of the input. A way whose dropping is not read so is not made, and is
+     * said as left.
+     */
+    private Keeping keeping(Core listed, InputReads at,
+                            Function<Denotation, LinearForm<NumericTerm>> worth) {
+        if (!(WrittenOutElements.of(new Denotation(listed, at), read.rules().symbols(),
+                read.rules().newtypes()) instanceof WrittenOutElements.Walked.Each written)) {
+            return null;
+        }
+        List<LinearForm<NumericTerm>> forms = new ArrayList<>();
+        List<List<TakenConstraint.Affine>> keptBy = new ArrayList<>();
+        List<List<List<TakenConstraint.Affine>>> droppedBy = new ArrayList<>();
+        FormRange range = new FormRange(ExactRatio.ZERO, ExactRatio.ZERO);
+        WhatConditionsState conditions = WhatConditionsState.of(read);
+        for (ReadMeaning.Occurrence each : written.asWritten()) {
+            LinearForm<NumericTerm> form = worth.apply(each.value());
+            if (form == null) {
+                return null;
+            }
+            List<TakenConstraint.Affine> kept = List.of();
+            // An element kept whatever the row is dropped on no way.
+            List<List<TakenConstraint.Affine>> dropped = List.of();
+            if (!each.keptWhere().isEmpty()) {
+                List<Proposition> asked = new ArrayList<>();
+                each.keptWhere().forEach(one -> asked.add(conditions.kept(one, read)));
+                Proposition keeping = Proposition.all(asked);
+                kept = relationsOf(keeping);
+                if (kept == null) {
+                    return null;
+                }
+                dropped = alternativesOf(keeping.denied());
+            }
+            FormRange one = FormRange.of(form, read, boundsUnder(form, kept));
+            if (one == null) {
+                return null;
+            }
+            range = FormRange.combined(BinOp.ADD, range, each.keptWhere().isEmpty() ? one
+                    : one.hull(new FormRange(ExactRatio.ZERO, ExactRatio.ZERO)));
+            if (range == null) {
+                return null;
+            }
+            forms.add(form);
+            keptBy.add(kept);
+            droppedBy.add(dropped);
+        }
+        List<Attainment> ways = new ArrayList<>();
+        boolean left = !waysOfKeeping(forms, keptBy, droppedBy, 0,
+                LinearForm.constant(ExactRatio.ZERO), new ArrayList<>(), ways);
+        return new Keeping(new Attainments(ways, left), range);
+    }
+
+    /** Each way of keeping the elements from {@code at} on, after {@code sofar} under
+     *  {@code holding}, into {@code out}, as many as {@link #MOST_WAYS_OF_KEEPING}: an element
+     *  kept, and dropped by each way its dropping holds ({@link #alternativesOf}). False where
+     *  some were left, for the figure or for a dropping not read. */
+    private static boolean waysOfKeeping(List<LinearForm<NumericTerm>> forms,
+                                         List<List<TakenConstraint.Affine>> keptBy,
+                                         List<List<List<TakenConstraint.Affine>>> droppedBy,
+                                         int at, LinearForm<NumericTerm> sofar,
+                                         List<TakenConstraint.Affine> holding,
+                                         List<Attainment> out) {
+        if (at == forms.size()) {
+            if (out.size() >= MOST_WAYS_OF_KEEPING) {
+                return false;
+            }
+            out.add(new Attainment(sofar, List.copyOf(holding)));
+            return true;
+        }
+        boolean all = true;
+        if (forms.get(at).plus(sofar) instanceof ExactAnswer.Held<LinearForm<NumericTerm>>(
+                var kept)) {
+            all = under(keptBy.get(at), holding, () ->
+                    waysOfKeeping(forms, keptBy, droppedBy, at + 1, kept, holding, out));
+        } else {
+            all = false;
+        }
+        if (droppedBy.get(at) == null) {
+            return false;
+        }
+        for (List<TakenConstraint.Affine> dropping : droppedBy.get(at)) {
+            all &= under(dropping, holding, () ->
+                    waysOfKeeping(forms, keptBy, droppedBy, at + 1, sofar, holding, out));
+        }
+        return all;
+    }
+
+    /**
+     * What {@code then} answers with {@code more} held beside {@code holding}, which is left as it
+     * was; true without asking it where one of {@code more} is the denial of one held, which no row
+     * meets both of.
+     */
+    private static boolean under(List<TakenConstraint.Affine> more,
+                                 List<TakenConstraint.Affine> holding, BooleanSupplier then) {
+        for (TakenConstraint.Affine each : more) {
+            if (holding.contains(new TakenConstraint.Affine(each.form(), each.rel().denied()))) {
+                return true;
+            }
+        }
+        int mark = holding.size();
+        holding.addAll(more);
+        try {
+            return then.getAsBoolean();
+        } finally {
+            holding.subList(mark, holding.size()).clear();
+        }
+    }
+
+    /** {@code stated} as the ways a row meets it, each the relations of numbers of the input it
+     *  meets: one for each part of a statement that holds where one of them does, or null where
+     *  one asks anything else of a row ({@link #relationsOf}). */
+    private List<List<TakenConstraint.Affine>> alternativesOf(Proposition stated) {
+        List<Proposition> parts = stated instanceof Proposition.Any(var any, var _, var _)
+                ? any : List.of(stated);
+        List<List<TakenConstraint.Affine>> out = new ArrayList<>();
+        for (Proposition part : parts) {
+            List<TakenConstraint.Affine> relations = relationsOf(part);
+            if (relations == null) {
+                return null;
+            }
+            out.add(relations);
+        }
+        return out;
+    }
+
+    /** {@code stated} as the relations of numbers of the input a row meets for it, or null where
+     *  it asks anything else of a row ({@link DemandReading#asked}). */
+    private List<TakenConstraint.Affine> relationsOf(Proposition stated) {
+        List<TakenConstraint.Affine> out = new ArrayList<>();
+        for (DemandReading.Read each : DemandReading.asked(stated, read)) {
+            if (each instanceof DemandReading.Read.Demands(
+                    RowDemand.Relational(TakenConstraint.Affine affine))) {
+                out.add(affine);
+            } else if (!(each instanceof DemandReading.Read.Settled(boolean thisWay) && thisWay)) {
+                return null;
+            }
+        }
+        return out;
+    }
+
+    /**
+     * The ends of each number of the input {@code form} is over, as its declaration and
+     * {@code holding} leave them: a relation of that number alone to a number written narrows
+     * them, and any other relation is not read.
+     */
+    private Map<NumericTerm, FormRange> boundsUnder(LinearForm<NumericTerm> form,
+                                                    List<TakenConstraint.Affine> holding) {
+        Map<NumericTerm, FormRange> out = new HashMap<>();
+        for (NumericTerm term : form.coefs().keySet()) {
+            FormRange ends = FormRange.endsOf(term, read);
+            if (ends == null) {
+                continue;
+            }
+            ExactRatio least = ends.least();
+            ExactRatio greatest = ends.greatest();
+            for (TakenConstraint.Affine each : holding) {
+                if (each.form().coefs().size() != 1 || !each.form().coefs().containsKey(term)) {
+                    continue;
+                }
+                ExactRatio coef = each.form().coefs().get(term);
+                if (!(each.form().constant().negated().dividedBy(coef)
+                        instanceof ExactAnswer.Held<ExactRatio>(var bound))) {
+                    continue;
+                }
+                Rel rel = coef.signum() > 0 ? each.rel() : each.rel().turned();
+                if ((rel == Rel.GE || rel == Rel.GT || rel == Rel.EQ)
+                        && (least == null || bound.compareTo(least) > 0)) {
+                    least = bound;
+                }
+                if ((rel == Rel.LE || rel == Rel.LT || rel == Rel.EQ)
+                        && (greatest == null || bound.compareTo(greatest) < 0)) {
+                    greatest = bound;
+                }
+            }
+            out.put(term, new FormRange(least, greatest));
+        }
+        return out;
     }
 
     /**
@@ -680,7 +951,9 @@ final class StopsOfABody {
                 }
             }
             case StopAssessment.Site.ByNought(var divisor) -> {
-                if (left.keepsAwayFromNought(divisor)) {
+                // A count held as one number is no place of the input the way leaves anything of.
+                if (divisor.coefs().keySet().stream().noneMatch(countsHeld::containsKey)
+                        && left.keepsAwayFromNought(divisor)) {
                     return new StopAssessment.Judgement.Safe(site,
                             StopAssessment.WhyNone.DIVISOR_AWAY_FROM_NOUGHT);
                 }
@@ -723,29 +996,43 @@ final class StopsOfABody {
                                                         WhatAWayLeavesOfAValue left,
                                                         List<TakenConstraint.Affine> way) {
         Map<NumericTerm, Attainments> worked = new LinkedHashMap<>();
-        if (site instanceof StopAssessment.Site.PastItsEnds(var operation)) {
-            valuesWorkedOutIn(operation, worked);
+        switch (site) {
+            case StopAssessment.Site.PastItsEnds(var operation) ->
+                    valuesWorkedOutIn(operation, worked);
+            case StopAssessment.Site.ByNought(var divisor) -> countsIn(divisor, worked);
         }
         gotPast.operations().forEach(each -> valuesWorkedOutIn(each, worked));
+        gotPast.divisors().forEach(each -> countsIn(each, worked));
         if (worked.isEmpty()) {
             return StopAssessment.aStopLookedFor(site, gotPast.operations(), gotPast.divisors(),
                     left, way, read);
         }
         List<NumericTerm> values = List.copyOf(worked.keySet());
         List<Map<NumericTerm, Attainment>> ways = new ArrayList<>();
-        boolean cutShort = !waysOf(values, 0, new LinkedHashMap<>(), worked, ways);
+        boolean cutShort = !waysOf(values, 0, new LinkedHashMap<>(), new ArrayList<>(way), worked,
+                ways);
         StopAssessment.Judgement first = null;
         for (Map<NumericTerm, Attainment> one : ways) {
             List<TakenConstraint.Affine> holding = new ArrayList<>(way);
             one.values().forEach(each -> holding.addAll(each.holding()));
             List<UndividedByARelation.IntOperation> before = new ArrayList<>();
             gotPast.operations().forEach(each -> before.add(atTheWay(each, one)));
-            StopAssessment.Site there = site instanceof StopAssessment.Site.PastItsEnds(var op)
-                    ? new StopAssessment.Site.PastItsEnds(atTheWay(op, one)) : site;
+            List<LinearForm<NumericTerm>> divisors = new ArrayList<>();
+            gotPast.divisors().forEach(each -> divisors.add(atTheWay(each, one)));
+            StopAssessment.Site there = switch (site) {
+                case StopAssessment.Site.PastItsEnds(var op) ->
+                        new StopAssessment.Site.PastItsEnds(atTheWay(op, one));
+                case StopAssessment.Site.ByNought(var divisor) ->
+                        new StopAssessment.Site.ByNought(atTheWay(divisor, one));
+            };
             StopAssessment.Judgement judged = StopAssessment.aStopLookedFor(there, before,
-                    gotPast.divisors(), left, holding, read);
-            if (judged instanceof StopAssessment.Judgement.Stops) {
-                return judged;
+                    divisors, left, holding, read);
+            if (judged instanceof StopAssessment.Judgement.Stops(var shown)) {
+                // An operation is said as the sum the way makes it, over numbers of the input; a
+                // divisor a way makes a number written is said as it is written.
+                return site instanceof StopAssessment.Site.ByNought
+                        ? new StopAssessment.Judgement.Stops(shown.ofTheSiteAsWritten(site))
+                        : judged;
             }
             if (first == null) {
                 first = judged;
@@ -769,11 +1056,38 @@ final class StopsOfABody {
         }
     }
 
+    /** Each count held as one number ({@link #countsHeld}) {@code divisor} is over, with the ways
+     *  a row makes it a number, into {@code out}. */
+    private void countsIn(LinearForm<NumericTerm> divisor, Map<NumericTerm, Attainments> out) {
+        if (divisor == null) {
+            return;
+        }
+        for (NumericTerm each : divisor.coefs().keySet()) {
+            if (countsHeld.get(each) instanceof Attainments ways) {
+                out.putIfAbsent(each, ways);
+            }
+        }
+    }
+
+    /** {@code form} over numbers of the input, each value held as one number put as {@code ways}
+     *  says a row makes it; itself where it is over none. */
+    private static LinearForm<NumericTerm> atTheWay(LinearForm<NumericTerm> form,
+                                                    Map<NumericTerm, Attainment> ways) {
+        return form == null ? null : form.over(each -> ways.get(each) instanceof Attainment way
+                ? way.form() : LinearForm.atom(each));
+    }
+
+    /** How many a list written out holds, where a divisor is over it, held as one number
+     *  ({@link #heldAs}), with the ways a row makes it a number ({@link #ownCount}). */
+    private final Map<NumericTerm, Attainments> countsHeld = new HashMap<>();
+
     /** Every way of putting a way of each of {@code values} from {@code at} on, after
-     *  {@code sofar}, into {@code out}, as many as {@link #MOST_WAYS_TRIED}; false where more were
-     *  left, or some value's ways were left unmade. */
+     *  {@code sofar} under {@code holding}, into {@code out}, as many as
+     *  {@link #MOST_WAYS_TRIED}: none whose relations deny each other ({@link #under}). False
+     *  where more were left, or some value's ways were left unmade. */
     private static boolean waysOf(List<NumericTerm> values, int at,
                                   Map<NumericTerm, Attainment> sofar,
+                                  List<TakenConstraint.Affine> holding,
                                   Map<NumericTerm, Attainments> worked,
                                   List<Map<NumericTerm, Attainment>> out) {
         if (at == values.size()) {
@@ -787,7 +1101,8 @@ final class StopsOfABody {
         boolean all = !ways.leftUnmade();
         for (Attainment way : ways.ways()) {
             sofar.put(values.get(at), way);
-            all &= waysOf(values, at + 1, sofar, worked, out);
+            all &= under(way.holding(), holding, () ->
+                    waysOf(values, at + 1, sofar, holding, worked, out));
             sofar.remove(values.get(at));
         }
         return all;
