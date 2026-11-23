@@ -101,9 +101,8 @@ class ARowThatTellsALineFromTheOneBesideItIsComposedTest {
      * instead, the search was never made and the block said nothing while the report asked for a
      * row.
      *
-     * <p>What comes back here is a figure of this compiler's rather than a row, which is the other
-     * half of the same rule: a side is never settled by looking, so what such a search says is that
-     * it left something untried. That is a thing an author can act on; silence is not.
+     * <p>The search finds one: {@code (1, 3)} is above {@code y <= 2x} and on {@code y <= 3x}, so
+     * the two lines answer it differently. It is offered as a row, and the sentence names it.
      */
     @Test
     void aLineOnAnOrderWithNoValueBesideItIsStillSearched() {
@@ -126,12 +125,12 @@ class ARowThatTellsALineFromTheOneBesideItIsComposedTest {
                 """);
 
         assertEquals(List.of("no row tells `-2 * x + y = 0` from `-3 * x + y = 0`,"
-                        + " and a row at `x = -1, y = -2` would"), findings(report),
+                        + " and a row at `x = 1, y = 3` would"), findings(report),
                 () -> "the rows meet every point this order owes one at and still leave a line"
                         + " standing:\n" + report);
-        assertTrue(report.contains("no row for `-2 * x + y = 0 against -3 * x + y = 0` in `f`"),
-                () -> "and the block says what looking for a row came to, rather than passing"
-                        + " over a line whose point against it the order cannot write:\n" + report);
+        assertEquals(List.of("(1m, 3m)"), offered(report),
+                () -> "and the block offers the row the search found, rather than passing over a"
+                        + " line whose point against it the order cannot write:\n" + report);
     }
 
     /** The model, with the rows handed in. */

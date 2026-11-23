@@ -129,7 +129,8 @@ final class WholeValuesMeeting {
         fixedBy.forEach(each -> given.remove(each.getKey()));
         List<NumericTerm> terms = inOrder.walking(given, term -> term);
         List<LaterNumbersEliminated.Bound<NumericTerm>> bounds = new ArrayList<>();
-        left.forEach(each -> boundsOf(each, bounds));
+        left.forEach(each -> bounds.addAll(
+                LaterNumbersEliminated.Bound.stated(each.form(), each.rel())));
         for (NumericTerm term : terms) {
             NumericDomain.Bounds ends = declared.apply(term);
             List<TakenConstraint.Affine> within = ends == null ? null
@@ -137,7 +138,8 @@ final class WholeValuesMeeting {
             if (within == null) {
                 return NONE_SHOWN;
             }
-            within.forEach(each -> boundsOf(each, bounds));
+            within.forEach(each -> bounds.addAll(
+                    LaterNumbersEliminated.Bound.stated(each.form(), each.rel())));
         }
         LaterNumbersEliminated<NumericTerm> eliminated =
                 LaterNumbersEliminated.of(bounds, terms, pairs);
@@ -179,25 +181,6 @@ final class WholeValuesMeeting {
                         declared.apply(each.getKey()) instanceof NumericDomain.Bounds ends
                                 && ends.admits(each.getValue()));
         return met ? new Witness.Found(out, eliminated.pairsCombined()) : notShown;
-    }
-
-    /** Adds to {@code into} the bounds {@code statement} states: none for a value held out, which
-     *  leaves a sum on either side of it. */
-    private static void boundsOf(TakenConstraint.Affine statement,
-                                 List<LaterNumbersEliminated.Bound<NumericTerm>> into) {
-        LinearForm<NumericTerm> form = statement.form();
-        switch (statement.rel()) {
-            case LT -> into.add(new LaterNumbersEliminated.Bound<>(form, true));
-            case LE -> into.add(new LaterNumbersEliminated.Bound<>(form, false));
-            case GT -> into.add(new LaterNumbersEliminated.Bound<>(form.negate(), true));
-            case GE -> into.add(new LaterNumbersEliminated.Bound<>(form.negate(), false));
-            case EQ -> {
-                into.add(new LaterNumbersEliminated.Bound<>(form, false));
-                into.add(new LaterNumbersEliminated.Bound<>(form.negate(), false));
-            }
-            case NE -> {
-            }
-        }
     }
 
     /** An equality among {@code statements} of two numbers or more, or null where none is. */

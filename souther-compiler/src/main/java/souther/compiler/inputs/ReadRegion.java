@@ -5,6 +5,7 @@ import souther.compiler.check.HeldClass;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.PartId;
 import souther.compiler.check.RuleRef;
+import souther.compiler.numeric.LaterNumbersEliminated;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedRuns;
@@ -52,6 +53,11 @@ record ReadRegion(ReadQuantities within) implements SearchRegion {
                     taken == within ? this : new ReadRegion(taken));
             case ReadQuantities.Taking.Refused(Refusal why) -> new Assumption.Refused(why);
         };
+    }
+
+    @Override
+    public List<LaterNumbersEliminated.Bound<NumericTerm>> boundsTakenIn() {
+        return within.boundsTakenIn();
     }
 
     @Override

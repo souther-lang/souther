@@ -93,6 +93,19 @@ public sealed interface LaterNumbersEliminated<A> {
      * @param <A> what a number is called
      */
     record Bound<A>(LinearForm<A> form, boolean strict) {
+
+        /** The bounds {@code form rel 0} states: two for an equation, and none for a value held
+         *  out, which leaves the form on either side of it. */
+        public static <A> List<Bound<A>> stated(LinearForm<A> form, Rel rel) {
+            return switch (rel) {
+                case LT -> List.of(new Bound<>(form, true));
+                case LE -> List.of(new Bound<>(form, false));
+                case GT -> List.of(new Bound<>(form.negate(), true));
+                case GE -> List.of(new Bound<>(form.negate(), false));
+                case EQ -> List.of(new Bound<>(form, false), new Bound<>(form.negate(), false));
+                case NE -> List.of();
+            };
+        }
     }
 
     /**

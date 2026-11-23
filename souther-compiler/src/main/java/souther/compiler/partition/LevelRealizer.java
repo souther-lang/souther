@@ -15,6 +15,8 @@ import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.Granularity;
+import souther.compiler.numeric.LaterNumbersEliminated;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
@@ -32,8 +34,10 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -2049,8 +2053,126 @@ public final class LevelRealizer {
 
         Reached solve(ExactRatio target) {
             Reached direct = straight ? straightDescent(target) : null;
-            return direct != null ? direct : walk(0, target, within);
+            if (direct != null) {
+                return direct;
+            }
+            levels = eliminated();
+            return levels == null ? Reached.EXHAUSTED : walk(0, target, within);
         }
+
+        /**
+         * For each position, at its place in the walk, the bounds the forms the region took in leave
+         * it and the positions before it once those after it are eliminated
+         * ({@link LaterNumbersEliminated}); null where they leave no rational assignment at all,
+         * which is a proof that the region holds none.
+         *
+         * <p>What lets the walk give each position only values the rest can complete. The region
+         * reads those forms one bound at a time, and where a bound weighs three positions or more it
+         * leaves a position wider than the bounds together do; the walk would then try value after
+         * value of it that no values of the positions after it complete, each shown to leave nothing
+         * only once enough of them are fixed. Eliminated in the walk's order, the bounds at a
+         * position's level, with the positions before it at their values, leave exactly the
+         * values some rational values of the rest complete.
+         *
+         * <p>The pairs the elimination puts together are steps of this search: they are its work,
+         * counted where its walks are. Where it stops short, the positions it did not reach are
+         * walked by what the region alone leaves them, as before.
+         */
+        private List<List<LaterNumbersEliminated.Bound<NumericTerm>>> eliminated() {
+            List<LaterNumbersEliminated.Bound<NumericTerm>> bounds = within.boundsTakenIn();
+            List<NumericTerm> order = new ArrayList<>();
+            terms.forEach(each -> order.add(each.getKey().term()));
+            Set<NumericTerm> after = new LinkedHashSet<>();
+            bounds.forEach(each -> after.addAll(each.form().coefs().keySet()));
+            after.removeAll(order);
+            order.addAll(after);
+            LaterNumbersEliminated<NumericTerm> eliminated = LaterNumbersEliminated.of(bounds,
+                    order, Math.max(0, STEPS_A_SEARCH_MAY_TAKE - steps.taken));
+            steps.taken += (int) Math.min(eliminated.pairsCombined(), Integer.MAX_VALUE);
+            return switch (eliminated) {
+                case LaterNumbersEliminated.Eliminated<NumericTerm> all -> all.levels();
+                case LaterNumbersEliminated.NoneLeft<NumericTerm> _ -> null;
+                case LaterNumbersEliminated.StoppedShort<NumericTerm> stopped -> {
+                    List<List<LaterNumbersEliminated.Bound<NumericTerm>>> reached =
+                            new ArrayList<>();
+                    for (int place = 0; place < stopped.place(); place++) {
+                        reached.add(List.of());
+                    }
+                    reached.addAll(stopped.reached());
+                    yield reached;
+                }
+            };
+        }
+
+        /**
+         * Where the bounds at position {@code i}'s level leave it with the positions before it at
+         * the values the walk gave them ({@link #eliminated}); open where its level holds none.
+         *
+         * <p>An end no decimal writes is rounded inward to the next whole number where the position
+         * is whole, and left off where it is not: a range left wider holds every value the bounds
+         * leave, which is the direction the walk depends on.
+         */
+        private NumericDomain.Bounds leftByWhatWasTakenIn(int i) {
+            if (i >= levels.size() || levels.get(i).isEmpty()) {
+                return NumericDomain.Bounds.OPEN;
+            }
+            Map<NumericTerm, ExactRatio> given = new HashMap<>();
+            for (int j = 0; j < i; j++) {
+                if (!(at[j] instanceof Count count)) {
+                    return NumericDomain.Bounds.OPEN;
+                }
+                given.put(terms.get(j).getKey().term(), count.exactly());
+            }
+            NumericTerm term = terms.get(i).getKey().term();
+            boolean whole = carriers[i].spacing() == Granularity.DISCRETE;
+            Endpoint min = null;
+            Endpoint max = null;
+            for (LaterNumbersEliminated.Bound<NumericTerm> each : levels.get(i)) {
+                ExactRatio weight = each.form().coefs().get(term);
+                Map<NumericTerm, ExactRatio> others = new LinkedHashMap<>(each.form().coefs());
+                others.remove(term);
+                ExactRatio rest = WholeValuesMeeting.valueOf(
+                        new LinearForm<>(each.form().constant(), others), given);
+                // weight · term + rest is below nought, so term is on one side of -rest / weight.
+                if (weight == null || rest == null || !(rest.negated().dividedBy(weight)
+                        instanceof ExactAnswer.Held<ExactRatio>(ExactRatio end))) {
+                    continue;
+                }
+                boolean above = weight.signum() > 0;
+                Endpoint at = endAt(end, each.strict(), above, whole);
+                if (at == null) {
+                    continue;
+                }
+                if (above) {
+                    max = Endpoint.upper(max, at);
+                } else {
+                    min = Endpoint.lower(min, at);
+                }
+            }
+            return new NumericDomain.Bounds(min, max);
+        }
+
+        /** The end {@code end} puts a position at: below it where {@code above} and over it
+         *  otherwise, short of it where {@code strict}; null where no place can be written. */
+        private static Endpoint endAt(ExactRatio end, boolean strict, boolean above,
+                                      boolean whole) {
+            if (whole) {
+                ExactAnswer<BigInteger> next = above ? end.floor() : end.ceiling();
+                if (!(next instanceof ExactAnswer.Held<BigInteger>(BigInteger at))) {
+                    return null;
+                }
+                if (strict && end.isWhole()) {
+                    at = above ? at.subtract(BigInteger.ONE) : at.add(BigInteger.ONE);
+                }
+                return Endpoint.inclusive(Count.of(new BigDecimal(at)));
+            }
+            return end.writtenDecimal() instanceof ExactAnswer.Held<Optional<BigDecimal>>(
+                    Optional<BigDecimal> written) && written.isPresent()
+                    ? new Endpoint(Count.of(written.get()), !strict) : null;
+        }
+
+        /** What {@link #eliminated} left each position, once the walk asked. */
+        private List<List<LaterNumbersEliminated.Bound<NumericTerm>>> levels;
 
         /**
          * The walk's first candidate at every position, taken against the runs the positions had
@@ -2216,6 +2338,10 @@ public final class LevelRealizer {
                     return Reached.EXHAUSTED;
                 }
                 case null -> runs = NumericDomain.Bounds.OPEN;
+            }
+            runs = runs.meet(leftByWhatWasTakenIn(i));
+            if (!runs.holdsAValue()) {
+                return Reached.EXHAUSTED;
             }
             // Narrowed by what the positions after this one can add up to. Left at the position's own
             // ends, a box a million wide is walked a million times and the budget runs out on

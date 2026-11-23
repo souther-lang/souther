@@ -3,6 +3,7 @@ package souther.compiler.inputs;
 import souther.compiler.check.HeldClass;
 import souther.compiler.check.PartId;
 import souther.compiler.check.RuleRef;
+import souther.compiler.numeric.LaterNumbersEliminated;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedRuns;
@@ -99,6 +100,21 @@ public interface SearchRegion {
      * as one the search was narrowed by, or by giving up on what it was composing.
      */
     Assumption assuming(LinearForm<NumericTerm> form, Rel rel);
+
+    /**
+     * The bounds every form taken in here states ({@link #assuming(LinearForm, Rel)}), as they were
+     * said.
+     *
+     * <p>What was taken in and not what the region worked it out to. The region reads them with
+     * the declarations one bound at a time, which can leave a position wider than the bounds
+     * together do where a bound weighs three positions or more; a reader that eliminates them
+     * together reads them exactly. Every one is implied by the region, so whatever a reader
+     * concludes from them holds of every row the region holds. A region that took nothing in
+     * states none, which is what the default is.
+     */
+    default List<LaterNumbersEliminated.Bound<NumericTerm>> boundsTakenIn() {
+        return List.of();
+    }
 
     /**
      * What asking a region to take a constraint in came to.
