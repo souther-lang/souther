@@ -104,9 +104,10 @@ public record ToBeChangedFirst(String name, String behavior)
     }
 
     private static List<AComparisonRead> read(Db db, String name, String behavior) {
-        List<AComparisonRead> read = !Adequacy.leavesWhatIsToBeChanged(db)
-                || !Adequacy.chosen(db, name, behavior) ? null
-                : db.ask(new Adequacy.ComparisonsRead(name, behavior)).value();
+        if (!Adequacy.leavesWhatIsToBeChanged(db) || !Adequacy.chosen(db, name, behavior)) {
+            return List.of();
+        }
+        List<AComparisonRead> read = db.ask(new Adequacy.ComparisonsRead(name, behavior)).value();
         return read == null ? List.of() : read;
     }
 
