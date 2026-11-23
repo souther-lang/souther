@@ -422,6 +422,34 @@ public class EveryShippedMessageCatalogIsCompleteAndValidTest {
     }
 
     /**
+     * An apostrophe in a message filled by position is written {@code ''}, or quotes a brace.
+     *
+     * <p>The check above sees a lone {@code '} only where a placeholder follows it. A message with
+     * none after it renders without its apostrophe and with nothing else wrong, so {@code an
+     * installed backend's own} reaches the reader as {@code backends own}. Read off the text: with
+     * {@code ''} and a quoted brace taken out, an apostrophe left over is one the formatter drops.
+     */
+    @Test
+    void everyApostropheInAMessageFilledByPositionIsWrittenTwice() throws IOException {
+        List<String> dropped = new ArrayList<>();
+        for (Catalog catalog : catalogs()) {
+            Properties messages = load(catalog.path());
+            for (String key : messages.stringPropertyNames()) {
+                if (ownedByAMessage().contains(key)) {
+                    continue;   // filled by name, where an apostrophe is itself
+                }
+                String template = messages.getProperty(key);
+                String rest = template.replace("''", "").replace("'{'", "").replace("'}'", "");
+                if (rest.indexOf('\'') >= 0) {
+                    dropped.add(catalog.name() + ": " + key + " -> " + template);
+                }
+            }
+        }
+        dropped.sort(String::compareTo);
+        assertEquals(List.of(), dropped, "write a literal apostrophe as `''`");
+    }
+
+    /**
      * Every definition is spelled {@code key=value} on one line.
      *
      * <p>The check below reads a catalog line by line to see a key defined twice, which
