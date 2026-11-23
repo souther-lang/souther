@@ -2,6 +2,8 @@ package souther.compiler.partition;
 
 import souther.compiler.abort.AbortKind;
 import souther.compiler.abort.AbortSet;
+import souther.compiler.check.BehaviorAnswers;
+import souther.compiler.check.CallPassage;
 import souther.compiler.check.WhatARunMayEndFor;
 import souther.compiler.core.Core;
 import souther.compiler.core.Evaluated;
@@ -153,8 +155,18 @@ final class StopAssessment {
         /** Some run stops at the site {@code shown} names. */
         record Stops(Shown shown) implements Judgement {}
 
-        /** Neither is shown of {@code site}, or, where that is null, of a stop no site names. */
-        record Unresolved(Site site, WhyAStopIsNotShown why) implements Judgement {}
+        /**
+         * Neither is shown of {@code site}, or, where that is null, of a stop no site names; of
+         * a stop left untold in a call of a behavior, {@code call} is that call, with what the
+         * behavior is told of, and null of any other.
+         */
+        record Unresolved(Site site, WhyAStopIsNotShown why, CallPassage.WhyOpen.ACall call)
+                implements Judgement {
+
+            Unresolved(Site site, WhyAStopIsNotShown why) {
+                this(site, why, null);
+            }
+        }
     }
 
     /**
@@ -226,6 +238,28 @@ final class StopAssessment {
                 .anyMatch(Judgement.Stops.class::isInstance);
     }
 
+    /**
+     * A stop {@code working} leaves untold, as unresolved: in each call of a behavior where the
+     * reading that left it said one ({@link NotAccountedFor#calls}), with what the behavior is told
+     * of, and otherwise in something that is no operation told. The calls are where the reading
+     * found a stop left untold, and not every one there may be.
+     */
+    private static List<Judgement> untoldStopsOf(UndividedByARelation.Working working,
+                                                 InputReading read) {
+        List<NotAccountedFor.ACall> calls = working.leftUntold().calls();
+        if (calls.isEmpty()) {
+            return List.of(new Judgement.Unresolved(null, WhyAStopIsNotShown.NO_OPERATION_TOLD));
+        }
+        BehaviorAnswers answers = read.rules().declarations().answers();
+        List<Judgement> out = new ArrayList<>();
+        for (NotAccountedFor.ACall call : calls) {
+            out.add(new Judgement.Unresolved(null, WhyAStopIsNotShown.IN_A_CALL,
+                    new CallPassage.WhyOpen.ACall(call.at(), call.behavior(),
+                            answers.passageOf(call.behavior()))));
+        }
+        return out;
+    }
+
     /** {@code places}, each that works out what an earlier one does on the same way left out. */
     private static List<Place> distinctPlaces(List<Place> places) {
         Map<List<Object>, Place> kept = new LinkedHashMap<>();
@@ -256,7 +290,7 @@ final class StopAssessment {
                     ? WhatAWayLeavesOfAValue.along(read, place.way()) : null;
             if (left != null && working.aStopUntold()
                     && working.leavesUntoldBeyond(each.quotients())) {
-                out.add(new Judgement.Unresolved(null, WhyAStopIsNotShown.NO_OPERATION_TOLD));
+                out.addAll(untoldStopsOf(working, read));
             }
             List<UndividedByARelation.IntOperation> operations = working.operations();
             for (int at = 0; at < operations.size(); at++) {
@@ -494,7 +528,7 @@ final class StopAssessment {
     static boolean mayDivideByNought(List<Judgement> judged) {
         return judged.stream().anyMatch(each -> each instanceof Judgement.Stops(Shown shown)
                 ? shown.site() instanceof Site.ByNought
-                : each instanceof Judgement.Unresolved(var site, var _)
+                : each instanceof Judgement.Unresolved(var site, var _, var _)
                         && site instanceof Site.ByNought);
     }
 
@@ -536,12 +570,14 @@ final class StopAssessment {
     }
 
     /** Each operation {@code judged} leave unresolved, as written, and why, in the order they were
-     *  judged: none written where no operation names the stop. */
+     *  judged: none written where no operation names the stop, and the call where a call of a
+     *  behavior leaves it untold. */
     static List<AStopNotShown> stopsNotShown(List<Judgement> judged) {
         List<AStopNotShown> out = new ArrayList<>();
         for (Judgement each : judged) {
-            if (each instanceof Judgement.Unresolved(var site, WhyAStopIsNotShown why)) {
-                out.add(new AStopNotShown(Optional.ofNullable(site).map(Site::written), why));
+            if (each instanceof Judgement.Unresolved(var site, WhyAStopIsNotShown why, var call)) {
+                out.add(new AStopNotShown(Optional.ofNullable(site).map(Site::written), why,
+                        Optional.ofNullable(call)));
             }
         }
         return out;

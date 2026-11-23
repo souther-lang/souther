@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.abort.GetsPast;
 import souther.compiler.check.AffineForms;
+import souther.compiler.check.AnOperationApplied;
 import souther.compiler.check.Choice;
 import souther.compiler.check.ClausesInOrder;
 import souther.compiler.check.CallArguments;
@@ -1240,7 +1241,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             private void ownWorkingPassedOver(Core node, InputReads at) {
                 Denotation worked = new Denotation(node, at);
                 if (reached.leavesItsOwnStopUntold(worked)) {
-                    told.passedOverWhatMayEndARun();
+                    told.passedOverTheOwnStopOf(node);
                 } else if (!reached.endsNoRunWhereItWasPassedOver(worked)) {
                     told.toldOnlyForWhereARunStops();
                 }
@@ -3142,14 +3143,35 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          */
         void passedOver(WorkedOutToReachIt reached, Denotation skipped,
                         Predicate<Denotation> tells) {
-            if (reached.endsNoRunWhereItWasPassedOver(skipped)) {
+            Optional<Denotation> stop = reached.whereARunMayEndWhereItWasPassedOver(skipped);
+            if (stop.isEmpty()) {
                 return;
             }
             leavingSomethingUntold();
-            if (tells == null || !reached.besideWhatIsTold(value -> toldAt(value.value()))
-                    .endsNoRunUntoldWhereItWasPassedOver(skipped, tells)) {
+            Optional<Denotation> untoldStop = tells == null ? stop
+                    : reached.besideWhatIsTold(value -> toldAt(value.value()))
+                            .whereAStopIsLeftUntoldWhereItWasPassedOver(skipped, tells);
+            if (untoldStop.isPresent()) {
                 aStopUntold = true;
+                aCallLeftUntoldAt(untoldStop.get().value());
             }
+        }
+
+        /** That where a stop was left untold is {@code at}, which is said where it is a call of
+         *  a behavior ({@link NotAccountedFor#calls}). */
+        private void aCallLeftUntoldAt(Core at) {
+            if (AnOperationApplied.of(at) instanceof AnOperationApplied applied
+                    && applied.operation() instanceof ValueName.Behavior called) {
+                untold = untold.join(NotAccountedFor.aCall(
+                        new NotAccountedFor.ACall(called, Core.withoutStanding(at).pos())));
+            }
+        }
+
+        /** That the own working of {@code node}, which may end a run, was passed over unread: the
+         *  stop is left untold at {@code node} ({@link #aCallLeftUntoldAt}). */
+        void passedOverTheOwnStopOf(Core node) {
+            passedOverWhatMayEndARun();
+            aCallLeftUntoldAt(node);
         }
 
         /** That something a run works out, and which may end it, was passed over unread. */
@@ -3179,7 +3201,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
 
         private void leavingSomethingUntold() {
             exact = false;
-            untold = NotAccountedFor.SOMETHING_ELSE;
+            untold = untold.join(NotAccountedFor.SOMETHING_ELSE);
         }
 
         /**
@@ -3196,7 +3218,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          */
         void aStopWhereNoRowIs() {
             aStopUntold = true;
-            untold = NotAccountedFor.SOMETHING_ELSE;
+            untold = untold.join(NotAccountedFor.SOMETHING_ELSE);
         }
 
         /**

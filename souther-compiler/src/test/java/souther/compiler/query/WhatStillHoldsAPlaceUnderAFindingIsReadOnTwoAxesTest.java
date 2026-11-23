@@ -187,14 +187,34 @@ class WhatStillHoldsAPlaceUnderAFindingIsReadOnTwoAxesTest {
                                 + " construction is told what it asks, or show that nothing"
                                 + " carrying a rule a run may stop in crosses a module boundary")));
         // A construction on the way to a rule of which neither a stop nor none is shown, held with
-        // why. The same place as above, said by the same words and document, and seen by nothing
-        // a compile of the models answers.
+        // why. The same place as above, said by the same words and document. The models reach
+        // it, and no two of them were seen differing only there.
         out.put("souther.compiler.inputs.AConstructionStopNotShown.at",
-                new Standing(new Because.NothingReachesOne(),
+                new Standing(new Because.ReachedAndNotObservedToDiscriminate(),
                         new AcrossTheCut.BlocksIt("say where the construction is written as the"
                                 + " module, line and column the report says, made where the"
                                 + " construction is judged, or show that nothing carrying a rule"
                                 + " whose stop is not resolved crosses a module boundary")));
+        // A call of a behavior a run may stop in, under a rule whose stop is not resolved, and
+        // each place in the called bodies down to where the proof that a run gets past gave out:
+        // the call, the construction or the expression there. Each is where it is written, which
+        // the words and the document say as a line and a column, and the place may be in another
+        // module than the rule's, the one the called behavior is declared in. The models reach a
+        // call, and no two of them were seen differing only there; nothing they reach is a
+        // construction or an expression left open in a body called.
+        String sayWhereACallLeavesItOpen = "say where each is written as the module, line and"
+                + " column the report says, made where the called behavior is asked of its body,"
+                + " or show that nothing carrying a rule whose stop is not resolved crosses a"
+                + " module boundary";
+        out.put("souther.compiler.check.CallPassage$WhyOpen$ACall.at",
+                new Standing(new Because.ReachedAndNotObservedToDiscriminate(),
+                        new AcrossTheCut.BlocksIt(sayWhereACallLeavesItOpen)));
+        out.put("souther.compiler.check.CallPassage$WhyOpen$AConstruction.at",
+                new Standing(new Because.NothingReachesOne(),
+                        new AcrossTheCut.BlocksIt(sayWhereACallLeavesItOpen)));
+        out.put("souther.compiler.check.CallPassage$WhyOpen$SomethingWorkedOut.at",
+                new Standing(new Because.NothingReachesOne(),
+                        new AcrossTheCut.BlocksIt(sayWhereACallLeavesItOpen)));
         return out;
     }
 

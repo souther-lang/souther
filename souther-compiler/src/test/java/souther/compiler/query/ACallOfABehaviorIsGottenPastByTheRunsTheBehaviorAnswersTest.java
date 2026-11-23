@@ -2,11 +2,18 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 import souther.compiler.ACompiledModel;
+import souther.compiler.DocumentShape;
+import souther.compiler.check.CallPassage;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.report.AdequacyReport;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -44,8 +51,264 @@ class ACallOfABehaviorIsGottenPastByTheRunsTheBehaviorAnswersTest {
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
-    private static boolean rowsRunsGetPast(Compilation compilation, String behavior) {
+    private static CallPassage passageOf(Compilation compilation, String behavior) {
         return compilation.db().ask(new Adequacy.RowsRunsGetPast("m", behavior)).value();
+    }
+
+    private static boolean rowsRunsGetPast(Compilation compilation, String behavior) {
+        return passageOf(compilation, behavior).getsPast();
+    }
+
+    /** What {@code behavior} is told of, where it is left open. */
+    private static CallPassage.WhyOpen whyOpen(Compilation compilation, String behavior) {
+        return assertInstanceOf(CallPassage.Open.class, passageOf(compilation, behavior)).why();
+    }
+
+    /** The lines of the report that say a stop is not resolved. */
+    private static List<String> notResolved(String report) {
+        return report.lines().filter(line -> line.contains(NOT_RESOLVED)).toList();
+    }
+
+    /** A called behavior whose {@code None} arm is {@code none}, a premise it states, and
+     *  {@code scoring} written in place of its {@code Some} arm; a row past twelve only where the
+     *  scoring clamps, since a construction of it aborts that row otherwise. */
+    private static String throwsScored(String scoring, String none) {
+        String pastTwelve = scoring.equals(CLAMPED)
+                ? "    | \"13 clamps to twelve\" : (Throw([13])) -> true\n" : "";
+        return """
+                data Points = Int
+                    invariant value >= 0 && value <= 12
+
+                data Throw = List<Int>
+
+                behavior scoreOf : (t: Throw) -> Points
+
+                let scoreOf (t) =
+                    match List.get(0, t.value) with
+                        | Some n -> %s
+                        | None -> %s
+
+                example scoreOf
+                    | "pin 5" : (Throw([5])) -> Points(5)
+                    | "pin 12" : (Throw([12])) -> Points(12)
+
+                behavior reachedTwelve : (t: Throw) -> Bool
+
+                let reachedTwelve (t) = scoreOf(t).value == 12
+
+                example reachedTwelve
+                    | "12 is twelve" : (Throw([12])) -> true
+                    | "11 is not" : (Throw([11])) -> false
+                %s""".formatted(scoring, none, pastTwelve);
+    }
+
+    private static final String CLAMPED = "Points(Int.clamp(0, 12, n))";
+    private static final String UNREACHABLE = "unreachable \"a throw always names a pin\"";
+
+    /** An {@code unreachable} is the premise the called behavior states, and its own to account
+     *  for: its callers get past it, and their comparison over the call is read to the end. */
+    @Test
+    void anUnreachableInABehaviorCalledLeavesNoCallerOpen() {
+        Compilation compilation = measured(throwsScored(CLAMPED, UNREACHABLE));
+        String report = reportOf(compilation, "reachedTwelve");
+
+        assertTrue(rowsRunsGetPast(compilation, "scoreOf"));
+        assertTrue(rowsRunsGetPast(compilation, "reachedTwelve"));
+        assertEquals(List.of(), notResolved(report), report);
+        assertFalse(report.contains("not read: comparison"), report);
+        assertTrue(report.contains("measurement: complete"), report);
+    }
+
+    /** A construction whose invariant is not shown to hold is no premise anything states: the
+     *  caller is left open, and the report names the call and the construction in it. */
+    @Test
+    void aConstructionNotShownToHoldInABehaviorCalledIsNamedInTheCallersReport() {
+        Compilation compilation = measured(throwsScored("Points(n)", UNREACHABLE));
+        String report = reportOf(compilation, "reachedTwelve");
+
+        CallPassage.WhyOpen why = whyOpen(compilation, "scoreOf");
+        assertEquals("Points",
+                assertInstanceOf(CallPassage.WhyOpen.AConstruction.class, why).type());
+        List<String> open = notResolved(report);
+        assertEquals(1, open.size(), report);
+        assertTrue(open.getFirst().contains("it is the call of scoreOf at "), report);
+        assertTrue(open.getFirst().contains("which may stop at the construction of Points at "),
+                report);
+        assertFalse(open.getFirst().contains("none of the operations"), report);
+        assertTrue(report.contains("measurement: partial"), report);
+    }
+
+    /** Taking the premise takes the {@code unreachable} and nothing beside it: a construction not
+     *  shown to hold in the same body still leaves it open, and is what is named. */
+    @Test
+    void anUnreachableBesideAConstructionNotShownToHoldTakesOnlyThePremise() {
+        Compilation compilation = measured(throwsScored("Points(n)", UNREACHABLE));
+        Compilation without = measured(throwsScored(CLAMPED, UNREACHABLE));
+
+        assertInstanceOf(CallPassage.WhyOpen.AConstruction.class,
+                whyOpen(compilation, "scoreOf"));
+        assertTrue(rowsRunsGetPast(without, "scoreOf"));
+    }
+
+    /** The premise is taken through every call on the way: of a behavior calling the one that
+     *  states it, directly or in the step of a walk. */
+    @Test
+    void anUnreachableIsTakenThroughEveryCallOnTheWay() {
+        Compilation compilation = measured(throwsScored(CLAMPED, UNREACHABLE) + """
+
+                behavior anyTwelve : (ts: List<Throw>) -> Bool
+
+                let anyTwelve (ts) = List.fold((s, t) -> s || scoreOf(t).value == 12, false, ts)
+
+                example anyTwelve
+                    | "one" : ([Throw([5]), Throw([12])]) -> true
+                    | "none" : ([Throw([5])]) -> false
+
+                behavior seen : (ts: List<Throw>) -> Int
+
+                let seen (ts) = if anyTwelve(ts) then 1 else 0
+
+                example seen
+                    | "one" : ([Throw([12])]) -> 1
+                    | "none" : ([]) -> 0
+                """);
+        String report = reportOf(compilation, "seen");
+
+        assertTrue(rowsRunsGetPast(compilation, "reachedTwelve"));
+        assertTrue(rowsRunsGetPast(compilation, "anyTwelve"));
+        assertTrue(rowsRunsGetPast(compilation, "seen"));
+        assertEquals(List.of(), notResolved(report), report);
+    }
+
+    /** Where a call on the way leaves it open, the reason is the one at the end of the calls, and
+     *  every call down to it is said. */
+    @Test
+    void aStopLeftOpenDownACallIsNamedThroughEveryCall() {
+        Compilation compilation = measured(throwsScored("Points(n)", UNREACHABLE) + """
+
+                behavior pinsOf : (t: Throw) -> Int
+
+                let pinsOf (t) = scoreOf(t).value
+
+                behavior twelveOrMore : (t: Throw) -> Bool
+
+                let twelveOrMore (t) = pinsOf(t) >= 12
+
+                example twelveOrMore
+                    | "12" : (Throw([12])) -> true
+                    | "11" : (Throw([11])) -> false
+                """);
+        String report = reportOf(compilation, "twelveOrMore");
+
+        CallPassage.WhyOpen.ACall call = assertInstanceOf(CallPassage.WhyOpen.ACall.class,
+                whyOpen(compilation, "pinsOf"));
+        assertEquals("scoreOf", call.behavior().name());
+        assertInstanceOf(CallPassage.WhyOpen.AConstruction.class,
+                assertInstanceOf(CallPassage.Open.class, call.passage()).why());
+        assertInstanceOf(CallPassage.WhyOpen.ACall.class, whyOpen(compilation, "twelveOrMore"));
+        assertTrue(report.contains("it is the call of pinsOf at "), report);
+        assertTrue(report.contains("which calls scoreOf at "), report);
+        assertTrue(report.contains("which may stop at the construction of Points at "), report);
+    }
+
+    /** A document says the same: the call, each call down from it, and the construction at the
+     *  end, the way the schema shipped beside this says. */
+    @Test
+    void aDocumentWritesEveryCallDownToWhereThePassageIsLeftOpen() {
+        Compilation compilation = Compilation.ofSource("module m\n"
+                + throwsScored("Points(n)", UNREACHABLE) + """
+
+                behavior pinsOf : (t: Throw) -> Int
+
+                let pinsOf (t) = scoreOf(t).value
+
+                behavior twelveOrMore : (t: Throw) -> Bool
+
+                let twelveOrMore (t) = pinsOf(t) >= 12
+
+                example twelveOrMore
+                    | "12" : (Throw([12])) -> true
+                    | "11" : (Throw([11])) -> false
+                """, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        ACompiledModel.compiles(compilation);
+        JsonNode document = JsonMapper.builder().build().readTree(AdequacyReport.of(compilation)
+                .json(SourceRendering.namedByIdentity(compilation.texts())));
+
+        DocumentShape.assertShapedLikeTheSchema(document);
+        List<JsonNode> calls = document.findParents("reason").stream()
+                .filter(each -> each.get("reason").asString().equals("in_a_call"))
+                .map(each -> each.get("call")).toList();
+        assertTrue(calls.stream().anyMatch(call -> call.get("behavior").asString().equals("pinsOf")
+                && call.at("/passage/reason").asString().equals("call")
+                && call.at("/passage/call/behavior").asString().equals("scoreOf")
+                && call.at("/passage/call/passage/reason").asString().equals("construction")
+                && call.at("/passage/call/passage/construction").asString().equals("Points")),
+                document::toString);
+    }
+
+    /** Where the proof gives out is asked on the arm it is written on, with what entering the arm
+     *  states: a construction on an arm whose condition keeps its invariant is got past. */
+    @Test
+    void whereAPassageIsLeftOpenIsAskedOnTheArmItIsWrittenOn() {
+        Compilation kept = measured("""
+                data Points = Int
+                    invariant value >= 0 && value <= 12
+                behavior scored : (n: Int) -> Points
+                let scored (n) = if n >= 0 && n <= 12 then Points(n) else Points(0)
+                """);
+        Compilation halfKept = measured("""
+                data Points = Int
+                    invariant value >= 0 && value <= 12
+                behavior scored : (n: Int) -> Points
+                let scored (n) = if n >= 0 then Points(n) else Points(0)
+                """);
+
+        assertTrue(rowsRunsGetPast(kept, "scored"));
+        assertInstanceOf(CallPassage.WhyOpen.AConstruction.class, whyOpen(halfKept, "scored"));
+    }
+
+    /** Of two calls in one comparison that each leave it open, the one the proof gave out at is
+     *  named, and naming it says nothing of the other: neither is taken to be got past. */
+    @Test
+    void ofTwoCallsThatEachLeaveItOpenNamingOneTakesNeitherAsGotPast() {
+        Compilation compilation = measured("""
+                data Out = Low | High
+                behavior first : (n: Int) -> Int
+                let first (n) = Int.floorMod(100, n)
+                behavior second : (n: Int) -> Int
+                let second (n) = Int.floorMod(50, n)
+                behavior both : (a: Int, b: Int) -> Out
+                let both (a, b) = if first(a) + second(b) >= 5 then Low else High
+                example both
+                    | (40, 40) -> Low
+                    | (1, 1) -> High
+                """);
+        String report = reportOf(compilation, "both");
+
+        assertFalse(rowsRunsGetPast(compilation, "first"));
+        assertFalse(rowsRunsGetPast(compilation, "second"));
+        assertTrue(report.contains("it is the call of first at ")
+                || report.contains("it is the call of second at "), report);
+        assertTrue(report.contains("measurement: partial"), report);
+        assertFalse(report.contains("adequacy: satisfied"), report);
+    }
+
+    /** What a passage is left open at is said of the behavior's own body: an operation in it, or
+     *  that it has none. */
+    @Test
+    void whatAPassageIsLeftOpenAtIsSaidOfTheBehaviorsOwnBody() {
+        Compilation compilation = measured("""
+                behavior made : (n: Int) -> Int
+                let made (n) = Int.floorMod(100, n)
+                """ + CALLER);
+
+        CallPassage.WhyOpen why = whyOpen(compilation, "made");
+        assertInstanceOf(CallPassage.WhyOpen.SomethingWorkedOut.class, why);
+        assertInstanceOf(CallPassage.WhyOpen.NoBody.class,
+                whyOpen(measured("""
+                        behavior made : (n: Int) -> Int
+                        """), "made"));
     }
 
     /** A text and a list made one longer stop past what the representation holds alone. The runs

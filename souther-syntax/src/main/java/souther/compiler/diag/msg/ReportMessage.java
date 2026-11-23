@@ -560,6 +560,37 @@ public sealed interface ReportMessage extends Message {
     /** Why a stop is not resolved: something worked out is read as no operation. */
     record NoOperationIsReadThere() implements ReportMessage, Prose {}
 
+    /** Why: it is the call of {@code behavior} written at {@code at}, and no run is shown to get
+     *  past that behavior's body, for {@code passage}, said by one of the messages below. */
+    record ItIsACallOf(String behavior, String at, Message passage)
+            implements ReportMessage, Prose {}
+
+    /** What a behavior called is told of: every run is shown to get past its body. */
+    record TheCalledBehaviorIsGottenPast() implements ReportMessage, Prose {}
+
+    /** What a behavior called is told of: it has no body in the model to read. */
+    record TheCalledBehaviorHasNoBody() implements ReportMessage, Prose {}
+
+    /** What a behavior called is told of: it reaches itself through what it calls, and no answer
+     *  is made of it. */
+    record TheCalledBehaviorReachesItself() implements ReportMessage, Prose {}
+
+    /** What a behavior called is told of: its inputs or its rules are not read. */
+    record TheCalledBehaviorIsNotRead() implements ReportMessage, Prose {}
+
+    /** What a behavior called is told of: it may stop at a construction of {@code type} written at
+     *  {@code at}, whose invariant is not shown to hold where it is made. */
+    record TheCalledBehaviorMayStopAtAConstruction(String at, String type)
+            implements ReportMessage, Prose {}
+
+    /** What a behavior called is told of: it calls {@code behavior} at {@code at}, which is told
+     *  {@code passage}. */
+    record TheCalledBehaviorCalls(String at, String behavior, Message passage)
+            implements ReportMessage, Prose {}
+
+    /** What a behavior called is told of: it may stop in something it works out at {@code at}. */
+    record TheCalledBehaviorMayStopInWhatItWorksOut(String at) implements ReportMessage, Prose {}
+
     /** Why: the comparison stops a run on rows it states, and no input reaching them is looked
      *  for. */
     record TheComparisonStopsOnRowsItStates() implements ReportMessage, Prose {}

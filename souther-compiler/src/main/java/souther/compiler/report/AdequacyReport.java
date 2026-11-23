@@ -13,6 +13,7 @@ import souther.compiler.source.SourceId;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.check.BehaviorImplementation;
+import souther.compiler.check.CallPassage;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.WholeRounding;
 import souther.compiler.check.ComparisonClaim;
@@ -4636,7 +4637,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             if (f.about() instanceof About.ARuleWhoseStopIsNotShown(var it)) {
                 marked(out, f, page, new ReportMessage.StopNotShown(
                         cited(it.cited(), page, declaredIn, places),
-                        stopsNotShownSaid(it.notShown(), page),
+                        stopsNotShownSaid(it.notShown(), page, rendering, declaredIn),
                         aRunGettingThereStopsAt(it.everyRunStops(), page),
                         it.asks().isEmpty() ? new ReportMessage.Nothing()
                                 : new ReportMessage.AStopAtAConstructionOnTheWayIsNotDetermined(
@@ -7492,11 +7493,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
 
     /** Each operation of a rule whether a run stops in is not resolved, and why, as the human
      *  report says it after the rule: of the operation, and never of the rule as a whole. */
-    private static Message stopsNotShownSaid(List<AStopNotShown> notShown, Page page) {
+    private static Message stopsNotShownSaid(List<AStopNotShown> notShown, Page page,
+                                             SourceRendering rendering, SourceId declaredIn) {
         StringBuilder out = new StringBuilder();
         for (AStopNotShown each : notShown) {
             Message why = switch (each.why()) {
                 case NO_OPERATION_TOLD -> new ReportMessage.NoOperationIsReadThere();
+                case IN_A_CALL -> each.call()
+                        .<Message>map(call -> new ReportMessage.ItIsACallOf(call.behavior().name(),
+                                writtenAtSaid(call.at(), rendering, declaredIn),
+                                passageSaid(call.passage(), rendering, declaredIn)))
+                        .orElseGet(ReportMessage.NoOperationIsReadThere::new);
                 case ON_ROWS_OF_THE_STATEMENT -> new ReportMessage.TheComparisonStopsOnRowsItStates();
                 case ON_AN_ARM -> new ReportMessage.ItIsWorkedOutOnAnArm();
                 case ON_AN_APPLICATION -> new ReportMessage.ItIsWorkedOutOnEachElement();
@@ -7513,6 +7520,31 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     .orElseGet(() -> new ReportMessage.StopNotShownInWhatItWorksOut(why))));
         }
         return new ReportMessage.Verbatim(out.toString());
+    }
+
+    /** What a behavior called is told of its body, as the words after the call say it: down
+     *  every call to where the proof that a run gets past gave out. */
+    private static Message passageSaid(CallPassage passage, SourceRendering rendering,
+                                       SourceId declaredIn) {
+        return switch (passage) {
+            case CallPassage.Past _ -> new ReportMessage.TheCalledBehaviorIsGottenPast();
+            case CallPassage.Open(var why) -> switch (why) {
+                case CallPassage.WhyOpen.NoBody _ -> new ReportMessage.TheCalledBehaviorHasNoBody();
+                case CallPassage.WhyOpen.OnACycle _ ->
+                        new ReportMessage.TheCalledBehaviorReachesItself();
+                case CallPassage.WhyOpen.NotRead _ -> new ReportMessage.TheCalledBehaviorIsNotRead();
+                case CallPassage.WhyOpen.AConstruction(var at, var type) ->
+                        new ReportMessage.TheCalledBehaviorMayStopAtAConstruction(
+                                writtenAtSaid(at, rendering, declaredIn), type);
+                case CallPassage.WhyOpen.ACall(var at, var behavior, var next) ->
+                        new ReportMessage.TheCalledBehaviorCalls(
+                                writtenAtSaid(at, rendering, declaredIn), behavior.name(),
+                                passageSaid(next, rendering, declaredIn));
+                case CallPassage.WhyOpen.SomethingWorkedOut(var at) ->
+                        new ReportMessage.TheCalledBehaviorMayStopInWhatItWorksOut(
+                                writtenAtSaid(at, rendering, declaredIn));
+            };
+        };
     }
 
     /** Where every run getting to a rule stops, as the human report says it after the rule. */
@@ -11586,6 +11618,46 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         }
     }
 
+    /** A call of a behavior a run may stop in, as a document writes it: the behavior, where the
+     *  call is written, and what the behavior is told of its body. */
+    private static void callWritten(ObjectNode into, CallPassage.WhyOpen.ACall call,
+                                    DocumentSources sources) {
+        into.put("behavior", call.behavior().name());
+        PublishedAt.of(Citation.of(call.at())).ifPresent(place -> at(into, place, sources));
+        passageWritten(into.putObject("passage"), call.passage(), sources);
+    }
+
+    /** What a behavior called is told of its body, as a document writes it: down every call to
+     *  where the proof that a run gets past gave out. */
+    private static void passageWritten(ObjectNode into, CallPassage passage,
+                                       DocumentSources sources) {
+        switch (passage) {
+            case CallPassage.Past _ -> into.put("reason", "gotten_past");
+            case CallPassage.Open(var why) -> {
+                switch (why) {
+                    case CallPassage.WhyOpen.NoBody _ -> into.put("reason", "no_body");
+                    case CallPassage.WhyOpen.OnACycle _ -> into.put("reason", "reaches_itself");
+                    case CallPassage.WhyOpen.NotRead _ -> into.put("reason", "not_read");
+                    case CallPassage.WhyOpen.AConstruction(var at, var type) -> {
+                        into.put("reason", "construction");
+                        into.put("construction", type);
+                        PublishedAt.of(Citation.of(at)).ifPresent(place -> at(into, place,
+                                sources));
+                    }
+                    case CallPassage.WhyOpen.ACall call -> {
+                        into.put("reason", "call");
+                        callWritten(into.putObject("call"), call, sources);
+                    }
+                    case CallPassage.WhyOpen.SomethingWorkedOut(var at) -> {
+                        into.put("reason", "something_worked_out");
+                        PublishedAt.of(Citation.of(at)).ifPresent(place -> at(into, place,
+                                sources));
+                    }
+                }
+            }
+        }
+    }
+
     /** Each of {@code notShown} into {@code into}: the type made, where it is written, what it
      *  asks where that is read, and why neither is shown. */
     private static void constructionsNotShownWritten(ArrayNode into,
@@ -11740,6 +11812,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 ObjectNode one = unresolved.addObject();
                 each.operation().ifPresent(operation -> one.put("operation", operation));
                 one.put("reason", word(each.why()));
+                each.call().ifPresent(call -> callWritten(one.putObject("call"), call, sources));
             }
         }
         if (finding.about() instanceof About.ARuleWhoseStopIsNotShown(var it)

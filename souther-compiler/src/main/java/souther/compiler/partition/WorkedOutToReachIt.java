@@ -125,7 +125,7 @@ final class WorkedOutToReachIt {
          *  on once the numbers are asked, and by the arms the runs it is asked of entered. Kept
          *  with the questions this one asks past an arm, which differ from it in those arms
          *  alone. */
-        private final Map<Core, Map<ReadAt, Boolean>> answered;
+        private final Map<Core, Map<ReadAt, WhereItMayEnd>> answered;
         private final FoldedValue.Kept folds;
         private final boolean byTheNumbers;
         /** The bodies of the closures shown to end no run where the call being asked applies them
@@ -167,7 +167,8 @@ final class WorkedOutToReachIt {
         private Question(boolean byTheNumbers, Set<Core> heldWhereApplied,
                          Predicate<Denotation> tellsWhereItStops,
                          Predicate<Denotation> ownStopsSaid, ArmsTaken arms,
-                         Map<Core, Map<ReadAt, Boolean>> answered, FoldedValue.Kept folds,
+                         Map<Core, Map<ReadAt, WhereItMayEnd>> answered,
+                         FoldedValue.Kept folds,
                          Map<Core, List<ArmsTaken>> bound) {
             this.byTheNumbers = byTheNumbers;
             this.heldWhereApplied = heldWhereApplied;
@@ -260,13 +261,31 @@ final class WorkedOutToReachIt {
             return ownStopsSaid != null && ownStopsSaid.test(value);
         }
 
-        Boolean answerOf(Core written, InputReads at) {
+        WhereItMayEnd answerOf(Core written, InputReads at) {
             return answered.getOrDefault(written, Map.of()).get(new ReadAt(at, arms));
         }
 
-        void answer(Core written, InputReads at, boolean endsNone) {
+        void answer(Core written, InputReads at, WhereItMayEnd answer) {
             answered.computeIfAbsent(written, _ -> new HashMap<>()).put(new ReadAt(at, arms),
-                    endsNone);
+                    answer);
+        }
+    }
+
+    /**
+     * What working a value out was answered: that it ends no run, or the expression met on the
+     * way whose own working may end one ({@link #ownWorkingEndsNoRun}), where it was read. That
+     * expression is the one whose answer made every answer above it what it is, so it is found by
+     * the walk that answers whether a run ends and by no other: an expression whose own stop
+     * something above it told is not one.
+     *
+     * @param at the expression, or null where working the value out ends no run
+     */
+    private record WhereItMayEnd(Denotation at) {
+
+        static final WhereItMayEnd NOWHERE = new WhereItMayEnd(null);
+
+        boolean endsNone() {
+            return at == null;
         }
     }
 
@@ -558,6 +577,21 @@ final class WorkedOutToReachIt {
         return new WorkedOutToReachIt(read, _ -> false, true);
     }
 
+    /**
+     * The same, where each {@code unreachable} met is taken as the premise it states: a run is
+     * taken to get past it, as the body's own account takes the arm it answers. What a behavior's
+     * callers are told of its body is asked so: the premise is the called behavior's, and a run
+     * that reaches it aborts there, in that behavior. What a run reaching it works out is asked as
+     * before, and a construction whose invariant is not shown to hold is not taken so, since
+     * nothing written states that it holds.
+     */
+    WorkedOutToReachIt takingWhatItRulesOutAsRuledOut() {
+        Predicate<Denotation> before = beyond;
+        return new WorkedOutToReachIt(read, value -> before.test(value)
+                || Core.withoutStanding(value.value()) instanceof Core.Unreachable,
+                closuresApart, toldElsewhere, ownStopsSaidOnTheirWays, onTheWay, numbersAsked);
+    }
+
     /** The same, each node asked with whatever it applies. */
     static WorkedOutToReachIt asking(InputReading read) {
         return new WorkedOutToReachIt(read, _ -> false, false);
@@ -718,61 +752,74 @@ final class WorkedOutToReachIt {
     }
 
     private boolean endsNoRun(Denotation value, Question question) {
+        return whereItMayEnd(value, question).endsNone();
+    }
+
+    /**
+     * Whether working out {@code value} ends no run, and where not, the expression whose own
+     * working may end one ({@link WhereItMayEnd}). The one walk that answers whether a run ends:
+     * every reader of it is answered here, whichever of the two it reads.
+     */
+    private WhereItMayEnd whereItMayEnd(Denotation value, Question question) {
         Core written = Core.withoutStanding(value.value());
         if (question.heldWhereApplied.contains(written)) {
-            return true;
+            return WhereItMayEnd.NOWHERE;
         }
-        Boolean known = question.answerOf(written, value.at());
+        WhereItMayEnd known = question.answerOf(written, value.at());
         if (known != null) {
             return known;
         }
-        boolean endsNone = worksOutWithoutEndingARun(value, question);
-        question.answer(written, value.at(), endsNone);
-        return endsNone;
+        WhereItMayEnd answer = worksOutWithoutEndingARun(value, question);
+        question.answer(written, value.at(), answer);
+        return answer;
     }
 
     /** Asked of what {@code value} is made of first, so that what another reading tells is only
      *  ever the least of it that may end a run: telling a value names what it reads. */
-    private boolean worksOutWithoutEndingARun(Denotation value, Question question) {
-        return worksOutOfItselfWithoutEndingARun(value, question) || toldElsewhere.test(value)
-                || question.tells(value);
+    private WhereItMayEnd worksOutWithoutEndingARun(Denotation value, Question question) {
+        WhereItMayEnd itself = worksOutOfItselfWithoutEndingARun(value, question);
+        return itself.endsNone() || toldElsewhere.test(value) || question.tells(value)
+                ? WhereItMayEnd.NOWHERE : itself;
     }
 
-    private boolean worksOutOfItselfWithoutEndingARun(Denotation value, Question question) {
+    private WhereItMayEnd worksOutOfItselfWithoutEndingARun(Denotation value,
+                                                            Question question) {
         // Past arms no run enters together, nothing is worked out on any run.
         if (question.arms.leaveNoRun(read)) {
-            return true;
+            return WhereItMayEnd.NOWHERE;
         }
         Core written = Core.withoutStanding(value.value());
         if (closuresApart && written instanceof Core.Block closure) {
-            return endsNoRun(new Denotation(closure.body(), value.at()),
+            return whereItMayEnd(new Denotation(closure.body(), value.at()),
                     question.notOnEveryRun());
         }
         if (written instanceof Core.LetIn let) {
             question.binding(let.value());
-            return endsNoRun(new Denotation(let.value(), value.at()), question)
-                    && endsNoRun(new Denotation(let.body(),
-                            value.at().and(let.binder(), let.value())), question);
+            WhereItMayEnd given = whereItMayEnd(new Denotation(let.value(), value.at()), question);
+            return !given.endsNone() ? given : whereItMayEnd(new Denotation(let.body(),
+                    value.at().and(let.binder(), let.value())), question);
         }
         // Written in a value that was built, whatever is inside it: the build ran all of it.
         if (written instanceof Core.Construct made && read.rules().declarations().answers()
                 .builtWhereItsModuleIsBuilt(read.rules().symbols().module(), made.pos())) {
-            return true;
+            return WhereItMayEnd.NOWHERE;
         }
         // A reference to a value is run as the value is defined, which no part of this node says.
         if (written instanceof Core.MaterialisedValue) {
             Denotation defined = value.at().taken(written);
-            return defined != null && endsNoRun(defined, question.whereItWasBound(defined));
+            return defined == null ? new WhereItMayEnd(value)
+                    : whereItMayEnd(defined, question.whereItWasBound(defined));
         }
         if (question.byTheNumbers) {
             Set<Core> held = closuresHeldOverTheirElements(value, question);
             if (!held.isEmpty()) {
                 Question applying = question.applying(held);
-                return ownWorkingEndsNoRun(value, applying)
-                        && partsAndNamesEndNoRun(value, applying);
+                return !ownWorkingEndsNoRun(value, applying) ? new WhereItMayEnd(value)
+                        : whereThePartsAndNamesMayEnd(value, applying);
             }
         }
-        return ownWorkingEndsNoRun(value, question) && partsAndNamesEndNoRun(value, question);
+        return !ownWorkingEndsNoRun(value, question) ? new WhereItMayEnd(value)
+                : whereThePartsAndNamesMayEnd(value, question);
     }
 
     /** The ends of an {@code Int}, which a total of whole numbers and each operation of them
@@ -1177,7 +1224,17 @@ final class WorkedOutToReachIt {
     /** Whether working out {@code value}, which a reading passed over, ends no run, asked
      *  {@link Question#byTheNumbers}. */
     boolean endsNoRunWhereItWasPassedOver(Denotation value) {
-        return endsNoRun(value, new Question(true, onTheWay));
+        return whereARunMayEndWhereItWasPassedOver(value).isEmpty();
+    }
+
+    /**
+     * The expression whose own working may end a run working out {@code value}, which a reading
+     * passed over, where it was read; none where working it out ends no run, which is
+     * {@link #endsNoRunWhereItWasPassedOver}. Found by the walk that answers that, so it is the
+     * expression the answer rests on: the first of them the walk met, and not every one there is.
+     */
+    Optional<Denotation> whereARunMayEndWhereItWasPassedOver(Denotation value) {
+        return Optional.ofNullable(whereItMayEnd(value, new Question(true, onTheWay)).at());
     }
 
     /**
@@ -1190,7 +1247,16 @@ final class WorkedOutToReachIt {
      */
     boolean endsNoRunUntoldWhereItWasPassedOver(Denotation value,
                                                Predicate<Denotation> tells) {
-        return endsNoRun(value, new Question(true, tells, ownStopsSaidOnTheirWays, onTheWay));
+        return whereAStopIsLeftUntoldWhereItWasPassedOver(value, tells).isEmpty();
+    }
+
+    /** The expression whose own stop is left untold working out {@code value}, where it was
+     *  read, as {@link #whereARunMayEndWhereItWasPassedOver} finds it; none where every stop
+     *  there is told ({@link #endsNoRunUntoldWhereItWasPassedOver}). */
+    Optional<Denotation> whereAStopIsLeftUntoldWhereItWasPassedOver(Denotation value,
+                                                                    Predicate<Denotation> tells) {
+        return Optional.ofNullable(whereItMayEnd(value,
+                new Question(true, tells, ownStopsSaidOnTheirWays, onTheWay)).at());
     }
 
     /**
@@ -1981,28 +2047,32 @@ final class WorkedOutToReachIt {
                             value.at().and(let.binder(), let.value())), question);
         }
         return endsOnlyWhereItsOwnAnswerHasNoPlace(written)
-                && partsAndNamesEndNoRun(value, question);
+                && whereThePartsAndNamesMayEnd(value, question).endsNone();
     }
 
     /** Whether what {@code value} is made of, each part on the runs that work it out, and what
-     *  each name in it was given, where it was given, end no run. */
-    private boolean partsAndNamesEndNoRun(Denotation value, Question question) {
+     *  each name in it was given, where it was given, end no run; where not, where the first of
+     *  them asked may end one. */
+    private WhereItMayEnd whereThePartsAndNamesMayEnd(Denotation value, Question question) {
         Core written = Core.withoutStanding(value.value());
         for (Part part : partsOf(written)) {
             Question asked = part.arm() >= 0
                     ? question.enteringArm(written, part.arm(), value.at())
                     : Evaluated.runsWhenever(written, part.expression()) ? question
                     : question.notOnEveryRun();
-            if (!endsNoRun(new Denotation(part.expression(), value.at()), asked)) {
-                return false;
+            WhereItMayEnd there = whereItMayEnd(new Denotation(part.expression(), value.at()),
+                    asked);
+            if (!there.endsNone()) {
+                return there;
             }
         }
         for (Denotation bound : boundTo(value)) {
-            if (!endsNoRun(bound, question.whereItWasBound(bound))) {
-                return false;
+            WhereItMayEnd there = whereItMayEnd(bound, question.whereItWasBound(bound));
+            if (!there.endsNone()) {
+                return there;
             }
         }
-        return true;
+        return WhereItMayEnd.NOWHERE;
     }
 
     /** What the name {@code value} is was given, where it was given; none where it is no name
