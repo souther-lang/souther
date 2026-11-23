@@ -61,13 +61,6 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
             List.of(MAX - 1), List.of(MIN), List.of(MAX, 1L), List.of(3_037_000_500L),
             List.of(4_611_686_018_427_387_904L, 4_611_686_018_427_387_904L));
 
-    /** Why a stop over a walk on an arm is not shown: the operation is told, and the working of the
-     *  arm leaves a stop untold beside it (NOT_EVERY_OPERATION_TOLD), which the comparison read
-     *  whole does not for the same walk. */
-    private static final String ARM_OF_A_WALK =
-            "the operation over the walk is told on an arm whose working leaves a stop untold "
-                    + "beside it (NOT_EVERY_OPERATION_TOLD): said as not resolved";
-
     /** Each condition on {@code ds} and {@code q}, by the name it is told under. */
     private static final Map<String, String> FORMS = new LinkedHashMap<>();
 
@@ -270,14 +263,12 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
                 + "option holds is two values held aside, and the operation beside the walk is "
                 + "read by no owner (NO_OPERATION_TOLD): said as not read");
         FORMS.put("walkAgainstAnOption", walk + " <= Option.withDefault(0, List.max(ds)) + 1");
-        NOT_TOLD.put("armOfAWalkPlusOne", ARM_OF_A_WALK);
         FORMS.put("armOfAWalkPlusOne", "(if q > 3 then " + walk + " + 1 else 0) >= 2");
         NOT_TOLD.put("remainderOfAWalkPlusOne", "no operation is told: the operation over the "
                 + "walk is a part of an expression held aside, read as a number only where it "
                 + "holds no choice (worksOutAsANumber), so it is passed over "
                 + "(NO_OPERATION_TOLD): said as not read");
         FORMS.put("remainderOfAWalkPlusOne", "Int.floorMod(" + walk + " + 1, 7) >= 3");
-        NOT_TOLD.put("armOfAWalkPlusOneInAClosure", ARM_OF_A_WALK + ", on each element");
         FORMS.put("armOfAWalkPlusOneInAClosure",
                 "List.all(x -> (if x > 3 then " + walk + " + 1 else 0) >= 2, ds)");
         FORMS.put("remainderOfAWalk", "Int.floorMod(" + walk + ", 7) + 1 >= 3");
