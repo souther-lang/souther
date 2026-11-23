@@ -46,10 +46,11 @@ final class WhereARunMayStop {
     /**
      * Where the walk met a step a run may stop at: the way to it, the names there, the
      * applications of the closures it stands inside, which say what of the way to it is met on
-     * each, and the ways a run gets into the tree it stands in, worked out where they are asked.
+     * each, the ways a run gets into the tree it stands in, worked out where they are asked, and
+     * that tree.
      */
     record Met(List<OnTheWay> way, InputReads reads, ClosureApplications applying,
-               Supplier<WaysToASite> ways) {
+               Supplier<WaysToASite> ways, Core tree) {
 
         Met {
             way = List.copyOf(way);
@@ -84,16 +85,16 @@ final class WhereARunMayStop {
         tested.add(Core.withoutStanding(made));
     }
 
-    /** That the walk met {@code step}, where it is a step a run may stop at, on {@code way}, with
-     *  the names as {@code reads} has them, inside {@code applying}, a run getting into its tree
-     *  by {@code ways}. */
+    /** That the walk met {@code step}, where it is a step a run may stop at, in {@code tree} on
+     *  {@code way}, with the names as {@code reads} has them, inside {@code applying}, a run
+     *  getting into its tree by {@code ways}. */
     void met(Core step, List<OnTheWay> way, InputReads reads, ClosureApplications applying,
-             Supplier<WaysToASite> ways) {
+             Supplier<WaysToASite> ways, Core tree) {
         if (!aStepARunMayStopAt(step) || tested.contains(step)) {
             return;
         }
         met.computeIfAbsent(step, _ -> new ArrayList<>(1))
-                .add(new Met(way, reads, applying, new Pullback.Once<>(ways)));
+                .add(new Met(way, reads, applying, new Pullback.Once<>(ways), tree));
     }
 
     /** That the walk met {@code e}, any node, on {@code way}, with the names as {@code reads} has

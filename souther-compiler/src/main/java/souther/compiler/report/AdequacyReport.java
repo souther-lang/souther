@@ -132,6 +132,7 @@ import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.inputs.InputFact;
 import souther.compiler.inputs.TraversalDirection;
 import souther.compiler.meta.ModuleMetadata;
 import souther.compiler.numeric.ExactRatio;
@@ -259,6 +260,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
@@ -5076,7 +5078,41 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         for (AStopShown.NumberAt at : shown.at()) {
             each.add(at.place() + " = " + at.number());
         }
+        each.addAll(listsSaid(shown.structure()));
         return listed(page, each);
+    }
+
+    /**
+     * The lists a value of the input holds, as {@code structure} says them: a list whose length is
+     * said written out whole, an element nothing fixes written {@code …}; and an element of a list
+     * whose length is not said, by its index.
+     */
+    private static List<String> listsSaid(List<InputFact> structure) {
+        Map<TermPath, Integer> lengths = new LinkedHashMap<>();
+        Map<TermPath, Map<Integer, BigInteger>> elements = new LinkedHashMap<>();
+        for (InputFact fact : structure) {
+            switch (fact) {
+                case InputFact.ListLength(var list, int length) -> lengths.put(list, length);
+                case InputFact.ListElement(var list, int index, var number) ->
+                        elements.computeIfAbsent(list, _ -> new TreeMap<>()).put(index, number);
+            }
+        }
+        List<String> out = new ArrayList<>();
+        for (Map.Entry<TermPath, Integer> length : lengths.entrySet()) {
+            Map<Integer, BigInteger> held = elements.getOrDefault(length.getKey(), Map.of());
+            List<String> written = new ArrayList<>();
+            for (int index = 0; index < length.getValue(); index++) {
+                BigInteger number = held.get(index);
+                written.add(number == null ? "…" : number.toString());
+            }
+            out.add(length.getKey() + " = [" + String.join(", ", written) + "]");
+        }
+        elements.forEach((list, held) -> {
+            if (!lengths.containsKey(list)) {
+                held.forEach((index, number) -> out.add(list + "[" + index + "] = " + number));
+            }
+        });
+        return out;
     }
 
     /**

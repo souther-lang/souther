@@ -12,6 +12,7 @@ import souther.compiler.core.Core;
 import souther.compiler.core.Evaluated;
 import souther.compiler.inputs.ABoundThatKeepsEveryRunGoing;
 import souther.compiler.inputs.Denotation;
+import souther.compiler.types.BindingId;
 import souther.compiler.inputs.ElementsMet;
 import souther.compiler.inputs.EveryRunStops;
 import souther.compiler.inputs.InputReading;
@@ -166,17 +167,24 @@ final class StopsOfABody {
      * @param onTheWay whether every run taking the way makes the application, so that the way
      *                 holds every condition a run getting there meets; a value looked for on a way
      *                 that does not is not shown to get there
+     * @param before   what a run on one application works out before the step, each part with the
+     *                 names it is worked out in, where the way's own account of it is not read and
+     *                 this one is ({@link #onEachApplication}); null otherwise
      */
     private record Reached(WhereARunMayStop.Met met, WaysToASite.Reach reach, InputReads reads,
-                           boolean onTheWay) {}
+                           boolean onTheWay, List<Part> before) {}
+
+    /** A part of what a run works out before a step, with the names it is worked out in; with
+     *  none, each step in it is read with the names where the walk met it. */
+    private record Part(Core node, InputReads names) {}
 
     /** Every way a run gets to {@code step}, and whether they are every way there is. */
     private record Ways(List<Reached> each, boolean every) {}
 
     /**
      * Every way a run gets to {@code step}: by each way into the tree it stands in, and inside a
-     * closure handed values written out, on each application a run makes on some row. Inside one
-     * handed none, on none.
+     * closure handed values written out, on each application a run makes on some row
+     * ({@link #onEachApplication}). Inside one handed none, on none.
      */
     private Ways waysTo(Core step) {
         List<Reached> each = new ArrayList<>();
@@ -187,15 +195,89 @@ final class StopsOfABody {
             for (WaysToASite.Reach reach : ways.each()) {
                 switch (met.applying()) {
                     case ClosureApplications.None _ -> { }
-                    case ClosureApplications.Each(var made) -> made.stream()
-                            .filter(ClosureApplications.Application::isMadeOnSomeRow)
-                            .forEach(one -> each.add(new Reached(met, reach, one.reads(),
-                                    ClosureApplications.madeWhateverTheRow(one))));
-                    default -> each.add(new Reached(met, reach, met.reads(), true));
+                    case ClosureApplications.Each(var made) ->
+                            each.addAll(onEachApplication(step, met, reach, made));
+                    default -> each.add(new Reached(met, reach, met.reads(), true, null));
                 }
             }
         }
         return new Ways(each, every);
+    }
+
+    /**
+     * The ways a run gets to {@code step} inside a closure on each application {@code made} that a
+     * run makes on some row, in the order a run makes them.
+     *
+     * <p>Where the step stands inside one closure a call is handed, what a run works out before it
+     * on an application is read here: what the call works out before it applies the closure and
+     * what the body works out before the step, as on the first application
+     * ({@link WhatARunWorksOutBeforeACount#workedOutAtTheFirstApplication}), and each application
+     * before this one whole, in the names that application was made in. A walk from a seed hands
+     * each application after the first what the one before it answered, and the first its seed.
+     * Elsewhere what comes before is the way's to say, and is not read.
+     */
+    private List<Reached> onEachApplication(Core step, WhereARunMayStop.Met met,
+                                            WaysToASite.Reach reach,
+                                            List<ClosureApplications.Application> made) {
+        WhatARunWorksOutBeforeACount.FirstApplication first =
+                WhatARunWorksOutBeforeACount.workedOutAtTheFirstApplication(met.tree(), step);
+        Core.Block closure = first == null || first.entered().size() != 1 ? null
+                : first.entered().getFirst().closure();
+        List<Reached> out = new ArrayList<>();
+        Set<BindingId> carrying = new LinkedHashSet<>();
+        InputReads answered = null;
+        for (ClosureApplications.Application one : made) {
+            if (!one.isMadeOnSomeRow()) {
+                continue;
+            }
+            InputReads reads = one.reads();
+            for (Map.Entry<BindingId, Denotation> seed : one.carriedIntoTheFirst().entrySet()) {
+                carrying.add(seed.getKey());
+                if (answered == null) {
+                    reads = reads.handing(seed.getKey(), seed.getValue(),
+                            read.rules().newtypes());
+                }
+            }
+            if (answered != null && closure != null) {
+                for (BindingId accumulator : carrying) {
+                    reads = reads.handing(accumulator, new Denotation(closure.body(), answered),
+                            read.rules().newtypes());
+                }
+            }
+            List<Part> before = null;
+            if (closure != null) {
+                before = new ArrayList<>();
+                for (Core part : first.parts().subList(0, first.parts().size() - 1)) {
+                    before.add(new Part(part, under(closure, part) ? reads : null));
+                }
+                for (Reached earlier : out) {
+                    before.add(new Part(closure.body(), earlier.reads()));
+                }
+            }
+            // A body that is a truth may be one an operation stops at the first answer of, and
+            // what the applications before answered then decides whether this one is made.
+            boolean onTheWay = before == null || Type.BOOL.equals(closure.body().type())
+                    ? ClosureApplications.madeWhateverTheRow(one)
+                    : ClosureApplications.madeWhereverTheOnesBeforeItAreGotPast(one);
+            out.add(new Reached(met, reach, reads, onTheWay, before));
+            answered = reads;
+        }
+        return out;
+    }
+
+    /** Whether {@code part} stands inside the body of {@code closure}. */
+    private static boolean under(Core.Block closure, Core part) {
+        boolean[] found = {false};
+        collectUnder(closure.body(), Core.withoutStanding(part), found);
+        return found[0];
+    }
+
+    private static void collectUnder(Core e, Core part, boolean[] found) {
+        if (found[0] || Core.withoutStanding(e) == part) {
+            found[0] = true;
+            return;
+        }
+        Core.forEachChild(e, child -> collectUnder(child, part, found));
     }
 
     // ---- constructions ----
@@ -295,8 +377,7 @@ final class StopsOfABody {
                             read.quantities().region()) instanceof Reachability.Reaching reaching)) {
                 continue;
             }
-            GotPast gotPast = each.reach().before().get()
-                    .map(first -> gotPast(first.onSomeRun(), left)).orElse(null);
+            GotPast gotPast = gotPastOn(each, left);
             List<StopAssessment.Site> sites = sitesOf(step, each);
             if (gotPast == null || sites == null) {
                 continue;
@@ -484,26 +565,27 @@ final class StopsOfABody {
             return null;
         }
         return LinearForm.atom(new UndividedByARelation.IntOperand.OfAValueWorkedOut(
-                heldAs(Core.withoutStanding(operand)), origin,
+                heldAs(new Denotation(Core.withoutStanding(operand), at)), origin,
                 attainmentsOf(value, Collections.newSetFromMap(new IdentityHashMap<>()))));
     }
 
     /**
      * The number a value worked out is held as in an operation over it: named as an author reads
      * it ({@link ComparisonAssessment#written}), and apart from every other value however alike the
-     * two read, so that no two values are one number for being written alike. One node is one
-     * number wherever it is asked.
+     * two read, so that no two values are one number for being written alike. One node with one
+     * set of names is one number wherever it is asked; with the names of another application of
+     * the closure it stands in, another.
      */
-    private NumericTerm heldAs(Core node) {
-        return heldAs.computeIfAbsent(node, _ -> {
-            String written = ComparisonAssessment.written(node);
+    private NumericTerm heldAs(Denotation value) {
+        return heldAs.computeIfAbsent(value, _ -> {
+            String written = ComparisonAssessment.written(value.value());
             int alike = writtenAlike.merge(written, 1, Integer::sum);
             return new NumericTerm.ValueOf(TermPath.of(alike == 1 ? written
                     : written + " #" + alike));
         });
     }
 
-    private final Map<Core, NumericTerm> heldAs = new IdentityHashMap<>();
+    private final Map<Denotation, NumericTerm> heldAs = new HashMap<>();
     private final Map<String, Integer> writtenAlike = new HashMap<>();
 
     /**
@@ -608,15 +690,13 @@ final class StopsOfABody {
             return new StopAssessment.Judgement.Unresolved(site,
                     WhyAStopIsNotShown.A_CONDITION_NOT_READ);
         }
-        Optional<WhatARunWorksOutBeforeACount.BeforeAConstruction> before =
-                reached.reach().before().get();
         List<TakenConstraint.Affine> way = StopAssessment.asRelations(reached.reach().way());
         if (way == null) {
             return new StopAssessment.Judgement.Unresolved(site,
                     WhyAStopIsNotShown.A_CONDITION_NOT_READ);
         }
         way.addAll(within);
-        GotPast gotPast = before.map(first -> gotPast(first.onSomeRun(), left)).orElse(null);
+        GotPast gotPast = gotPastOn(reached, left);
         if (gotPast == null) {
             return new StopAssessment.Judgement.Unresolved(site,
                     WhyAStopIsNotShown.SOMETHING_BEFORE_IT_MAY_STOP);
@@ -739,18 +819,37 @@ final class StopsOfABody {
      * ({@link WhatAWayLeavesOfAValue#endsNoRunAt}) asks nothing.
      */
     private GotPast gotPast(List<Core> parts, WhatAWayLeavesOfAValue left) {
+        List<Part> each = new ArrayList<>(parts.size());
+        parts.forEach(part -> each.add(new Part(part, null)));
+        return gotPastIn(each, left);
+    }
+
+    /** What a run on {@code reached} works out before the step asks of a value that gets past
+     *  it: what one application works out, where that is read ({@link Reached#before}), and
+     *  otherwise what the way says comes first. */
+    private GotPast gotPastOn(Reached reached, WhatAWayLeavesOfAValue left) {
+        if (reached.before() != null) {
+            return gotPastIn(reached.before(), left);
+        }
+        return reached.reach().before().get()
+                .map(first -> gotPast(first.onSomeRun(), left)).orElse(null);
+    }
+
+    /** The same, of {@code parts} each worked out with the names it holds, or with the names
+     *  where the walk met it where it holds none. */
+    private GotPast gotPastIn(List<Part> parts, WhatAWayLeavesOfAValue left) {
         List<UndividedByARelation.IntOperation> operations = new ArrayList<>();
         List<LinearForm<NumericTerm>> divisors = new ArrayList<>();
         Set<Core> through = Collections.newSetFromMap(new IdentityHashMap<>());
-        for (Core part : parts) {
-            if (!past(part, left, operations, divisors, through)) {
+        for (Part part : parts) {
+            if (!past(part.node(), part.names(), left, operations, divisors, through)) {
                 return null;
             }
         }
         return new GotPast(operations, divisors);
     }
 
-    private boolean past(Core e, WhatAWayLeavesOfAValue left,
+    private boolean past(Core e, InputReads reads, WhatAWayLeavesOfAValue left,
                          List<UndividedByARelation.IntOperation> operations,
                          List<LinearForm<NumericTerm>> divisors, Set<Core> through) {
         Core node = Core.withoutStanding(e);
@@ -762,49 +861,52 @@ final class StopsOfABody {
             if (!through.add(template)) {
                 return false;
             }
-            boolean past = past(template, left, operations, divisors, through);
+            boolean past = past(template, null, left, operations, divisors, through);
             through.remove(template);
             return past;
         }
         if (node instanceof Core.IfConstructed attempt) {
             boolean[] all = {true};
             WhatARunMayEndFor.forEachWorkedOut(attempt, (part, _) -> all[0] = all[0]
-                    && past(part, left, operations, divisors, through));
+                    && past(part, reads, left, operations, divisors, through));
             return all[0];
         }
-        if (WhereARunMayStop.aStepARunMayStopAt(node) && !aStepGotPast(node, left, operations,
-                divisors)) {
+        if (WhereARunMayStop.aStepARunMayStopAt(node) && !aStepGotPast(node, reads, left,
+                operations, divisors)) {
             return false;
         }
         boolean[] all = {true};
         Core.forEachChild(node, child -> all[0] = all[0]
-                && past(child, left, operations, divisors, through));
+                && past(child, reads, left, operations, divisors, through));
         return all[0];
     }
 
     /**
      * What {@code step}, met where the walk met it once, asks of a value that gets past it, into
-     * {@code operations} and {@code divisors}; false where that is not read.
+     * {@code operations} and {@code divisors}; false where that is not read. Read with
+     * {@code reads}, the names of one application of the closure it stands in, and with the names
+     * where the walk met it where that is null.
      *
      * <p>Asked whatever premise a run of a row is taken under there: a call of a behavior whose
      * rows get past its body, and an {@code unreachable}, are got past by a row, and a value
      * looked for is no row of either, so it is asked to get past them as any value is.
      */
-    private boolean aStepGotPast(Core step, WhatAWayLeavesOfAValue left,
+    private boolean aStepGotPast(Core step, InputReads reads, WhatAWayLeavesOfAValue left,
                                  List<UndividedByARelation.IntOperation> operations,
                                  List<LinearForm<NumericTerm>> divisors) {
         Optional<WhereARunMayStop.Met> met = where.at(step);
         if (met.isEmpty() || gotPast(step)) {
             return false;
         }
-        if (left.endsNoRunAt(new Denotation(step, met.get().reads()))) {
+        InputReads names = reads == null ? met.get().reads() : reads;
+        if (left.endsNoRunAt(new Denotation(step, names))) {
             return true;
         }
         if (step instanceof Core.Construct) {
             return false;
         }
         List<StopAssessment.Site> sites = sitesOf(step,
-                new Reached(met.get(), null, met.get().reads(), true));
+                new Reached(met.get(), null, names, true, null));
         if (sites == null) {
             return false;
         }

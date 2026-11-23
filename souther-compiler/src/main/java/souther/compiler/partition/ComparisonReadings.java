@@ -1795,7 +1795,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         // function value by a name, where a run goes into the body of the function value.
         if (in.metOnly().isEmpty() && in.context().equals(CallContext.OF_THE_BODY)) {
             in.constructions().met(e, assumed, reads, applying,
-                    () -> waysToASite(e, assumed, applying, in));
+                    () -> waysToASite(e, assumed, applying, in), in.within());
             in.constructions().reached(e, assumed, reads);
             if (in.root() != null && handsAFunctionValueByAName(e, reads, in)) {
                 in.constructions().handing(Core.withoutStanding(e), assumed);
@@ -2317,7 +2317,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 new ClosureApplications.Each(List.of(new ClosureApplications.Application(step,
                         WhereAnApplicationIsMade.nothingAsked(), Map.of(),
                         metOn.madeWhere(made.stated()).stoppingIn(list, onward.denied()),
-                        List.of(), ClosureApplications.MadeOnEvery.NOT_SHOWN, List.of()))));
+                        List.of(), ClosureApplications.MadeOnEvery.NOT_SHOWN, List.of(),
+                        WhereAnApplicationIsMade.nothingAsked()))));
     }
 
     /**
