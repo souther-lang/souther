@@ -27,7 +27,8 @@ public sealed interface CallPassage {
     /** The run of every row is shown to get past the body. */
     record Past() implements CallPassage {}
 
-    /** No run of a row is shown to get past the body, for {@code why}. */
+    /** It is not shown that the run of every row gets past the body, and {@code why} is what that
+     *  rests on. Not that some run does not. */
     record Open(WhyOpen why) implements CallPassage {
 
         public Open {
@@ -49,8 +50,8 @@ public sealed interface CallPassage {
         record NotRead() implements WhyOpen {}
 
         /**
-         * A construction written at {@code at}, of {@code type}, whose invariant is not shown to
-         * hold where it is made.
+         * A construction written at {@code at}, of {@code type}, of which it is not shown that
+         * every run making it keeps its invariant.
          */
         record AConstruction(SourcePos at, String type) implements WhyOpen {
 

@@ -96,7 +96,7 @@
         "passage"
       ],
       "additionalProperties": false,
-      "description": "A call of a behavior no run of a row is shown to get past: what is told of a call is asked of the behavior it calls, over whatever that behavior's own inputs may hold.",
+      "description": "A call of a behavior of which it is not shown that every run of a row gets past it, which is not that some run does not: what is told of a call is asked of the behavior it calls, over whatever that behavior's own inputs may hold.",
       "properties": {
         "behavior": {
           "type": "string",
@@ -118,6 +118,69 @@
       ],
       "additionalProperties": false,
       "description": "What a behavior called is told of its body: where the proof that every run of a row gets past it gave out. That is the first expression the proof found whose own working may end a run, and not every one there is. Not shown to get past is not shown to stop.",
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "reason": {
+                "const": "construction"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "construction"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "construction"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "reason": {
+                "const": "call"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "call"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "call"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "reason": {
+                "enum": [
+                  "construction",
+                  "something_worked_out"
+                ]
+              }
+            }
+          },
+          "else": {
+            "not": {
+              "required": [
+                "at"
+              ]
+            }
+          }
+        }
+      ],
       "properties": {
         "reason": {
           "enum": [
@@ -129,7 +192,7 @@
             "call",
             "something_worked_out"
           ],
-          "description": "`gotten_past`: every run is shown to get past it. `no_body`: the behavior has no body in the model to read. `reaches_itself`: asking the body asks the behavior again, through the calls it makes, and nothing is said of it. `not_read`: its inputs or rules are not read. `construction`: a construction in it whose invariant is not shown to hold where it is made, named by `construction` and `at`. `call`: a call in it of another behavior, said by `call` the same way. `something_worked_out`: something else written at `at` whose own working may end a run. An `unreachable` in the body is the premise it states and the behavior's to account for, and is never this."
+          "description": "`gotten_past`: every run is shown to get past it. `no_body`: the behavior has no body in the model to read. `reaches_itself`: asking the body asks the behavior again, through the calls it makes, and nothing is said of it. `not_read`: its inputs or rules are not read. `construction`: a construction in it whose invariant is not shown to hold on every run that makes it, named by`construction` and `at`. `call`: a call in it of another behavior, said by `call` the same way. `something_worked_out`: something else written at `at` whose own working may end a run. An `unreachable` in the body is the premise it states and the behavior's to account for, and is never this."
         },
         "construction": {
           "type": "string",
@@ -5047,6 +5110,29 @@
                 "reason"
               ],
               "additionalProperties": false,
+              "allOf": [
+                {
+                  "if": {
+                    "properties": {
+                      "reason": {
+                        "const": "in_a_call"
+                      }
+                    }
+                  },
+                  "then": {
+                    "required": [
+                      "call"
+                    ]
+                  },
+                  "else": {
+                    "not": {
+                      "required": [
+                        "call"
+                      ]
+                    }
+                  }
+                }
+              ],
               "properties": {
                 "operation": {
                   "type": "string",
@@ -5071,7 +5157,7 @@
                     "no_value_found",
                     "no_value_found_within_what_is_tried"
                   ],
-                  "description": "Why neither is shown. `no_operation_told`: a run may stop in something worked out that this compiler does not read as an operation. `in_a_call`: a run may stop in a call of a behavior, since no run of a row is shown to get past working that behavior's body out, and `call` says which call and why. `on_rows_of_the_statement`: the comparison stops a run on rows it states, such as a divisor of nought, and no input reaching them is looked for. `on_an_arm` and `on_an_application`: the operation is worked out on one arm of a choice, or inside a function applied to each element, and the comparison is no condition, so nothing says which runs take the arm or make the application. `not_every_operation_told`: another part of the comparison may stop a run first and is not read. `something_before_it_may_stop`: something evaluated before the comparison may stop a run first. `a_condition_not_read`: a condition on the way is no comparison of whole numbers of the input, so no input is checked against it. `not_over_the_input`: the operation is over a value the body works out, such as a total or a product, and not over numbers of the input. `no_value_shown`: the input's types declare invariants or cases, and no input meeting them is built. `no_value_found`: no input tried takes the operation past its type. `no_value_found_within_what_is_tried`: the inputs tried ran out first, and another may."
+                  "description": "Why neither is shown. `no_operation_told`: a run may stop in something worked out that this compiler does not read as an operation. `in_a_call`: a run may stop in a call of a behavior, since it is not shown that every run of a row gets past working that behavior's body out, and `call` says which call and why. `on_rows_of_the_statement`: the comparison stops a run on rows it states, such as a divisor of nought, and no input reaching them is looked for. `on_an_arm` and `on_an_application`: the operation is worked out on one arm of a choice, or inside a function applied to each element, and the comparison is no condition, so nothing says which runs take the arm or make the application. `not_every_operation_told`: another part of the comparison may stop a run first and is not read. `something_before_it_may_stop`: something evaluated before the comparison may stop a run first. `a_condition_not_read`: a condition on the way is no comparison of whole numbers of the input, so no input is checked against it. `not_over_the_input`: the operation is over a value the body works out, such as a total or a product, and not over numbers of the input. `no_value_shown`: the input's types declare invariants or cases, and no input meeting them is built. `no_value_found`: no input tried takes the operation past its type. `no_value_found_within_what_is_tried`: the inputs tried ran out first, and another may."
                 }
               }
             }

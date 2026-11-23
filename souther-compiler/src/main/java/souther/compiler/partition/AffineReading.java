@@ -3160,10 +3160,11 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         /** That where a stop was left untold is {@code at}, which is said where it is a call of
          *  a behavior ({@link NotAccountedFor#calls}). */
         private void aCallLeftUntoldAt(Core at) {
-            if (AnOperationApplied.of(at) instanceof AnOperationApplied applied
+            Core written = Core.withoutStanding(at);
+            if (AnOperationApplied.of(written) instanceof AnOperationApplied applied
                     && applied.operation() instanceof ValueName.Behavior called) {
                 untold = untold.join(NotAccountedFor.aCall(
-                        new NotAccountedFor.ACall(called, Core.withoutStanding(at).pos())));
+                        new NotAccountedFor.ACall(called, written.pos())));
             }
         }
 
@@ -3201,7 +3202,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
 
         private void leavingSomethingUntold() {
             exact = false;
-            untold = untold.join(NotAccountedFor.SOMETHING_ELSE);
+            untold = untold.andSomethingElse();
         }
 
         /**
@@ -3218,7 +3219,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          */
         void aStopWhereNoRowIs() {
             aStopUntold = true;
-            untold = untold.join(NotAccountedFor.SOMETHING_ELSE);
+            untold = untold.andSomethingElse();
         }
 
         /**
@@ -3381,17 +3382,20 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
 
         /** {@code told} as the working: every operation is told where {@code everyOne}, and
          *  where not, what is left out is what was left untold, which the running totals and
-         *  what is told beside the rows ({@code besideTheRows}) are not accounted for in. */
+         *  what is told beside the rows ({@code besideTheRows}) are not accounted for in. What
+         *  is left to something else is widened from what was left untold, so the calls it
+         *  names are kept. */
         private UndividedByARelation.Working working(
                 List<UndividedByARelation.IntOperation> told, boolean everyOne,
                 boolean besideTheRowsIsEmpty) {
+            NotAccountedFor left = everyOne
+                    ? (aStopUntold ? untold.andSomethingElse() : NotAccountedFor.NOTHING)
+                    : (besideTheRowsIsEmpty && partials.isEmpty()) ? untold
+                    : untold.andSomethingElse();
             return new UndividedByARelation.Working(told, everyOne
                     ? WhatARelationLeavesUndivided.Told.EVERY
                     : WhatARelationLeavesUndivided.Told.SOME,
-                    true, exact ? partials : List.of(), aStopUntold,
-                    everyOne ? NotAccountedFor.NOTHING
-                            : (besideTheRowsIsEmpty && partials.isEmpty()) ? untold
-                            : NotAccountedFor.SOMETHING_ELSE);
+                    true, exact ? partials : List.of(), aStopUntold, left);
         }
     }
 

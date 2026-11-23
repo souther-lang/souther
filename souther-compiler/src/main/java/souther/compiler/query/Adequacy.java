@@ -5353,15 +5353,16 @@ public final class Adequacy {
         /** What the proof that the runs get past gave out at, {@code at}: a construction, a call
          *  of a behavior, with what that behavior is told of, or something else worked out. */
         private static CallPassage.WhyOpen whyOpenAt(Db db, Core at) {
-            if (Core.withoutStanding(at) instanceof Core.Construct made) {
+            Core written = Core.withoutStanding(at);
+            if (written instanceof Core.Construct made) {
                 return new CallPassage.WhyOpen.AConstruction(made.pos(), made.typeName().name());
             }
-            if (AnOperationApplied.of(at) instanceof AnOperationApplied applied
+            if (AnOperationApplied.of(written) instanceof AnOperationApplied applied
                     && applied.operation() instanceof ValueName.Behavior called) {
-                return new CallPassage.WhyOpen.ACall(at.pos(), called,
+                return new CallPassage.WhyOpen.ACall(written.pos(), called,
                         db.ask(new RowsRunsGetPast(called.module(), called.name())).value());
             }
-            return new CallPassage.WhyOpen.SomethingWorkedOut(at.pos());
+            return new CallPassage.WhyOpen.SomethingWorkedOut(written.pos());
         }
 
         @Override

@@ -306,9 +306,9 @@ public final class GuardThresholds {
     }
 
     /**
-     * Where the runs of rows may not get past working out the body {@code states}, over whatever
-     * its inputs may hold: the expression written in it whose own working may end a run, and none
-     * where every run gets past. What a caller is told of it ({@link
+     * Where it is not shown that the runs of rows get past working out the body {@code states},
+     * over whatever its inputs may hold: the expression written in it whose own working may end a
+     * run, and none where every run is shown to get past. What a caller is told of it ({@link
      * souther.compiler.check.BehaviorAnswers#passageOf}). Asked by the numbers its operations lie
      * within: a sum of inputs declared within a range ends no run, and one of any {@code Int}
      * may. An {@code unreachable} is taken as the premise it states, the body's to account for

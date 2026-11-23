@@ -560,8 +560,9 @@ public sealed interface ReportMessage extends Message {
     /** Why a stop is not resolved: something worked out is read as no operation. */
     record NoOperationIsReadThere() implements ReportMessage, Prose {}
 
-    /** Why: it is the call of {@code behavior} written at {@code at}, and no run is shown to get
-     *  past that behavior's body, for {@code passage}, said by one of the messages below. */
+    /** Why: it is the call of {@code behavior} written at {@code at}, and it is not shown that
+     *  every run gets past that behavior's body, for {@code passage}, said by one of the messages
+     *  below. */
     record ItIsACallOf(String behavior, String at, Message passage)
             implements ReportMessage, Prose {}
 
@@ -579,7 +580,7 @@ public sealed interface ReportMessage extends Message {
     record TheCalledBehaviorIsNotRead() implements ReportMessage, Prose {}
 
     /** What a behavior called is told of: it may stop at a construction of {@code type} written at
-     *  {@code at}, whose invariant is not shown to hold where it is made. */
+     *  {@code at}, of which it is not shown that every run making it keeps its invariant. */
     record TheCalledBehaviorMayStopAtAConstruction(String at, String type)
             implements ReportMessage, Prose {}
 

@@ -10,8 +10,8 @@ package souther.compiler.inputs;
 public enum WhyAStopIsNotShown {
     /** A run may stop in something worked out that is no operation told. */
     NO_OPERATION_TOLD,
-    /** A run may stop in a call of a behavior: no run of a row is shown to get past working its
-     *  body out, which is what that behavior is told of. */
+    /** A run may stop in a call of a behavior: it is not shown that the run of every row gets
+     *  past working its body out, which is what that behavior is told of. */
     IN_A_CALL,
     /** A run may stop on rows the statement says of its own, which are no operation of numbers. */
     ON_ROWS_OF_THE_STATEMENT,

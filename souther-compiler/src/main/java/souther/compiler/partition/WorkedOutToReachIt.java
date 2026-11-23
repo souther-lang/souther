@@ -582,8 +582,8 @@ final class WorkedOutToReachIt {
      * taken to get past it, as the body's own account takes the arm it answers. What a behavior's
      * callers are told of its body is asked so: the premise is the called behavior's, and a run
      * that reaches it aborts there, in that behavior. What a run reaching it works out is asked as
-     * before, and a construction whose invariant is not shown to hold is not taken so, since
-     * nothing written states that it holds.
+     * before, and a construction whose invariant is not shown to hold on every run that makes it
+     * is not taken so, since nothing written states that it holds.
      */
     WorkedOutToReachIt takingWhatItRulesOutAsRuledOut() {
         Predicate<Denotation> before = beyond;

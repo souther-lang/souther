@@ -10,10 +10,12 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
 
 import java.math.BigInteger;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -100,6 +102,37 @@ class AWorkingPutTogetherKeepsWhichStopsItLeavesUntoldTest {
         apart.aStopWhereNoRowIs();
         absorbing.absorb(apart);
         assertTrue(absorbing.working().leavesUntoldBeyond(List.of(q)));
+    }
+
+    /** Some operation left untold, and a stop left untold in a call of {@code behavior}. */
+    private static UndividedByARelation.Working leavingTheCallOf(String behavior) {
+        return new UndividedByARelation.Working(List.of(), Told.SOME, true, List.of(), true,
+                NotAccountedFor.aCall(new NotAccountedFor.ACall(
+                        new ValueName.Behavior("m", behavior), POS)));
+    }
+
+    private static List<String> callsOf(UndividedByARelation.Working working) {
+        return working.leftUntold().calls().stream().map(call -> call.behavior().name())
+                .toList();
+    }
+
+    /** A call one reading names is named by the readings together, whether or not they agree on
+     *  what they tell, and by whatever a working is put beside or read past. */
+    @Test
+    void aCallAReadingLeavesUntoldIsKeptByEveryWayOfPuttingWorkingsTogether() {
+        UndividedByARelation.Working made = leavingTheCallOf("made");
+        // Told of every operation where the other is told of some: the two disagree on what
+        // they tell, and are put together as no reading.
+        UndividedByARelation.Working toldWhole = new UndividedByARelation.Working(List.of(),
+                Told.EVERY);
+
+        assertEquals(List.of("made"), callsOf(
+                UndividedByARelation.Working.together(List.of(toldWhole, made))));
+        assertEquals(List.of("made", "other"), callsOf(UndividedByARelation.Working.together(
+                List.of(made, leavingTheCallOf("other")))));
+        assertEquals(List.of("made"), callsOf(made.after(aStopNothingAnswersFor())));
+        assertEquals(List.of("made"), callsOf(aStopNothingAnswersFor().after(made)));
+        assertEquals(List.of("made"), callsOf(made.notOnEveryRun()));
     }
 
     private static UndividedByARelation.IntOperation operationAt(Core node) {

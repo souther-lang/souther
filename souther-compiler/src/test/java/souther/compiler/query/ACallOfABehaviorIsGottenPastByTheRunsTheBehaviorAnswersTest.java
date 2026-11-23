@@ -245,6 +245,31 @@ class ACallOfABehaviorIsGottenPastByTheRunsTheBehaviorAnswersTest {
                 document::toString);
     }
 
+    /** The schema holds a document to what the types hold this to: a call exactly where the
+     *  reason is a call, and of a passage, the construction or the call exactly where it names
+     *  one, and a place only where there is one. */
+    @Test
+    void theSchemaRefusesAReasonWithoutWhatItNames() {
+        JsonMapper json = JsonMapper.builder().build();
+        String item = "#/$defs/findings/items/properties/unresolved/items";
+        String passage = "#/$defs/passageOfACall";
+        String call = "{\"behavior\": \"made\", \"passage\": {\"reason\": \"no_body\"}}";
+
+        assertEquals(List.of(), DocumentShape.of(json.readTree(
+                "{\"reason\": \"in_a_call\", \"call\": " + call + "}"), item).wrong());
+        for (String wrong : List.of("{\"reason\": \"in_a_call\"}",
+                "{\"reason\": \"no_operation_told\", \"call\": " + call + "}")) {
+            assertFalse(DocumentShape.of(json.readTree(wrong), item).wrong().isEmpty(), wrong);
+        }
+        for (String wrong : List.of("{\"reason\": \"construction\"}",
+                "{\"reason\": \"no_body\", \"construction\": \"Points\"}",
+                "{\"reason\": \"call\"}",
+                "{\"reason\": \"gotten_past\", \"call\": " + call + "}",
+                "{\"reason\": \"not_read\", \"at\": {}}")) {
+            assertFalse(DocumentShape.of(json.readTree(wrong), passage).wrong().isEmpty(), wrong);
+        }
+    }
+
     /** Where the proof gives out is asked on the arm it is written on, with what entering the arm
      *  states: a construction on an arm whose condition keeps its invariant is got past. */
     @Test

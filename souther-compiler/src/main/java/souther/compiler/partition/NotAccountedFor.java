@@ -40,8 +40,8 @@ final class NotAccountedFor {
     }
 
     /**
-     * A call of {@code behavior}, written at {@code at}, whose stop a working leaves untold: no
-     * run of a row is shown to get past working its body out.
+     * A call of {@code behavior}, written at {@code at}, whose stop a working leaves untold: it is
+     * not shown that the run of every row gets past working its body out.
      */
     record ACall(ValueName.Behavior behavior, SourcePos at) {
 
@@ -54,8 +54,11 @@ final class NotAccountedFor {
     static final NotAccountedFor NOTHING = new NotAccountedFor(Kind.NOTHING, List.of(),
             List.of());
 
-    static final NotAccountedFor SOMETHING_ELSE = new NotAccountedFor(Kind.SOMETHING_ELSE,
-            List.of(), List.of());
+    /** Something else and no call. Not handed out: what is left to something else is made from
+     *  what was left before ({@link #andSomethingElse}), so that no reader widening it drops the
+     *  calls it holds. */
+    private static final NotAccountedFor SOMETHING_ELSE = new NotAccountedFor(
+            Kind.SOMETHING_ELSE, List.of(), List.of());
 
     private final Kind kind;
     private final List<Core.Binary> quotients;
@@ -80,6 +83,12 @@ final class NotAccountedFor {
     static NotAccountedFor quotients(List<Core.Binary> nodes) {
         return nodes.isEmpty() ? SOMETHING_ELSE
                 : new NotAccountedFor(Kind.QUOTIENTS, List.copyOf(nodes), List.of());
+    }
+
+    /** This, and something else beside it: what a reader leaves where it cannot name what is
+     *  left, with every call this names still named. */
+    NotAccountedFor andSomethingElse() {
+        return join(SOMETHING_ELSE);
     }
 
     /** The stop of {@code call} left untold, which is something else. */
