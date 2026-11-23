@@ -9,7 +9,9 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.inputs.AStopNotShown;
 import souther.compiler.inputs.WhyAStopIsNotShown;
+import souther.compiler.meta.ModulePath;
 import souther.compiler.report.AdequacyReport;
+import souther.compiler.types.TypeKey;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -152,7 +154,7 @@ class ACallOfABehaviorIsGottenPastByTheRunsTheBehaviorAnswersTest {
         Compilation compilation = readByItsRules(throwsScored("Points(n)", UNREACHABLE));
         String report = reportOf(compilation, "reachedTwelve");
 
-        assertEquals("Points", assertInstanceOf(StopOrigin.AConstruction.class,
+        assertEquals(new TypeKey("m", "Points"), assertInstanceOf(StopOrigin.AConstruction.class,
                 mayStopAt(compilation, "scoreOf")).type());
         List<String> open = notResolved(report);
         assertEquals(1, open.size(), report);
@@ -287,14 +289,53 @@ class ACallOfABehaviorIsGottenPastByTheRunsTheBehaviorAnswersTest {
             restsOn.forEach(places::add);
         }
         assertTrue(places.stream().anyMatch(place -> place.at("/kind").asString().equals("call")
+                && place.at("/module").asString().equals("m")
                 && place.at("/behavior").asString().equals("pinsOf")
                 && place.at("/passage/reason").asString().equals("may_stop")
                 && place.at("/passage/place/behavior").asString().equals("scoreOf")
                 && place.at("/passage/place/passage/place/kind").asString()
                         .equals("construction")
                 && place.at("/passage/place/passage/place/construction").asString()
-                        .equals("Points")),
+                        .equals("m.Points")),
                 document::toString);
+    }
+
+    /**
+     * A behavior called is named in a document by the module that declares it as well as by its
+     * name, and a type by its qualified name: two modules may each declare one of a name, and a
+     * reader of the document is not left to resolve which.
+     */
+    @Test
+    void aDocumentNamesWhatACallLeavesOpenByTheModuleThatDeclaresIt() {
+        String declaring = """
+                module %s
+                data Points = Int
+                    invariant value >= 0 && value <= 12
+                behavior calculate : (n: Int) -> Points
+                let calculate (n) = Points(n)
+                """;
+        Compilation compilation = Compilation.ofSources(List.of(
+                declaring.formatted("billing"), declaring.formatted("shipping"), """
+                        module main
+                        import billing ( calculate )
+                        behavior twelve : (n: Int) -> Bool
+                        let twelve (n) = calculate(n).value == 12
+                        """), ModulePath.EMPTY);
+        compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.OFF));
+        ACompiledModel.compiles(compilation);
+        JsonNode document = JsonMapper.builder().build().readTree(AdequacyReport.of(compilation)
+                .json(SourceRendering.namedByIdentity(compilation.texts())));
+
+        DocumentShape.assertShapedLikeTheSchema(document);
+        List<JsonNode> calls = new ArrayList<>();
+        for (JsonNode restsOn : document.findValues("restsOn")) {
+            restsOn.forEach(calls::add);
+        }
+        assertEquals(List.of("billing"), calls.stream()
+                .filter(place -> place.at("/behavior").asString().equals("calculate"))
+                .map(place -> place.at("/module").asString()).toList(), document::toString);
+        assertEquals("billing.Points", calls.getFirst().at("/passage/place/construction")
+                .asString(), document::toString);
     }
 
     private static final String ITEM = "#/$defs/findings/items/properties/unresolved/items";
@@ -340,12 +381,15 @@ class ACallOfABehaviorIsGottenPastByTheRunsTheBehaviorAnswersTest {
     void theSchemaRefusesAPlaceOrAPassageWithoutWhatItNames() {
         String place = "#/$defs/stopPlace";
         String passage = "#/$defs/passageOfACall";
-        assertTrue(schemaTakes("{\"kind\": \"call\", \"behavior\": \"made\","
-                + " \"passage\": {\"reason\": \"may_stop\", \"place\": {\"kind\": \"worked_out\"}}}",
-                place));
+        String passageOfMade = "\"passage\": {\"reason\": \"may_stop\","
+                + " \"place\": {\"kind\": \"worked_out\"}}";
+        assertTrue(schemaTakes("{\"kind\": \"call\", \"module\": \"m\", \"behavior\": \"made\", "
+                + passageOfMade + "}", place));
         for (String wrong : List.of("{\"kind\": \"construction\"}",
-                "{\"kind\": \"worked_out\", \"construction\": \"Points\"}",
-                "{\"kind\": \"call\", \"behavior\": \"made\"}",
+                "{\"kind\": \"worked_out\", \"construction\": \"m.Points\"}",
+                "{\"kind\": \"call\", \"module\": \"m\", \"behavior\": \"made\"}",
+                "{\"kind\": \"call\", \"behavior\": \"made\", " + passageOfMade + "}",
+                "{\"kind\": \"worked_out\", \"module\": \"m\"}",
                 "{\"kind\": \"worked_out\", \"behavior\": \"made\"}")) {
             assertFalse(schemaTakes(wrong, place), wrong);
         }

@@ -9960,8 +9960,7 @@ final class Pullback {
                                 ConstructionAsk.Requirement asks,
                                 Collection<? extends Quantity> numbers) {
         if (Core.withoutStanding(operation) instanceof Core.Construct construct) {
-            asked.add(new ConstructionAsk(construct, construct.typeName().name(), construct.pos(),
-                    bearingOf(numbers), asks));
+            asked.add(new ConstructionAsk(construct, construct.pos(), bearingOf(numbers), asks));
         }
     }
 

@@ -128,6 +128,7 @@
           },
           "then": {
             "required": [
+              "module",
               "behavior",
               "passage"
             ]
@@ -135,6 +136,11 @@
           "else": {
             "not": {
               "anyOf": [
+                {
+                  "required": [
+                    "module"
+                  ]
+                },
                 {
                   "required": [
                     "behavior"
@@ -161,11 +167,15 @@
         },
         "construction": {
           "type": "string",
-          "description": "Of `construction` only: the type made, as it is written."
+          "description": "Of `construction` only: the type made, qualified by the module that declares it, as two modules may each declare a data of one name."
+        },
+        "module": {
+          "type": "string",
+          "description": "Of `call` only: the module that declares the behavior called, which may be another than the one the call is written in."
         },
         "behavior": {
           "type": "string",
-          "description": "Of `call` only: the behavior called, by its name."
+          "description": "Of `call` only: the behavior called, by its name in `module`."
         },
         "passage": {
           "$ref": "#/$defs/passageOfACall",
@@ -5215,7 +5225,7 @@
               "properties": {
                 "construction": {
                   "type": "string",
-                  "description": "The type made, as it is written."
+                  "description": "The type made, qualified by the module that declares it, as two modules may each declare a data of one name."
                 },
                 "at": {
                   "$ref": "#/$defs/at",
@@ -5256,7 +5266,7 @@
               "properties": {
                 "construction": {
                   "type": "string",
-                  "description": "The type made, as it is written."
+                  "description": "The type made, qualified by the module that declares it, as two modules may each declare a data of one name."
                 },
                 "at": {
                   "$ref": "#/$defs/at",

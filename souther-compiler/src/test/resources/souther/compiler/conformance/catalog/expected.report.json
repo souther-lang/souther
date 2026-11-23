@@ -7878,6 +7878,7 @@
           "reason" : "no_operation_told",
           "restsOn" : [ {
             "kind" : "call",
+            "module" : "conformance.catalog",
             "behavior" : "現価を引く",
             "passage" : {
               "reason" : "no_body"

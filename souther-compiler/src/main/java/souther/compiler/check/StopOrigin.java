@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.types.TypeKey;
 import souther.compiler.types.ValueName;
 
 import java.util.Objects;
@@ -29,7 +30,7 @@ public sealed interface StopOrigin {
     static StopOrigin of(Core e, BehaviorAnswers answers) {
         Core written = Core.withoutStanding(e);
         if (written instanceof Core.Construct made) {
-            return new AConstruction(made.pos(), made.typeName().name());
+            return new AConstruction(made.pos(), made.typeName().key());
         }
         if (AnOperationApplied.of(written) instanceof AnOperationApplied applied
                 && applied.operation() instanceof ValueName.Behavior called) {
@@ -39,8 +40,9 @@ public sealed interface StopOrigin {
     }
 
     /** A construction of {@code type}, of which it is not shown that every run making it keeps
-     *  its invariant. */
-    record AConstruction(SourcePos at, String type) implements StopOrigin {
+     *  its invariant. The type is held as the declaration it is, and not by its name: two modules
+     *  may each declare one of a name. */
+    record AConstruction(SourcePos at, TypeKey type) implements StopOrigin {
 
         public AConstruction {
             Objects.requireNonNull(at, "a construction is written somewhere");

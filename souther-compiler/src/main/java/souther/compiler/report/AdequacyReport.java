@@ -7362,10 +7362,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         List<String> each = new ArrayList<>();
         for (WhatAConstructionAsks one : asks) {
             String at = writtenAtSaid(one.at(), rendering, declaredIn);
+            String made = one.construction().name();
             each.add(page.say(one.asks() instanceof WhatAConstructionAsks.Never
-                    ? new ReportMessage.ConstructionNeverPassed(one.construction(), at)
-                    : new ReportMessage.ConstructionAsks(one.construction(), at,
-                            askedSaid(one.asks(), page))));
+                    ? new ReportMessage.ConstructionNeverPassed(made, at)
+                    : new ReportMessage.ConstructionAsks(made, at, askedSaid(one.asks(), page))));
         }
         return new ReportMessage.Verbatim(String.join("", each));
     }
@@ -7394,14 +7394,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 case NO_VALUE_FOUND_WITHIN_WHAT_IS_TRIED ->
                         new ReportMessage.TheInputsTriedRanOutBeforeOneWasRefused();
             };
+            String made = one.construction().name();
             out.append(page.say(one.asked()
                     .<Message>map(asked -> asked instanceof WhatAConstructionAsks.Never
-                            ? new ReportMessage.ConstructionNeverPassedAndNotShown(
-                                    one.construction(), at, why)
-                            : new ReportMessage.ConstructionAsksAndNotShown(one.construction(),
-                                    at, askedSaid(asked, page), why))
-                    .orElseGet(() -> new ReportMessage.ConstructionNotShown(one.construction(), at,
-                            why))));
+                            ? new ReportMessage.ConstructionNeverPassedAndNotShown(made, at, why)
+                            : new ReportMessage.ConstructionAsksAndNotShown(made, at,
+                                    askedSaid(asked, page), why))
+                    .orElseGet(() -> new ReportMessage.ConstructionNotShown(made, at, why))));
         }
         return new ReportMessage.Verbatim(out.toString());
     }
@@ -7570,7 +7569,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         String at = writtenAtSaid(place.at(), rendering, declaredIn);
         return switch (place) {
             case StopOrigin.AConstruction(var _, var type) ->
-                    new ReportMessage.TheConstructionOf(type, at);
+                    new ReportMessage.TheConstructionOf(type.name(), at);
             case StopOrigin.ACall(var _, var behavior, var _) ->
                     new ReportMessage.TheCallOf(behavior.name(), at);
             case StopOrigin.SomethingWorkedOut _ -> new ReportMessage.WhatIsWorkedOutAt(at);
@@ -11642,7 +11641,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                              DocumentSources sources) {
         for (WhatAConstructionAsks each : asks) {
             ObjectNode one = into.addObject();
-            one.put("construction", each.construction());
+            one.put("construction", each.construction().qualified());
             PublishedAt.of(Citation.of(each.at())).ifPresent(place -> at(one, place, sources));
             askedWritten(one.putObject("asked"), each.asks());
         }
@@ -11654,10 +11653,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         switch (place) {
             case StopOrigin.AConstruction(var _, var type) -> {
                 into.put("kind", "construction");
-                into.put("construction", type);
+                into.put("construction", type.qualified());
             }
             case StopOrigin.ACall(var _, var behavior, var passage) -> {
                 into.put("kind", "call");
+                into.put("module", behavior.module());
                 into.put("behavior", behavior.name());
                 passageWritten(into.putObject("passage"), passage, sources);
             }
@@ -11693,7 +11693,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                                      DocumentSources sources) {
         for (AConstructionStopNotShown each : notShown) {
             ObjectNode one = into.addObject();
-            one.put("construction", each.construction());
+            one.put("construction", each.construction().qualified());
             PublishedAt.of(Citation.of(each.at())).ifPresent(place -> at(one, place, sources));
             each.asked().ifPresent(asked -> askedWritten(one.putObject("asked"), asked));
             one.put("reason", word(each.why()));

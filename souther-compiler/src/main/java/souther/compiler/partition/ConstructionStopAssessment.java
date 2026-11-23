@@ -136,7 +136,7 @@ final class ConstructionStopAssessment {
 
         @Override
         public String toString() {
-            return told.construction() + " at " + told.at() + " for " + at;
+            return told.construction().qualified() + " at " + told.at() + " for " + at;
         }
     }
 
@@ -169,7 +169,7 @@ final class ConstructionStopAssessment {
                 // Not read for want of the names where it is worked out, where the walk did not
                 // meet it on one way: that no run is shown to get to it is what is missing.
                 case AConstructionOnTheWay.Asked.NotRead _ -> new Judgement.Unresolved(one.made(),
-                        new AConstructionStopNotShown(one.made().typeName().name(),
+                        new AConstructionStopNotShown(one.made().typeName().key(),
                                 one.made().pos(), Optional.empty(), !one.reaches().isEmpty()
                                         ? WhyAConstructionStopIsNotShown.ASKS_NOT_READ
                                         : WhyAConstructionStopIsNotShown.REACH_NOT_SHOWN),

@@ -15,6 +15,7 @@ import souther.compiler.inputs.WhyAConstructionStopIsNotShown;
 import souther.compiler.partition.Partitions;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.compiler.types.TypeKey;
 import souther.runtime.ConstraintViolation;
 import souther.runtime.InvariantFailure;
 
@@ -351,9 +352,9 @@ class AConstructionIsToldOfAStopWhereARunStopsThereTest {
 
     /** A construction as the type made and the line and column it is written at, which is what a
      *  run that stops there says of where it stopped. */
-    private static String siteOf(String type, SourcePos at, SourceRendering rendering) {
+    private static String siteOf(TypeKey type, SourcePos at, SourceRendering rendering) {
         PhysicalPos written = rendering.layouts().resolve(at);
-        return type + " at " + written.line() + ":" + written.column();
+        return type.name() + " at " + written.line() + ":" + written.column();
     }
 
     /** Every construction some run of the grid stops at ({@link #constructionStoppedAt}). */
