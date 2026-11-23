@@ -7,8 +7,8 @@ import souther.compiler.diag.SourceRendering;
 import souther.compiler.inputs.AConstructionStopNotShown;
 import souther.compiler.inputs.AConstructionStopShown;
 import souther.compiler.inputs.AStopShown;
-import souther.compiler.inputs.RuleWhereARunMayStop;
-import souther.compiler.inputs.RuleWhereAStopIsNotShown;
+import souther.compiler.inputs.StepWhereARunMayStop;
+import souther.compiler.inputs.StepWhereAStopIsNotShown;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.WhatIsShownOfAStop;
 import souther.compiler.inputs.WhyAConstructionStopIsNotShown;
@@ -335,12 +335,12 @@ class AConstructionIsToldOfAStopWhereARunStopsThereTest {
         Set<String> shownAt = new TreeSet<>();
         Map<String, List<WhyAConstructionStopIsNotShown>> notShownAt = new TreeMap<>();
         for (WhatIsShownOfAStop each : divided.stopsShown()) {
-            if (each instanceof RuleWhereARunMayStop stops) {
+            if (each instanceof StepWhereARunMayStop stops) {
                 for (AConstructionStopShown one : stops.constructions()) {
                     shown.add(one);
                     shownAt.add(siteOf(one.asks().construction(), one.asks().at(), rendering));
                 }
-            } else if (each instanceof RuleWhereAStopIsNotShown open) {
+            } else if (each instanceof StepWhereAStopIsNotShown open) {
                 for (AConstructionStopNotShown one : open.asks()) {
                     notShownAt.computeIfAbsent(siteOf(one.construction(), one.at(), rendering),
                             _ -> new ArrayList<>()).add(one.why());

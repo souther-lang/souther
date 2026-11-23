@@ -7,7 +7,6 @@ import souther.compiler.check.AnalysisBody;
 import souther.compiler.core.Core;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.types.BinOp;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -18,16 +17,16 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A run that takes the way to a comparison and the way to a construction gets to the construction,
- * unless something before ends it, where it is worked out before the comparison and not inside a
- * function value: on an arm, or on the right of an {@code ||}, past what decides it, which it works
- * out first. The construction an attempt tests is none a run gets to and past, since whether it is
- * built is the attempt's deciding; what it is built of is.
+ * What a run works out before a construction is read where the construction is not inside a
+ * function value: on an arm, or on the right of an {@code ||}, past what decides it, which it
+ * works out first; and whatever comes after it, a comparison among them, since a run that stops
+ * there gets to none of it. The construction an attempt tests is none a run gets to and past,
+ * since whether it is built is the attempt's deciding; what it is built of is.
  *
  * <p>Held here and not by the report: which runs take the arm is the way to the construction's to
- * say, and the report asks a value to meet it ({@link ConstructionStopAssessment}).
+ * say, and the report asks a value to meet it ({@link StopsOfABody}).
  */
-class ARunOnTheWayGetsToAConstructionPastWhatDecidesItAndNotIntoAFunctionTest {
+class ARunGetsToAConstructionPastWhatDecidesItAndNotIntoAFunctionTest {
 
     private static final String HEAD = """
             module probe.w
@@ -56,35 +55,28 @@ class ARunOnTheWayGetsToAConstructionPastWhatDecidesItAndNotIntoAFunctionTest {
         return analysis.core();
     }
 
-    /** What a run on the way to the one comparison of equality works out before the one
-     *  construction made of {@code t}, where it is shown to get there. */
+    /** What a run works out before the one construction made of {@code t}, where that is read. */
     private static Optional<WhatARunWorksOutBeforeACount.BeforeAConstruction> toTheConstructionOfT(
             String body) {
         Core root = bodyOf(body);
-        List<Core> comparisons = new ArrayList<>();
         List<Core.Construct> ofT = new ArrayList<>();
-        collect(root, comparisons, ofT);
-        assertEquals(1, comparisons.size(), () -> "one comparison is written: " + comparisons);
+        collect(root, ofT);
         assertEquals(1, ofT.size(), () -> "one construction of t is written: " + ofT);
-        return WhatARunWorksOutBeforeACount.workedOutBeforeAConstruction(root,
-                comparisons.getFirst(), ofT.getFirst());
+        return WhatARunWorksOutBeforeACount.workedOutBeforeASite(root, ofT.getFirst());
     }
 
-    private static void collect(Core e, List<Core> comparisons, List<Core.Construct> ofT) {
+    private static void collect(Core e, List<Core.Construct> ofT) {
         Core here = Core.withoutStanding(e);
-        if (here instanceof Core.Binary binary && binary.op() == BinOp.EQ) {
-            comparisons.add(binary);
-        }
         if (here instanceof Core.Construct construct
                 && Core.withoutStanding(construct.values().getFirst().value())
                 instanceof Core.Read read && read.name().equals("t")) {
             ofT.add(construct);
         }
-        Core.forEachChild(here, child -> collect(child, comparisons, ofT));
+        Core.forEachChild(here, child -> collect(child, ofT));
     }
 
     @Test
-    void aConstructionInTheValueOfALetBeforeTheComparisonIsGotTo() {
+    void aConstructionInTheValueOfALetIsGotTo() {
         assertTrue(toTheConstructionOfT("""
                 let pick (s, t, u) = {
                     let made = Domain(t)
@@ -95,7 +87,7 @@ class ARunOnTheWayGetsToAConstructionPastWhatDecidesItAndNotIntoAFunctionTest {
 
     /** A guard met after it decides nothing of whether it is got to. */
     @Test
-    void aConstructionBeforeAGuardTheComparisonIsUnderIsGotTo() {
+    void aConstructionBeforeAGuardIsGotTo() {
         assertTrue(toTheConstructionOfT("""
                 let pick (s, t, u) = {
                     let made = Domain(t)
@@ -107,7 +99,7 @@ class ARunOnTheWayGetsToAConstructionPastWhatDecidesItAndNotIntoAFunctionTest {
     /** What decides the arm is worked out on every run that gets to the construction, before
      *  what it is made of. */
     @Test
-    void aConstructionOnAnArmOfAValueBeforeTheComparisonIsGotToPastItsCondition() {
+    void aConstructionOnAnArmIsGotToPastItsCondition() {
         assertEquals(List.of("u", "t"), namesWorkedOutFirst("""
                 let pick (s, t, u) = {
                     let made = if u then Domain(t) else Domain("a")
@@ -130,7 +122,7 @@ class ARunOnTheWayGetsToAConstructionPastWhatDecidesItAndNotIntoAFunctionTest {
     private static List<String> namesWorkedOutFirst(String body) {
         Optional<WhatARunWorksOutBeforeACount.BeforeAConstruction> before =
                 toTheConstructionOfT(body);
-        assertTrue(before.isPresent(), "a run on the way gets to it");
+        assertTrue(before.isPresent(), "a run gets to it");
         return before.get().onEveryRun().stream()
                 .map(part -> ((Core.Read) Core.withoutStanding(part)).name()).toList();
     }
@@ -145,16 +137,17 @@ class ARunOnTheWayGetsToAConstructionPastWhatDecidesItAndNotIntoAFunctionTest {
                 """));
     }
 
-    /** One worked out after the comparison is not on the way to it. */
+    /** One worked out after a comparison is got to all the same: a run that stops there has
+     *  got past the comparison, and gets to nothing after. */
     @Test
-    void aConstructionAfterTheComparisonIsNotShownToBeGotTo() {
-        assertEquals(Optional.empty(), toTheConstructionOfT("""
+    void aConstructionAfterAComparisonIsGotTo() {
+        assertTrue(toTheConstructionOfT("""
                 let pick (s, t, u) = {
                     let same = s == "x"
                     let made = Domain(t)
                     if same then Yes else No
                 }
-                """));
+                """).isPresent());
     }
 
     /** A refused attempt takes the other arm, so a run is neither stopped at the construction

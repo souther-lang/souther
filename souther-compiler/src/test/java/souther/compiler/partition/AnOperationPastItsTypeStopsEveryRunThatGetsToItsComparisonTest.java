@@ -449,7 +449,7 @@ class AnOperationPastItsTypeStopsEveryRunThatGetsToItsComparisonTest {
         List<JsonNode> out = new ArrayList<>();
         for (JsonNode each : findings) {
             String kind = each.get("kind").asString();
-            if (kind.equals("rule_may_stop_a_run") || kind.equals("rule_stop_not_shown")) {
+            if (kind.equals("step_may_stop_a_run") || kind.equals("step_stop_not_shown")) {
                 out.add(each);
             }
         }

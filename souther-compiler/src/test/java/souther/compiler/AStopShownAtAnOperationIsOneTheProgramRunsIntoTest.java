@@ -4,8 +4,8 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import souther.compiler.inputs.AStopShown;
-import souther.compiler.inputs.RuleWhereARunMayStop;
-import souther.compiler.inputs.RuleWhereAStopIsNotShown;
+import souther.compiler.inputs.StepWhereARunMayStop;
+import souther.compiler.inputs.StepWhereAStopIsNotShown;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.WhatIsShownOfAStop;
 import souther.compiler.partition.Partitions;
@@ -198,7 +198,7 @@ class AStopShownAtAnOperationIsOneTheProgramRunsIntoTest {
         boolean aStopShown = false;
         List<String> shownAndItsRunDoesNotStop = new ArrayList<>();
         for (WhatIsShownOfAStop each : divided.stopsShown()) {
-            if (each instanceof RuleWhereARunMayStop stops) {
+            if (each instanceof StepWhereARunMayStop stops) {
                 saidSomething |= !stops.shown().isEmpty() || !stops.everyRunStops().isEmpty();
                 aStopShown |= !stops.shown().isEmpty();
                 for (AStopShown shown : stops.shown()) {
@@ -212,7 +212,7 @@ class AStopShownAtAnOperationIsOneTheProgramRunsIntoTest {
                         }
                     }
                 }
-            } else if (each instanceof RuleWhereAStopIsNotShown open) {
+            } else if (each instanceof StepWhereAStopIsNotShown open) {
                 saidSomething |= !open.notShown().isEmpty();
             }
         }

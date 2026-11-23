@@ -13,9 +13,7 @@ import souther.compiler.semantics.HowAClosureIsApplied;
 import souther.compiler.types.BindingId;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
-import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -319,65 +317,6 @@ final class WhatARunWorksOutBeforeACount {
     }
 
     /**
-     * Every construction a run on the way to {@code comparison}, a node of {@code root}'s tree,
-     * may work out before it, each once, in the order the parts holding them are worked out — or
-     * empty where what a run works out before it is not read ({@link #workedOutUpTo}): it is not in
-     * the tree, or stands in a function value that is not handed to the call applying it, whose
-     * applications may come anywhere. Empty is that it is not read, and never that there is none:
-     * a reader then asks of every construction that may come first
-     * ({@link #everyConstructionIn}).
-     *
-     * <p>Every construction under a part a run may work out first ({@link #workedOutUpTo}, a part
-     * that runs only on some runs counted as running), on whichever arm of it, and under a function
-     * value made on the way, which may be applied before the comparison. Gathered by where it is
-     * written and not by whether every run gets to it, so that one only some runs get to is among
-     * them, and whether a run gets to it is asked of each afterwards
-     * ({@link #workedOutBeforeAConstruction}).
-     *
-     * <p>Not the construction an attempt tests, which no run gets past or stops at: whether it is
-     * built is what the attempt decides ({@link Evaluated#inOrder}). What it is built of is among
-     * them. And nothing under the comparison, which is the relation's own working out.
-     */
-    static Optional<List<Core.Construct>> constructionsARunMayMeetBefore(Core root,
-                                                                       Core comparison) {
-        List<Core> parts = root == null ? null : workedOutUpTo(root, comparison, false, true);
-        if (parts == null) {
-            return Optional.empty();
-        }
-        Set<Core> met = Collections.newSetFromMap(new IdentityHashMap<>());
-        List<Core.Construct> out = new ArrayList<>();
-        for (Core part : parts.subList(0, parts.size() - 1)) {
-            constructionsUnder(part, comparison, null, met, out);
-        }
-        return Optional.of(List.copyOf(out));
-    }
-
-    /**
-     * Every construction written in {@code trees} but under {@code comparison}, each once, in the
-     * order the trees are walked: what a run may work out before a comparison whose way is not
-     * read, every one of which may be worked out first, and none of which a run is shown to get
-     * to. Not the construction an attempt tests, as above.
-     */
-    static List<Core.Construct> everyConstructionIn(List<Core> trees, Core comparison) {
-        Set<Core> met = Collections.newSetFromMap(new IdentityHashMap<>());
-        List<Core.Construct> out = new ArrayList<>();
-        for (Core tree : trees) {
-            constructionsUnder(tree, comparison, null, met, out);
-        }
-        return List.copyOf(out);
-    }
-
-    /** Every construction under {@code e}, each once: what a call is handed, all of which is
-     *  worked out before the body it goes into runs. Not the construction an attempt tests, as
-     *  above. */
-    static List<Core.Construct> everyConstructionUnder(Core e) {
-        Set<Core> met = Collections.newSetFromMap(new IdentityHashMap<>());
-        List<Core.Construct> out = new ArrayList<>();
-        constructionsUnder(e, null, null, met, out);
-        return List.copyOf(out);
-    }
-
-    /**
      * The function value on the way down from {@code root} to {@code node} that no call it is
      * handed to applies ({@link #workedOutUpTo}), with the node it stands under, the outermost
      * where there are several — or null where there is none, or {@code node} is not in the tree.
@@ -458,137 +397,6 @@ final class WhatARunWorksOutBeforeACount {
     }
 
     /**
-     * What a run works out before {@code made}, a construction in what {@code at}, a node of
-     * {@code root}'s tree where a run goes into another body, is handed: what the run works out
-     * before {@code at}, and then, down from {@code at}, as {@link #workedOutBeforeAConstruction}
-     * reads it — every run that works {@code at} out works what it is handed out before going in,
-     * and a run gets to {@code made} on the runs the conditions on the way to it say. Empty where
-     * a function value stands above {@code made}, whose body runs where it is applied, or the way
-     * is not read.
-     */
-    static Optional<BeforeAConstruction> workedOutBeforeEntering(Core root, Core at,
-                                                                Core.Construct made) {
-        List<Core> toIt = wayDownTo(at, made);
-        if (root == null || toIt == null || toIt.size() < 2) {
-            return Optional.empty();
-        }
-        for (int i = 0; i + 1 < toIt.size(); i++) {
-            if (Evaluated.makesAFunction(toIt.get(i))
-                    || !entersOnSomeRun(toIt.get(i), toIt.get(i + 1), made)) {
-                return Optional.empty();
-            }
-        }
-        List<Core> someUpTo = workedOutUpTo(root, at, false);
-        List<Core> everyUpTo = workedOutUpTo(root, at, true);
-        List<Core> someIn = workedOutUpTo(at, made, false);
-        List<Core> everyIn = workedOutUpTo(at, made, true);
-        if (someUpTo == null || everyUpTo == null || someIn == null || everyIn == null) {
-            return Optional.empty();
-        }
-        List<Core> ofIt = Evaluated.inOrder(made).stream().map(Evaluated.Step::expression)
-                .toList();
-        List<Core> onSomeRun = new ArrayList<>(someUpTo.subList(0, someUpTo.size() - 1));
-        onSomeRun.addAll(someIn.subList(0, someIn.size() - 1));
-        onSomeRun.addAll(ofIt);
-        List<Core> onEveryRun = new ArrayList<>(everyUpTo.subList(0, everyUpTo.size() - 1));
-        onEveryRun.addAll(everyIn.subList(0, everyIn.size() - 1));
-        onEveryRun.addAll(ofIt);
-        return Optional.of(new BeforeAConstruction(onSomeRun, onEveryRun));
-    }
-
-    /** Every construction under {@code e} but {@code tested}, the construction the attempt above
-     *  it tests, and nothing under {@code apart}, into {@code out}, each once. */
-    private static void constructionsUnder(Core e, Core apart, Core tested, Set<Core> met,
-                                           List<Core.Construct> out) {
-        if (e == apart) {
-            return;
-        }
-        if (e instanceof Core.Construct made && made != tested && met.add(made)) {
-            out.add(made);
-        }
-        Core testing = e instanceof Core.IfConstructed attempt ? attempt.construct() : null;
-        Core.forEachChild(e, child -> constructionsUnder(child, apart, testing, met, out));
-    }
-
-    /**
-     * What a run may work out before {@code comparison}, a node of {@code root}'s tree, that may
-     * end it: every part counted as running on some run, the comparison itself left out
-     * ({@link #workedOutUpTo}), but those {@code endings} says end none — a build of a value
-     * answered by its template. Null where it is not in the tree. A part that ends a run for what
-     * nothing says ({@link WhatARunMayEndFor.Endings.NotKnown}) is among them: that is not that it
-     * ends none.
-     */
-    static List<Core> whatMayEndARunBefore(Core root, Core comparison,
-                                           WhatARunMayEndFor.WithDefinitions endings) {
-        List<Core> worked = root == null ? null : workedOutUpTo(root, comparison, false);
-        return worked == null ? null : worked.subList(0, worked.size() - 1).stream()
-                .filter(part -> !endings.of(part).endsNone()).toList();
-    }
-
-    /**
-     * What a run works out before {@code made}, a construction in {@code root}'s tree, where a run
-     * that takes the way to {@code comparison} and the way to {@code made} works {@code made} out
-     * before the comparison unless something before it ends the run — or empty where that is not
-     * shown.
-     *
-     * <p>Shown where the two part at a node that works {@code made}'s side out on every run
-     * before it enters {@code comparison}'s — a step that always runs and comes first, or the value
-     * of a {@code let} whose body the comparison is in — and every node from there down to
-     * {@code made} is entered by what is above it on some run. A branch, an arm and a right operand
-     * that runs only where the left comes out one way are entered on the runs their conditions
-     * say, which are conditions of the way to {@code made}: a reader asking of a run getting there
-     * asks it to meet them as well as the way to the comparison. Above the two parting they are the
-     * comparison's way too. Not where a function value stands above {@code made}, whose body runs
-     * once for each application and on arguments the way does not say. And not the construction an
-     * attempt tests, which no run gets past or stops at: whether it is built is what the attempt
-     * decides ({@link Evaluated#inOrder}).
-     *
-     * <p>What it works out first is told twice ({@link BeforeAConstruction}).
-     */
-    static Optional<BeforeAConstruction> workedOutBeforeAConstruction(Core root, Core comparison,
-                                                                      Core.Construct made) {
-        List<Core> toIt = root == null ? null : wayDownTo(root, made);
-        List<Core> toTheComparison = root == null ? null : wayDownTo(root, comparison);
-        if (toIt == null || toTheComparison == null) {
-            return Optional.empty();
-        }
-        int parting = 0;
-        while (parting + 1 < toIt.size() && parting + 1 < toTheComparison.size()
-                && toIt.get(parting + 1) == toTheComparison.get(parting + 1)) {
-            parting++;
-        }
-        if (parting + 1 >= toIt.size() || parting + 1 >= toTheComparison.size()) {
-            return Optional.empty();
-        }
-        for (Core above : toIt.subList(0, parting + 1)) {
-            if (Evaluated.makesAFunction(above)) {
-                return Optional.empty();
-            }
-        }
-        if (!firstOnEveryRun(toIt.get(parting), toIt.get(parting + 1),
-                toTheComparison.get(parting + 1), made)) {
-            return Optional.empty();
-        }
-        for (int i = parting + 1; i + 1 < toIt.size(); i++) {
-            if (!entersOnSomeRun(toIt.get(i), toIt.get(i + 1), made)) {
-                return Optional.empty();
-            }
-        }
-        List<Core> some = workedOutUpTo(root, made, false);
-        List<Core> every = workedOutUpTo(root, made, true);
-        if (some == null || every == null) {
-            return Optional.empty();
-        }
-        List<Core> ofIt = Evaluated.inOrder(made).stream().map(Evaluated.Step::expression)
-                .toList();
-        List<Core> onSomeRun = new ArrayList<>(some.subList(0, some.size() - 1));
-        onSomeRun.addAll(ofIt);
-        List<Core> onEveryRun = new ArrayList<>(every.subList(0, every.size() - 1));
-        onEveryRun.addAll(ofIt);
-        return Optional.of(new BeforeAConstruction(onSomeRun, onEveryRun));
-    }
-
-    /**
      * What a run works out before it takes the step of {@code site}, a node of {@code root}'s tree
      * a run may stop at: everything before it on the way down from {@code root}
      * ({@link #workedOutUpTo}), and then what the site itself is worked out of, which a run works
@@ -654,32 +462,6 @@ final class WhatARunWorksOutBeforeACount {
             every.addAll(after.onEveryRun());
             return new BeforeAConstruction(some, every);
         }
-    }
-
-    /** Whether {@code node} works {@code first} out on every run it runs on, before it enters
-     *  {@code then}, on the way down to {@code made}. */
-    private static boolean firstOnEveryRun(Core node, Core first, Core then, Core made) {
-        return switch (node) {
-            case Core.LetIn let -> first == let.value() && then == let.body();
-            // A value standing as a wider type holds one, and two ways do not part at it; a
-            // function value's body runs where it is applied, and not here.
-            case Core.Widen _, Core.Block _ -> false;
-            // What an attempt is built of is worked out before either arm, and is reached
-            // through the construction; the construction itself is the attempt's own deciding.
-            case Core.IfConstructed attempt ->
-                    first == attempt.construct() && first != made;
-            default -> {
-                for (Evaluated.Step step : Evaluated.inOrder(node)) {
-                    if (step.expression() == then) {
-                        yield false;
-                    }
-                    if (step.expression() == first) {
-                        yield step instanceof Evaluated.Step.Always;
-                    }
-                }
-                yield false;
-            }
-        };
     }
 
     /** Whether {@code node} enters {@code child} on some run it runs on, on the way down to

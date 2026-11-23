@@ -59,11 +59,10 @@ final class WhereARunMayStop {
     /** Each step by the node it is, and the steps in the order the walk first met them. */
     private final Map<Core, List<Met>> met = new IdentityHashMap<>();
     private final List<Core> inOrder = new ArrayList<>();
+    private final Set<Core> placed = Collections.newSetFromMap(new IdentityHashMap<>());
     private final Set<Core> tested = Collections.newSetFromMap(new IdentityHashMap<>());
     private final Map<Core.Block, List<List<OnTheWay>>> made = new IdentityHashMap<>();
     private final Map<Core, List<List<OnTheWay>>> handing = new IdentityHashMap<>();
-    private final Map<Core, Optional<List<Core.Construct>>> metBeforeGoingIn =
-            new IdentityHashMap<>();
     private final Map<Core, Optional<WhatARunWorksOutBeforeACount.BeforeAConstruction>>
             workedOutGoingIn = new IdentityHashMap<>();
 
@@ -93,13 +92,20 @@ final class WhereARunMayStop {
         if (!aStepARunMayStopAt(step) || tested.contains(step)) {
             return;
         }
-        met.computeIfAbsent(step, _ -> {
-            inOrder.add(step);
-            return new ArrayList<>(1);
-        }).add(new Met(way, reads, applying, new Pullback.Once<>(ways)));
+        met.computeIfAbsent(step, _ -> new ArrayList<>(1))
+                .add(new Met(way, reads, applying, new Pullback.Once<>(ways)));
     }
 
-    /** Every step met, in the order the walk first met each. */
+    /** That the walk has gone through everything under {@code e}: where it is a step met, it is
+     *  put in order after what it is worked out of. */
+    void walkedPast(Core e) {
+        if (met.containsKey(e) && placed.add(e)) {
+            inOrder.add(e);
+        }
+    }
+
+    /** Every step met, each once, in the order a run takes them: what a step is worked out of
+     *  before it. */
     List<Core> steps() {
         return Collections.unmodifiableList(inOrder);
     }
@@ -140,18 +146,9 @@ final class WhereARunMayStop {
         return once(handing.get(call));
     }
 
-    /**
-     * Every construction a run may work out before it goes on into another body at {@code at}, a
-     * node of {@code root}'s tree ({@link WhatARunWorksOutBeforeACount#constructionsARunMayMeetBefore}):
-     * worked out once for each such node, however many rules a run goes on there to.
-     */
-    Optional<List<Core.Construct>> metBeforeGoingIn(Core root, Core at) {
-        return metBeforeGoingIn.computeIfAbsent(at, _ ->
-                WhatARunWorksOutBeforeACount.constructionsARunMayMeetBefore(root, at));
-    }
-
     /** What a run works out going into another body at {@code at}, a node of {@code root}'s
-     *  tree ({@link WhatARunWorksOutBeforeACount#workedOutGoingIn}), once for each such node. */
+     *  tree ({@link WhatARunWorksOutBeforeACount#workedOutGoingIn}), once for each such node,
+     *  however many steps a run goes on there to. */
     Optional<WhatARunWorksOutBeforeACount.BeforeAConstruction> workedOutGoingIn(Core root,
                                                                                Core at) {
         return workedOutGoingIn.computeIfAbsent(at, _ ->

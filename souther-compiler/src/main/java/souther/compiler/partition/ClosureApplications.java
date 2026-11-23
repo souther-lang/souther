@@ -664,7 +664,7 @@ sealed interface ClosureApplications {
      * the step of a helper read at a call is made under, the arm taking an element being on
      * neither.
      */
-    private static boolean madeWhateverTheRow(Application one) {
+    static boolean madeWhateverTheRow(Application one) {
         return one.reached() instanceof Proposition.Always(boolean holds) && holds
                 && one.metOn().levels().isEmpty()
                 && one.metOn().made() instanceof Proposition.Always(boolean made) && made;

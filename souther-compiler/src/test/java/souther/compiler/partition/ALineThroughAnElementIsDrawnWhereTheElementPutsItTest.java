@@ -3,8 +3,8 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ACompiledModel;
-import souther.compiler.inputs.RuleWhereARunMayStop;
-import souther.compiler.inputs.RuleWhereAStopIsNotShown;
+import souther.compiler.inputs.StepWhereARunMayStop;
+import souther.compiler.inputs.StepWhereAStopIsNotShown;
 import souther.compiler.inputs.WhatIsShownOfAStop;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
@@ -92,7 +92,7 @@ class ALineThroughAnElementIsDrawnWhereTheElementPutsItTest {
         String holding = "if List.length(xs) >= 1 then List.mapIndexed((i, _) -> %s, xs) else []";
         assertEquals(List.of(), stopsShown(compiled("a: Int, xs: List<Int>", "List<Bool>",
                 holding.formatted("i + 1 == a"))));
-        assertEquals(List.of(RuleWhereAStopIsNotShown.class), stopsShown(compiled(
+        assertEquals(List.of(StepWhereAStopIsNotShown.class), stopsShown(compiled(
                 "a: Int, xs: List<Int>", "List<Bool>", holding.formatted("a + i >= 3")))
                 .stream().map(Object::getClass).toList());
     }
@@ -103,7 +103,7 @@ class ALineThroughAnElementIsDrawnWhereTheElementPutsItTest {
     /** The rules of {@code m} some run reaching them is shown to stop in. */
     private static List<WhatIsShownOfAStop> mayStop(Compilation compilation) {
         return stopsShown(compilation).stream()
-                .filter(RuleWhereARunMayStop.class::isInstance).toList();
+                .filter(StepWhereARunMayStop.class::isInstance).toList();
     }
 
     /** What is shown of a run stopping at each rule of {@code m}. */

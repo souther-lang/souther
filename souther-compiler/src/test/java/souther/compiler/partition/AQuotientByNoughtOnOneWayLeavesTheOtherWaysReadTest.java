@@ -230,12 +230,12 @@ class AQuotientByNoughtOnOneWayLeavesTheOtherWaysReadTest {
         List<JsonNode> stopping = new ArrayList<>();
         for (JsonNode each : findings) {
             String kind = each.get("kind").asString();
-            if (kind.equals("rule_may_stop_a_run") || kind.equals("rule_stop_not_shown")) {
+            if (kind.equals("step_may_stop_a_run") || kind.equals("step_stop_not_shown")) {
                 stopping.add(each);
             }
         }
         assertEquals(1, stopping.size(), findings.toString());
-        assertEquals("rule_stop_not_shown", stopping.getFirst().get("kind").asString());
+        assertEquals("step_stop_not_shown", stopping.getFirst().get("kind").asString());
         assertTrue(stopping.getFirst().has("ruleId"), stopping.getFirst().toString());
         assertFalse(stopping.getFirst().has("reason"), stopping.getFirst().toString());
     }

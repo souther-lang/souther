@@ -141,35 +141,6 @@ final class ConstructionStopAssessment {
     }
 
     /**
-     * What is shown of each construction a run on the way to the comparison {@code each} reads may
-     * work out before it ({@link ComparisonReadings.Reading#onTheWay}), where every row taking the
-     * way to it is in one of {@code ways}: in the order they are worked out.
-     */
-    static List<Judgement> of(ComparisonReadings.Reading each, List<SearchRegion> ways,
-                              InputReading read) {
-        List<AConstructionOnTheWay> onTheWay = each.onTheWay();
-        List<ConstructionAsk> asks = new ArrayList<>();
-        // The way to each construction by each way into the body the comparison stands in.
-        Map<Integer, Map<Core, List<OnTheWay>>> waysTo = new HashMap<>();
-        for (AConstructionOnTheWay one : onTheWay) {
-            if (one.asked() instanceof AConstructionOnTheWay.Asked.Read(ConstructionAsk ask)) {
-                asks.add(ask);
-            }
-            for (AConstructionOnTheWay.Reach reach : one.reaches()) {
-                waysTo.computeIfAbsent(reach.entry(), _ -> new IdentityHashMap<>())
-                        .put(one.made(), reach.toIt());
-            }
-        }
-        // Whether the way holds a part is asked of each part once, however many times it is read.
-        Predicate<Proposition> toTheComparison = heldOnEvery(ways, read);
-        List<Judgement> out = new ArrayList<>();
-        for (AConstructionOnTheWay one : onTheWay) {
-            out.add(judgedWhole(one, asks, waysTo, toTheComparison, read, each.definitions()));
-        }
-        return out;
-    }
-
-    /**
      * What is shown of {@code one}, a construction a run may stop at, where every row taking a way
      * to it is in one of {@code ways}: the same judgement as of one on the way to a comparison,
      * the way to it standing for the way to the comparison. {@code asks} are what the

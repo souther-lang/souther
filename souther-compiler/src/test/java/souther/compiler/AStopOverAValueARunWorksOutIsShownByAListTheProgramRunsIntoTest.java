@@ -7,8 +7,8 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import souther.compiler.inputs.AStopShown;
 import souther.compiler.inputs.InputFact;
-import souther.compiler.inputs.RuleWhereARunMayStop;
-import souther.compiler.inputs.RuleWhereAStopIsNotShown;
+import souther.compiler.inputs.StepWhereARunMayStop;
+import souther.compiler.inputs.StepWhereAStopIsNotShown;
 import souther.compiler.inputs.WhatIsShownOfAStop;
 import souther.compiler.inputs.WhyAStopIsNotShown;
 import souther.compiler.partition.Partitions;
@@ -277,7 +277,7 @@ class AStopOverAValueARunWorksOutIsShownByAListTheProgramRunsIntoTest {
                 compilation.db().ask(new Adequacy.Divided("demo", behavior)).value();
         List<AStopShown> out = new ArrayList<>();
         for (WhatIsShownOfAStop each : divided.stopsShown()) {
-            if (each instanceof RuleWhereARunMayStop stops) {
+            if (each instanceof StepWhereARunMayStop stops) {
                 out.addAll(stops.shown());
             }
         }
@@ -291,7 +291,7 @@ class AStopOverAValueARunWorksOutIsShownByAListTheProgramRunsIntoTest {
                 compilation.db().ask(new Adequacy.Divided("demo", behavior)).value();
         List<WhyAStopIsNotShown> out = new ArrayList<>();
         for (WhatIsShownOfAStop each : divided.stopsShown()) {
-            if (each instanceof RuleWhereAStopIsNotShown open) {
+            if (each instanceof StepWhereAStopIsNotShown open) {
                 open.notShown().forEach(one -> out.add(one.why()));
             }
         }

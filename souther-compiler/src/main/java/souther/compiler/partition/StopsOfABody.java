@@ -2,7 +2,10 @@ package souther.compiler.partition;
 
 import souther.compiler.abort.AbortKind;
 import souther.compiler.abort.AbortSites;
+import souther.compiler.abort.GetsPast;
+import souther.compiler.check.ARowsRun;
 import souther.compiler.check.ClausesInOrder;
+import souther.compiler.check.StopOrigin;
 import souther.compiler.check.ValueTemplates;
 import souther.compiler.check.WhatARunMayEndFor;
 import souther.compiler.core.Core;
@@ -12,6 +15,7 @@ import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.ElementsMet;
 import souther.compiler.inputs.EveryRunStops;
 import souther.compiler.inputs.InputReading;
+import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
@@ -91,11 +95,22 @@ final class StopsOfABody {
         this.definitions = definitions;
     }
 
-    /** What is shown of every step, in the order the walk first met each. Worked out once. */
+    /**
+     * What is shown of every step, in the order the walk first met each. Worked out once.
+     *
+     * <p>Not of a step a run of a row is taken to get past ({@link ARowsRun#completionOf}): an
+     * {@code unreachable}, which states that no run reaches it; a call of a behavior whose own rows
+     * answer for its body; and an operation that ends a run only past what a representation
+     * holds, which is said once of the operation. What is said of those is said where their owner
+     * says it, and nothing here says it again.
+     */
     synchronized List<AtAStep> judged() {
         if (judged == null) {
             List<AtAStep> out = new ArrayList<>();
             for (Core step : where.steps()) {
+                if (gotPast(step)) {
+                    continue;
+                }
                 out.add(Core.withoutStanding(step) instanceof Core.Construct made
                         ? new AtAStep(step, List.of(), Optional.of(ofAConstruction(made)),
                                 List.of(), Optional.empty())
@@ -103,25 +118,76 @@ final class StopsOfABody {
                                 everyRunStops(step), keeping(step)));
             }
             judged = List.copyOf(out);
+            judged.forEach(each -> byStep.put(each.step(), each));
         }
         return judged;
     }
 
-    /** Each way a run gets to {@code step}, with where the walk met it on that way. */
-    private record Reached(WhereARunMayStop.Met met, WaysToASite.Reach reach) {}
+    /**
+     * Whether a run may stop at {@code step}: it is shown to, or it is not shown not to. A node
+     * the walk did not meet as a step of this body is one nothing here shows a run gets past.
+     * What a reader of the rows that get past a step asks, which is a question of what this says
+     * and not one it answers again.
+     */
+    synchronized boolean mayStopAt(Core step) {
+        judged();
+        AtAStep each = byStep.get(Core.withoutStanding(step));
+        if (each == null) {
+            return !gotPast(step);
+        }
+        return each.construction().map(made -> !(made
+                        instanceof ConstructionStopAssessment.Judgement.Safe)).orElse(false)
+                || each.operations().stream().anyMatch(one ->
+                        !(one instanceof StopAssessment.Judgement.Safe));
+    }
+
+    /** What is shown of each step, by the node it is, once {@link #judged} is worked out. */
+    private final Map<Core, AtAStep> byStep = new IdentityHashMap<>();
+
+    /** Whether a run of a row is taken to get past {@code step} whatever the input holds
+     *  ({@link ARowsRun#completionOf}). */
+    private boolean gotPast(Core step) {
+        return ARowsRun.completionOf(step, read.rules().declarations().answers())
+                instanceof GetsPast.Always;
+    }
+
+    /**
+     * Each way a run gets to a step, with where the walk met it on that way, and the names as they
+     * stand there on it: inside a closure handed values written out, on one application of it.
+     *
+     * @param onTheWay whether every run taking the way makes the application, so that the way
+     *                 holds every condition a run getting there meets; a value looked for on a way
+     *                 that does not is not shown to get there
+     */
+    private record Reached(WhereARunMayStop.Met met, WaysToASite.Reach reach, InputReads reads,
+                           boolean onTheWay) {}
 
     /** Every way a run gets to {@code step}, and whether they are every way there is. */
     private record Ways(List<Reached> each, boolean every) {}
 
+    /**
+     * Every way a run gets to {@code step}: by each way into the tree it stands in, and inside a
+     * closure handed values written out, on each application a run makes on some row. Inside one
+     * handed none, on none.
+     */
     private Ways waysTo(Core step) {
         List<Reached> each = new ArrayList<>();
         boolean every = true;
         for (WhereARunMayStop.Met met : where.everyPlace(step)) {
             WaysToASite ways = met.ways().get();
             every &= ways.every();
-            ways.each().forEach(reach -> each.add(new Reached(met, reach)));
+            for (WaysToASite.Reach reach : ways.each()) {
+                switch (met.applying()) {
+                    case ClosureApplications.None _ -> { }
+                    case ClosureApplications.Each(var made) -> made.stream()
+                            .filter(ClosureApplications.Application::isMadeOnSomeRow)
+                            .forEach(one -> each.add(new Reached(met, reach, one.reads(),
+                                    ClosureApplications.madeWhateverTheRow(one))));
+                    default -> each.add(new Reached(met, reach, met.reads(), true));
+                }
+            }
         }
-        return new Ways(each, every && !each.isEmpty());
+        return new Ways(each, every);
     }
 
     // ---- constructions ----
@@ -216,7 +282,7 @@ final class StopsOfABody {
         Set<EveryRunStops> out = new LinkedHashSet<>();
         for (Reached each : waysTo(step).each()) {
             WhatAWayLeavesOfAValue left = WhatAWayLeavesOfAValue.along(read, each.reach().way());
-            if (left == null || !each.reach().read().get()
+            if (left == null || !each.onTheWay() || !each.reach().read().get()
                     || !(Reachability.of(new WayToTheBorder(each.reach().way()),
                             read.quantities().region()) instanceof Reachability.Reaching reaching)) {
                 continue;
@@ -230,7 +296,7 @@ final class StopsOfABody {
             Set<String> own = new HashSet<>();
             sites.forEach(site -> own.add(site.written()));
             StopEvidence evidence = AffineReading.stopsOfEvaluating(Core.withoutStanding(step),
-                    each.met().reads(), read, AffineReading.WhatTheAnalysisAnswersFor.NOTHING);
+                    each.reads(), read, AffineReading.WhatTheAnalysisAnswersFor.NOTHING);
             for (EveryRunStops stops : evidence.everyRunStopsIn(read, List.of(reaching.region()),
                     gotPast.operations(), EvaluationPlaces.none())) {
                 if (own.contains(stops.operation())) {
@@ -250,8 +316,8 @@ final class StopsOfABody {
      */
     private Optional<WhatKeepsEveryRunGoing> keeping(Core step) {
         List<StopEvidence> worked = new ArrayList<>();
-        for (WhereARunMayStop.Met met : where.everyPlace(step)) {
-            worked.add(AffineReading.stopsOfEvaluating(Core.withoutStanding(step), met.reads(),
+        for (Reached each : waysTo(step).each()) {
+            worked.add(AffineReading.stopsOfEvaluating(Core.withoutStanding(step), each.reads(),
                     read, AffineReading.WhatTheAnalysisAnswersFor.NOTHING));
         }
         return UndividedByARelation.boundsThatKeepEveryRunGoing(worked, read).map(region -> {
@@ -287,7 +353,7 @@ final class StopsOfABody {
             return List.of(new StopAssessment.Judgement.Safe(null,
                     StopAssessment.WhyNone.NOT_WORKED_OUT));
         }
-        Denotation here = new Denotation(step, reached.met().reads());
+        Denotation here = new Denotation(step, reached.reads());
         if (left.endsNoRunAt(here)) {
             return List.of(new StopAssessment.Judgement.Safe(null,
                     StopAssessment.WhyNone.WITHIN_ITS_ENDS));
@@ -295,7 +361,8 @@ final class StopsOfABody {
         List<StopAssessment.Site> sites = sitesOf(step, reached);
         if (sites == null) {
             return List.of(new StopAssessment.Judgement.Unresolved(null,
-                    WhyAStopIsNotShown.NO_OPERATION_TOLD));
+                    WhyAStopIsNotShown.NO_OPERATION_TOLD, Optional.of(StopOrigin.of(step,
+                            read.rules().declarations().answers()))));
         }
         List<StopAssessment.Judgement> out = new ArrayList<>();
         for (StopAssessment.Site site : sites) {
@@ -312,7 +379,7 @@ final class StopsOfABody {
     private List<StopAssessment.Site> sitesOf(Core step, Reached reached) {
         Core node = Core.withoutStanding(step);
         List<StopAssessment.Site> out = new ArrayList<>();
-        StopEvidence evidence = AffineReading.stopsOfEvaluating(node, reached.met().reads(), read,
+        StopEvidence evidence = AffineReading.stopsOfEvaluating(node, reached.reads(), read,
                 AffineReading.WhatTheAnalysisAnswersFor.NOTHING);
         for (UndividedByARelation.IntOperation operation
                 : evidence.operations().operations()) {
@@ -324,7 +391,7 @@ final class StopsOfABody {
         if (node instanceof Core.Binary quotient
                 && AbortSites.ofAnOperator(quotient).contains(AbortKind.DIVISION_BY_ZERO)) {
             LinearForm<NumericTerm> divisor = AffineReading.formOf(quotient.right(),
-                    reached.met().reads(), read, new ElementsMet(),
+                    reached.reads(), read, new ElementsMet(),
                     AffineReading.Unkept.EVERY_NAME_AFRESH);
             if (divisor == null) {
                 return null;
@@ -354,7 +421,7 @@ final class StopsOfABody {
                 }
             }
         }
-        if (!reached.reach().read().get()) {
+        if (!reached.onTheWay() || !reached.reach().read().get()) {
             return new StopAssessment.Judgement.Unresolved(site,
                     WhyAStopIsNotShown.A_CONDITION_NOT_READ);
         }
@@ -435,6 +502,9 @@ final class StopsOfABody {
     private boolean aStepGotPast(Core step, WhatAWayLeavesOfAValue left,
                                  List<UndividedByARelation.IntOperation> operations,
                                  List<LinearForm<NumericTerm>> divisors) {
+        if (gotPast(step)) {
+            return true;
+        }
         Optional<WhereARunMayStop.Met> met = where.at(step);
         if (met.isEmpty()) {
             return false;
@@ -445,7 +515,8 @@ final class StopsOfABody {
         if (step instanceof Core.Construct) {
             return false;
         }
-        List<StopAssessment.Site> sites = sitesOf(step, new Reached(met.get(), null));
+        List<StopAssessment.Site> sites = sitesOf(step,
+                new Reached(met.get(), null, met.get().reads(), true));
         if (sites == null) {
             return false;
         }
@@ -477,10 +548,11 @@ final class StopsOfABody {
                 return List.of(each);
             }
         }
-        if (all.isEmpty() || !every) {
+        if (!every) {
             return List.of(new StopAssessment.Judgement.Unresolved(null,
                     WhyAStopIsNotShown.REACH_NOT_SHOWN));
         }
-        return List.of(all.getFirst());
+        return all.isEmpty() ? List.of(new StopAssessment.Judgement.Safe(null,
+                StopAssessment.WhyNone.NOT_WORKED_OUT)) : List.of(all.getFirst());
     }
 }
