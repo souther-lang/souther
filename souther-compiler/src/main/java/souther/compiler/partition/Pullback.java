@@ -3751,6 +3751,23 @@ final class Pullback {
     }
 
     /**
+     * What every reading of the input {@code read} reads with, whatever rule it reads: the one bound
+     * value a name comes to, and where working an expression out moves the month of a date at a
+     * place past the calendar. Facts of the input and of no rule, so a reader of what a step works
+     * out where no comparison is read asks them as a comparison's reading does, and nothing a rule
+     * answers for.
+     */
+    static AffineReading.WhatTheAnalysisAnswersFor whatEveryReadingReadsWith(InputReading read) {
+        Pullback reading = new Pullback(read, Optional.empty());
+        AffineReading.WhatTheAnalysisAnswersFor none =
+                AffineReading.WhatTheAnalysisAnswersFor.NOTHING;
+        return new AffineReading.WhatTheAnalysisAnswersFor(none.readAgain(),
+                none.readByTheFormOf(), none.dividendBesideTheRows(), reading::boundValueOf,
+                none.landsInAMonth(), none.saidOnItsWays(), none.saidOnItsArms(),
+                reading::monthsWorkedOut);
+    }
+
+    /**
      * What the analysis of the candidate {@code theRule} answers for, as every reader of what a
      * run works out under it asks: the one place what the candidate said is made into what a
      * reading takes as answered, and the totals whose stop it says on each way among it.

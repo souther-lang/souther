@@ -848,11 +848,17 @@ final class Clauses {
                 ? EntryHeld.read(substituted(said.of(), given), core -> core, newtypes) : null;
     }
 
-    /** {@code e} with each binding {@code given} names replaced by the value it was given. */
+    /**
+     * {@code e} with each binding {@code given} names replaced by the value it was given, where
+     * that value is of the name's type. A name an arm gives the scrutinee narrowed to one of its
+     * cases is of that case, and the scrutinee is of the whole union: put in the name's place it
+     * would be an operand of another type than the one the clause was written over, so the name
+     * is left standing, as one whose value is not known here.
+     */
     static Core substituted(Core e, Map<BindingId, Core> given) {
         if (e instanceof Core.Read r) {
             Core value = given.get(r.binding());
-            return value != null ? value : r;
+            return value != null && value.type().equals(r.type()) ? value : r;
         }
         return Core.mapAll(e, child -> substituted(child, given),
                 // A name slot holds a binding and nothing else, so a value put there would be

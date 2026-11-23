@@ -570,10 +570,6 @@ public sealed interface ReportMessage extends Message {
      */
     record NoOperationIsReadAt(Message at) implements ReportMessage, Prose {}
 
-    /** {@link AnotherPartIsNotRead}, and where the first stop left untold in that part is,
-     *  {@code at}, said as {@link NoOperationIsReadAt} says it. */
-    record AnotherPartIsNotReadAt(Message at) implements ReportMessage, Prose {}
-
     /** A place a run may stop at: the construction of {@code type} written at {@code at}, of which
      *  it is not shown that every run making it keeps its invariant. */
     record TheConstructionOf(String type, String at) implements ReportMessage, Prose {}
@@ -604,12 +600,6 @@ public sealed interface ReportMessage extends Message {
     record TheCalledBehaviorMayStopAt(String behavior, Message place)
             implements ReportMessage, Prose {}
 
-    /** Why: the comparison stops a run on rows it states, and no input reaching them is looked
-     *  for. */
-    record TheComparisonStopsOnRowsItStates() implements ReportMessage, Prose {}
-
-    /** Why: another part of the comparison may stop a run first and is not read. */
-    record AnotherPartIsNotRead() implements ReportMessage, Prose {}
 
     /** Why: something evaluated before the comparison may stop a run first. */
     record SomethingBeforeItMayStopARun() implements ReportMessage, Prose {}

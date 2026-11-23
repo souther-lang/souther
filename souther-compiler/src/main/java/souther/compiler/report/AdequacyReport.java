@@ -338,7 +338,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         };
     }
 
-    public static final int SCHEMA_VERSION = 28;
+    public static final int SCHEMA_VERSION = 29;
 
     /**
      * Where the schema this writes documents ships.
@@ -7522,10 +7522,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             Message why = switch (each.why()) {
                 case NO_OPERATION_TOLD -> place == null ? new ReportMessage.NoOperationIsReadThere()
                         : new ReportMessage.NoOperationIsReadAt(place);
-                case ON_ROWS_OF_THE_STATEMENT -> new ReportMessage.TheComparisonStopsOnRowsItStates();
-                case NOT_EVERY_OPERATION_TOLD -> place == null
-                        ? new ReportMessage.AnotherPartIsNotRead()
-                        : new ReportMessage.AnotherPartIsNotReadAt(place);
                 case SOMETHING_BEFORE_IT_MAY_STOP -> new ReportMessage.SomethingBeforeItMayStopARun();
                 case REACH_NOT_SHOWN -> new ReportMessage.NoRunIsShownToGetToIt();
                 case A_CONDITION_NOT_READ -> new ReportMessage.AConditionOnTheWayIsNotRead();

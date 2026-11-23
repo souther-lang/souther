@@ -203,10 +203,11 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
         assertTrue(suggested(report).getFirst().contains("one step further out"), report);
     }
 
-    /** Two places one data holds are bounded by one declaration on it, the tighter of what each
-     *  asks: with it one step further out on both, the place that asked it is past. */
+    /** Two places one data holds, each in a step of its own, are each bounded by what its own
+     *  step asks of the data: what keeps a run going is said of the step it keeps going, and one
+     *  step further out lets in a run that stops there. */
     @Test
-    void twoPlacesOneDataHoldsAreBoundedByTheTighterDeclarationOnce() {
+    void twoPlacesOneDataHoldsAreEachBoundedByWhatTheirStepAsks() {
         String report = report("""
                 module m
 
@@ -218,7 +219,10 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
                 let f (p) = p.a.value + 10 > p.b.value + 20
                 """);
 
-        assertEquals(List.of("· declaring `invariant value <= 9223372036854775787` on m.Amount keeps"
+        assertEquals(List.of("· declaring `invariant value <= 9223372036854775797` on m.Amount keeps"
+                + " every run from taking a number past its type there; a bound one step further"
+                + " out lets in a run that does, and the value to declare is the one the domain"
+                + " has", "· declaring `invariant value <= 9223372036854775787` on m.Amount keeps"
                 + " every run from taking a number past its type there; a bound one step further"
                 + " out lets in a run that does, and the value to declare is the one the domain"
                 + " has"), suggested(report), report);

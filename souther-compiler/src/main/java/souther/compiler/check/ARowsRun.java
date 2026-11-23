@@ -97,6 +97,19 @@ public final class ARowsRun {
         return under[0];
     }
 
+    /**
+     * Whether a run of a row is taken to get past {@code e} by a premise it is written under: an
+     * {@code unreachable}, or a call of a behavior whose own rows get past its body. What a
+     * reader saying where a run stops asks, since a stop at either is said where the premise is
+     * accounted for: of the model's rows, and of the called behavior's body. Not the operations
+     * that end a run only past what a representation holds, which a class is not drawn over and
+     * a run still stops at.
+     */
+    public static boolean takenAsGotPast(Core e, BehaviorAnswers answers) {
+        return premised(Core.withoutStanding(e), answers).orElse(null)
+                instanceof GetsPast.Always;
+    }
+
     /** What a premise of a row's run says of {@code node}; none where no premise speaks of it. */
     private static Optional<GetsPast> premised(Core node, BehaviorAnswers answers) {
         if (Core.withoutStanding(node) instanceof Core.Unreachable) {

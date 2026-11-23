@@ -2,7 +2,6 @@ package souther.compiler.partition;
 
 import souther.compiler.abort.AbortKind;
 import souther.compiler.abort.AbortSites;
-import souther.compiler.abort.GetsPast;
 import souther.compiler.check.ARowsRun;
 import souther.compiler.check.ClausesInOrder;
 import souther.compiler.check.StopOrigin;
@@ -28,6 +27,7 @@ import souther.compiler.numeric.Rel;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
@@ -93,16 +93,21 @@ final class StopsOfABody {
         this.conditions = conditions;
         this.read = read;
         this.definitions = definitions;
+        this.readsWith = Pullback.whatEveryReadingReadsWith(read);
     }
+
+    /** What a step is read with: what every reading of the input reads with, and nothing a rule
+     *  answers for, since no rule is read here
+     *  ({@link Pullback#whatEveryReadingReadsWith}). */
+    private final AffineReading.WhatTheAnalysisAnswersFor readsWith;
 
     /**
      * What is shown of every step, in the order the walk first met each. Worked out once.
      *
-     * <p>Not of a step a run of a row is taken to get past ({@link ARowsRun#completionOf}): an
-     * {@code unreachable}, which states that no run reaches it; a call of a behavior whose own rows
-     * answer for its body; and an operation that ends a run only past what a representation
-     * holds, which is said once of the operation. What is said of those is said where their owner
-     * says it, and nothing here says it again.
+     * <p>Not of a step a run of a row is taken to get past by a premise
+     * ({@link ARowsRun#takenAsGotPast}): an {@code unreachable}, which states that no run reaches
+     * it, and a call of a behavior whose own rows answer for its body. What is said of those is
+     * said where their owner says it, and nothing here says it again.
      */
     synchronized List<AtAStep> judged() {
         if (judged == null) {
@@ -144,11 +149,10 @@ final class StopsOfABody {
     /** What is shown of each step, by the node it is, once {@link #judged} is worked out. */
     private final Map<Core, AtAStep> byStep = new IdentityHashMap<>();
 
-    /** Whether a run of a row is taken to get past {@code step} whatever the input holds
-     *  ({@link ARowsRun#completionOf}). */
+    /** Whether a run of a row is taken to get past {@code step} by a premise it is written under
+     *  ({@link ARowsRun#takenAsGotPast}). */
     private boolean gotPast(Core step) {
-        return ARowsRun.completionOf(step, read.rules().declarations().answers())
-                instanceof GetsPast.Always;
+        return ARowsRun.takenAsGotPast(step, read.rules().declarations().answers());
     }
 
     /**
@@ -296,7 +300,7 @@ final class StopsOfABody {
             Set<String> own = new HashSet<>();
             sites.forEach(site -> own.add(site.written()));
             StopEvidence evidence = AffineReading.stopsOfEvaluating(Core.withoutStanding(step),
-                    each.reads(), read, AffineReading.WhatTheAnalysisAnswersFor.NOTHING);
+                    each.reads(), read, readsWith);
             for (EveryRunStops stops : evidence.everyRunStopsIn(read, List.of(reaching.region()),
                     gotPast.operations(), EvaluationPlaces.none())) {
                 if (own.contains(stops.operation())) {
@@ -318,7 +322,7 @@ final class StopsOfABody {
         List<StopEvidence> worked = new ArrayList<>();
         for (Reached each : waysTo(step).each()) {
             worked.add(AffineReading.stopsOfEvaluating(Core.withoutStanding(step), each.reads(),
-                    read, AffineReading.WhatTheAnalysisAnswersFor.NOTHING));
+                    read, readsWith));
         }
         return UndividedByARelation.boundsThatKeepEveryRunGoing(worked, read).map(region -> {
             Set<ABoundThatKeepsEveryRunGoing> farOut = new LinkedHashSet<>();
@@ -364,6 +368,10 @@ final class StopsOfABody {
                     WhyAStopIsNotShown.NO_OPERATION_TOLD, Optional.of(StopOrigin.of(step,
                             read.rules().declarations().answers()))));
         }
+        if (sites.isEmpty()) {
+            return List.of(new StopAssessment.Judgement.Safe(null,
+                    StopAssessment.WhyNone.WITHIN_ITS_ENDS));
+        }
         List<StopAssessment.Judgement> out = new ArrayList<>();
         for (StopAssessment.Site site : sites) {
             out.add(judgedOn(site, reached, left, within));
@@ -374,17 +382,22 @@ final class StopsOfABody {
     /**
      * What a run may stop at in {@code step} itself, with the names as {@code reached} has them:
      * each operation of whole numbers it is, past its ends, and a quotient with its divisor at
-     * nought. Null where it is neither, or what it is over is not read.
+     * nought; none where the reading tells none and says every stop there is. Null where it tells
+     * none and leaves a stop untold or to another owner, or what a divisor is over is not read.
      */
     private List<StopAssessment.Site> sitesOf(Core step, Reached reached) {
         Core node = Core.withoutStanding(step);
         List<StopAssessment.Site> out = new ArrayList<>();
-        StopEvidence evidence = AffineReading.stopsOfEvaluating(node, reached.reads(), read,
-                AffineReading.WhatTheAnalysisAnswersFor.NOTHING);
+        StopEvidence evidence = evaluated(node, reached.reads());
+        // Its own operations, and not those of a step it is worked out of, which are judged
+        // there: what the reading of it tells beside what the readings of those tell.
+        List<UndividedByARelation.IntOperation> ofWhatItIsMadeOf = new ArrayList<>();
+        for (Core under : stepsUnder(node)) {
+            ofWhatItIsMadeOf.addAll(evaluated(under, reached.reads()).operations().operations());
+        }
         for (UndividedByARelation.IntOperation operation
                 : evidence.operations().operations()) {
-            if (operation.origin().node() != null
-                    && Core.withoutStanding(operation.origin().node()) == node) {
+            if (ofWhatItIsMadeOf.stream().noneMatch(operation::sameOperationAs)) {
                 out.add(new StopAssessment.Site.PastItsEnds(operation));
             }
         }
@@ -398,7 +411,34 @@ final class StopsOfABody {
             }
             out.add(new StopAssessment.Site.ByNought(divisor));
         }
-        return out.isEmpty() ? null : out;
+        // Nothing of its own told, where the reading says every stop a run may meet in it
+        // (StopEvidence#everyStopSaid), is that working it out here stops no run. Where it leaves
+        // one untold, or to another owner, nothing here reads it.
+        return out.isEmpty() && !evidence.everyStopSaid() ? null : out;
+    }
+
+    /** What a run works out evaluating {@code node} with the names {@code at} has, read once for
+     *  each, however many steps above it ask. */
+    private StopEvidence evaluated(Core node, InputReads at) {
+        return evaluatedAt.computeIfAbsent(new Denotation(node, at), value ->
+                AffineReading.stopsOfEvaluating(value.value(), value.at(), read, readsWith));
+    }
+
+    private final Map<Denotation, StopEvidence> evaluatedAt = new HashMap<>();
+
+    /** The steps strictly under {@code node} that the walk met, each judged where it stands. */
+    private Set<Core> stepsUnder(Core node) {
+        Set<Core> out = Collections.newSetFromMap(new IdentityHashMap<>());
+        Core.forEachChild(node, child -> collectSteps(child, out));
+        return out;
+    }
+
+    private void collectSteps(Core e, Set<Core> out) {
+        Core node = Core.withoutStanding(e);
+        if (!where.everyPlace(node).isEmpty()) {
+            out.add(node);
+        }
+        Core.forEachChild(node, child -> collectSteps(child, out));
     }
 
     /** What is shown of {@code site} by one way: none where every value the way leaves keeps it
@@ -497,16 +537,19 @@ final class StopsOfABody {
         return all[0];
     }
 
-    /** What {@code step}, met where the walk met it once, asks of a value that gets past it, into
-     *  {@code operations} and {@code divisors}; false where that is not read. */
+    /**
+     * What {@code step}, met where the walk met it once, asks of a value that gets past it, into
+     * {@code operations} and {@code divisors}; false where that is not read.
+     *
+     * <p>Asked whatever premise a run of a row is taken under there: a call of a behavior whose
+     * rows get past its body, and an {@code unreachable}, are got past by a row, and a value
+     * looked for is no row of either, so it is asked to get past them as any value is.
+     */
     private boolean aStepGotPast(Core step, WhatAWayLeavesOfAValue left,
                                  List<UndividedByARelation.IntOperation> operations,
                                  List<LinearForm<NumericTerm>> divisors) {
-        if (gotPast(step)) {
-            return true;
-        }
         Optional<WhereARunMayStop.Met> met = where.at(step);
-        if (met.isEmpty()) {
+        if (met.isEmpty() || gotPast(step)) {
             return false;
         }
         if (left.endsNoRunAt(new Denotation(step, met.get().reads()))) {
