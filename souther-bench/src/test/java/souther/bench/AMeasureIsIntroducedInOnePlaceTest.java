@@ -124,7 +124,7 @@ class AMeasureIsIntroducedInOnePlaceTest {
             Map.entry("souther.compiler.query.Adequacy$BranchEvidence#noArms(Lsouther/compiler/query/Adequacy$BranchEvidence$NoArms;)Lsouther/compiler/query/Adequacy$BranchEvidence;", 1),
             Map.entry("souther.compiler.query.Adequacy$BranchEvidence#notAsked(Lsouther/compiler/query/Adequacy$BranchEvidence$NotAsked;)Lsouther/compiler/query/Adequacy$BranchEvidence;", 1),
             Map.entry("souther.compiler.query.Adequacy$BranchEvidence#unreadable(Lsouther/compiler/query/WeakeningSet;)Lsouther/compiler/query/Adequacy$BranchEvidence;", 1),
-            Map.entry("souther.compiler.query.Adequacy$BranchEvidence#bodyNotInEvaluation(Ljava/lang/String;)Lsouther/compiler/query/Adequacy$BranchEvidence;", 1),
+            Map.entry("souther.compiler.query.Adequacy$BranchEvidence#bodyNotRead(Ljava/lang/String;Lsouther/compiler/partition/BodyReading$Unread;)Lsouther/compiler/query/Adequacy$BranchEvidence;", 1),
             // Two sets of probes: the arms a row that states what it expects went through, and the
             // arms a row whose answer is owed went through. They are handed in apart because they
             // answer different questions about one arm.
@@ -140,7 +140,7 @@ class AMeasureIsIntroducedInOnePlaceTest {
             // one was left open.
             Map.entry("souther.compiler.query.ReplacementEvidence#noBody()Lsouther/compiler/query/ReplacementEvidence;", 1),
             Map.entry("souther.compiler.query.ReplacementEvidence#notAsked(Lsouther/compiler/query/ReplacementEvidence$NotAsked;)Lsouther/compiler/query/ReplacementEvidence;", 1),
-            Map.entry("souther.compiler.query.ReplacementEvidence#bodyNotInEvaluation(Ljava/lang/String;)Lsouther/compiler/query/ReplacementEvidence;", 1),
+            Map.entry("souther.compiler.query.ReplacementEvidence#bodyNotRead(Ljava/lang/String;Lsouther/compiler/partition/BodyReading$Unread;)Lsouther/compiler/query/ReplacementEvidence;", 1),
             Map.entry("souther.compiler.query.ReplacementEvidence#unreadable(Lsouther/compiler/query/WeakeningSet;)Lsouther/compiler/query/ReplacementEvidence;", 1),
             Map.entry("souther.compiler.query.ReplacementEvidence#measured(Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Lsouther/compiler/query/WeakeningSet;)Lsouther/compiler/query/ReplacementEvidence;", 2),
             Map.entry("souther.compiler.query.ArmObligation#of(Ljava/util/List;Ljava/util/Map;Ljava/util/Set;Lsouther/compiler/query/WeakeningSet;Ljava/util/function/Function;)Lsouther/compiler/query/ArmObligation;", 3),

@@ -146,6 +146,7 @@ import souther.compiler.query.HelpersReadOnApplicationsAroundThem;
 import souther.compiler.meaning.AHelperReadOnApplicationsAroundIt;
 import souther.compiler.query.InputCaseEvidence;
 import souther.compiler.query.TiltOfADerivedValue;
+import souther.compiler.query.ToBeChangedFirst;
 import souther.compiler.query.Measure;
 import souther.compiler.query.Offering;
 import souther.compiler.query.InputOfARowForALine;
@@ -698,6 +699,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      *                  line, since a case of one candidate is made of nothing the function did
      * @param stoppedAtAFigure the conditions of the body read no further at a figure, and what to
      *                  declare as a behavior so that they are read
+     * @param leftToBeChanged what the body was left unread for its author to change first; nothing
+     *                  where it was measured
      */
     public record BehaviorReport(String name, BehaviorImplementation implementation,
                                  BehaviorEvidence evidence,
@@ -720,9 +723,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                  Map<DecisionReading.Ruled, List<WhereARunStopped>> wayStops,
                                  Map<ValueName.Helper, HelpersReadOnApplicationsAroundThem.Told>
                                          helpersCalledOnEachElement,
-                                 ConditionsStoppedAtAFigure.Stopped stoppedAtAFigure) {
+                                 ConditionsStoppedAtAFigure.Stopped stoppedAtAFigure,
+                                 ToBeChangedFirst.Left leftToBeChanged) {
         public BehaviorReport {
             Objects.requireNonNull(stoppedAtAFigure, "what stopped at a figure, if nothing");
+            Objects.requireNonNull(leftToBeChanged, "what is left to be changed, if nothing");
             helpersCalledOnEachElement = Map.copyOf(helpersCalledOnEachElement);
             weights = List.copyOf(weights);
             wayStops = Map.copyOf(wayStops);
@@ -1125,8 +1130,49 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         ObjectNode out = behavior.putObject("conditionsStoppedAtAFigure");
         out.put("conditions", stopped.conditions());
         figuresMet(out, stopped.figures());
+        whatToDeclare(out, stopped.declare());
+    }
+
+    /** What is left for the author to change before the behavior is measured, as the document
+     *  writes it; absent where the behavior is measured. */
+    private static void leftToBeChanged(ObjectNode behavior, ToBeChangedFirst.Left left) {
+        if (left.figure().isEmpty()) {
+            return;
+        }
+        ObjectNode out = behavior.putObject("toBeChangedFirst");
+        figuresMet(out, List.of(left.figure().get()));
+        out.put("conditions", left.choices().conditions());
+        whatToDeclare(out, left.choices());
+        ArrayNode applied = out.putArray("helpersAppliedToEachElement");
+        for (HelpersReadOnApplicationsAroundThem.Told each : left.helpers()) {
+            ObjectNode one = applied.addObject();
+            one.put("helper", each.named().helper().toString());
+            one.put("applicationsAtMost", each.applicationsAtMost());
+            ArrayNode inside = one.putArray("calledInside");
+            each.calledInside().forEach(caller -> inside.add(caller.toString()));
+        }
+    }
+
+    /** What is left for the author to change before the behavior is measured, one sentence after
+     *  another. */
+    private static String leftSaid(ToBeChangedFirst.Left left, Page page) {
+        StringBuilder out = new StringBuilder(suggestedSaid(left.choices(), page));
+        for (HelpersReadOnApplicationsAroundThem.Told each : left.helpers()) {
+            out.append(page.say(new ReportMessage.DeclaredAsABehaviorItReadsItsComparisonsOnce(
+                    each.named().helper().name(), each.applicationsAtMost(),
+                    each.calledInside().isEmpty() ? new ReportMessage.Nothing()
+                            : new ReportMessage.TheCallIsWrittenInsideHelpers(listed(page,
+                                    each.calledInside().stream()
+                                            .map(helper -> "`" + helper.name() + "`")
+                                            .toList())))));
+        }
+        return out.toString();
+    }
+
+    /** The helpers to declare and the conditions to write in a behavior. */
+    private static void whatToDeclare(ObjectNode out, WhatToDeclare declare) {
         ArrayNode helpers = out.putArray("helpersToDeclare");
-        for (WhatToDeclare.HelperToDeclare each : stopped.declare().helpers()) {
+        for (WhatToDeclare.HelperToDeclare each : declare.helpers()) {
             ObjectNode one = helpers.addObject();
             one.put("helper", each.helper().toString());
             one.put("conditions", each.conditions());
@@ -1134,7 +1180,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             ArrayNode inside = one.putArray("calledInside");
             each.calledInside().forEach(caller -> inside.add(caller.toString()));
         }
-        out.put("conditionsToWriteInABehavior", stopped.declare().inABehavior());
+        out.put("conditionsToWriteInABehavior", declare.inABehavior());
     }
 
     /**
@@ -1350,7 +1396,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     wayStops(compilation, decisions == null ? null
                             : decisions.get(behavior.name())),
                     helpersCalledOnEachElement(compilation, name, behavior.name()),
-                    stoppedAtAFigure(compilation, name, behavior.name())));
+                    stoppedAtAFigure(compilation, name, behavior.name()),
+                    Adequacy.leftToBeChanged(compilation.db(), name, behavior.name())));
         }
         Adequacy.DeclaredBoundaries declared =
                 compilation.db().ask(new Adequacy.DeclaredBorders(name)).value();
@@ -2756,6 +2803,21 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      *  that something the rows are asked for is not there. */
     public List<Adequacy.Finding> adequacyGaps() {
         return findings().stream().filter(Adequacy.Finding::isAdequacyGap).toList();
+    }
+
+    /**
+     * The behaviors whose body was left unread for their author to change ({@link
+     * ToBeChangedFirst}), in the order they are reported.
+     *
+     * <p>No gap of the model and no part of what {@link #adequacy()} is decided by beyond what the
+     * measures of the body went without: nothing was shown of them either way. Held apart so that
+     * a run refusing what is not covered can refuse what nobody looked at for this.
+     */
+    public List<String> leftToBeChanged() {
+        return modules.stream().flatMap(module -> module.behaviors().stream()
+                        .filter(behavior -> behavior.leftToBeChanged().figure().isPresent())
+                        .map(behavior -> module.module() + "." + behavior.name()))
+                .toList();
     }
 
     /**
@@ -4685,6 +4747,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     figuresSaid(stopped.figures(), page),
                     suggestedSaid(stopped.declare(), page)));
         }
+        // And a body left unread for its author to change, with the change: what every measure of
+        // the body below went without, said once.
+        behavior.leftToBeChanged().figure().ifPresent(figure ->
+                noted(out, page, new ReportMessage.LeftToBeChanged(
+                        figuresSaid(List.of(figure), page),
+                        leftSaid(behavior.leftToBeChanged(), page))));
         // And a position whose rules this reading never arrived at, which names no rule because
         // nothing observed one. Its own line, so that a reader is not left reading an absent rule
         // to work out which of the two they are being told.
@@ -9261,6 +9329,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 interaction(b, behavior, sources);
                 replacement(b, behavior, sources);
                 stoppedAtAFigure(b, behavior.stoppedAtAFigure());
+                leftToBeChanged(b, behavior.leftToBeChanged());
                 reachProofsContradicted(b, behavior.name(), behavior.reachShownWrong(),
                         waysGoneDown(behavior));
                 walkProofsContradicted(b, behavior.reachShownWrong());
@@ -12816,6 +12885,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 case ClosureGap.LineNotDerived _ -> WeakeningWord.RULE_UNREAD;
             };
             case Weakening.BodyNotInEvaluation _ -> WeakeningWord.BODY_NOT_IN_EVALUATION;
+            case Weakening.BehaviorToBeChangedFirst _ -> WeakeningWord.BEHAVIOR_TO_BE_CHANGED_FIRST;
             case Weakening.BoundaryNotDerived _ -> WeakeningWord.BEHAVIOR_BOUNDARY_NOT_DERIVED;
             case Weakening.InputNotRead _ -> WeakeningWord.BEHAVIOR_INPUT_NOT_READ;
             case Weakening.PairSpaceTruncated _ -> WeakeningWord.PAIR_SPACE_TRUNCATED;

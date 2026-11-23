@@ -72,7 +72,7 @@ class WhoMayAskTheJdkWhatACharacterIsTest {
      * package, {@code AdequacyReport}, {@code ArmWord}. A precondition
      * on a value the compiler or its caller supplied, refusing nothing a source can write:
      * {@code SoutherProcessor}'s option, {@code Messages}' language tag, {@code SourceId},
-     * {@code FixtureTemplate}.
+     * {@code FixtureText}.
      */
     private static final List<String> MAY_ASK = List.of(
             "souther/compiler/apt/SoutherProcessor#process java/lang/String.isBlank",
@@ -127,7 +127,7 @@ class WhoMayAskTheJdkWhatACharacterIsTest {
             "souther/compiler/doc/SpecIncludes#unindented java/lang/String.stripLeading",
             "souther/compiler/doc/TakenAsItStands#lines java/lang/String.isBlank",
             "souther/compiler/doc/TakenAsItStands#lines java/lang/String.strip",
-            "souther/compiler/partition/FixtureTemplate#<init> java/lang/String.isBlank",
+            "souther/compiler/partition/FixtureText#word java/lang/String.isBlank",
             "souther/compiler/report/AdequacyReport#word java/lang/String.toLowerCase",
             "souther/compiler/source/SourceId#<init> java/lang/String.isBlank");
 

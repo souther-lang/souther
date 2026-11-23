@@ -579,7 +579,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                         WithinOneApplication.Gathered oneApplication,
                         ComparisonWitnesses.AtComparisons witnesses, WaysToNodes ways,
                         WhereConstructionsAreMet constructions, Core whole, Core within,
-                        Optional<WayIn> calledAt, Optional<List<AConstructMet>> metOnly) {
+                        Optional<WayIn> calledAt, Optional<AtAConstruct> metOnly) {
 
         /** The same reading, in the body of a recursive helper read at {@code at}, a call of it:
          *  its own tree, and the copy that call makes of each construct in it. */
@@ -635,6 +635,22 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         return read(behavior, analysis, read, reads, witnesses, Optional.empty());
     }
 
+    /** What is done at a construct that may state something, of a walk that reads nothing of what
+     *  any states ({@link #mayState}): handed the construct, the copy of it the walk met, the
+     *  applications of the closures it stands in and the names in force there. */
+    @FunctionalInterface
+    private interface AtAConstruct {
+
+        void met(Core e, ConstructOccurrence occurrence, ClosureApplications applying,
+                 InputReads reads, Body in);
+
+        /** Whether no construct met from here on is asked anything of, so the walk goes into none
+         *  of what is left. */
+        default boolean asksNoMore() {
+            return false;
+        }
+    }
+
     /**
      * A construct of the body that may state something a line is drawn from ({@link #mayState}),
      * where the walk met it, and the applications of the closures it stands in.
@@ -669,18 +685,47 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
     static List<AConstructMet> metOf(String behavior, AnalysisBody analysis, InputReading read,
                            InputReads reads, ComparisonWitnesses.AtComparisons witnesses) {
         List<AConstructMet> met = new ArrayList<>();
-        read(behavior, analysis, read, reads, witnesses, Optional.of(met));
+        read(behavior, analysis, read, reads, witnesses, Optional.of(
+                (e, occurrence, applying, names, _) -> met.add(new AConstructMet(occurrence,
+                        applying, ChoicesAConditionIsReadThrough.of(e, names, read)))));
         return List.copyOf(met);
     }
 
     /**
+     * The same walk, reading the conditions {@code stops} is of until one ends the measuring of the
+     * body: each as {@link #of} reads it, with no line drawn of it and nothing read on the way to
+     * it, which what it states does not turn on.
+     */
+    static void conditionsRead(String behavior, AnalysisBody analysis, InputReading read,
+                               InputReads reads, WhatStopsMeasuring stops) {
+        read(behavior, analysis, read, reads, ComparisonWitnesses.AtComparisons.NONE, Optional.of(
+                new AtAConstruct() {
+
+                    @Override
+                    public void met(Core e, ConstructOccurrence occurrence,
+                                    ClosureApplications applying, InputReads names, Body in) {
+                        ModelOccurrence.statedAt(occurrence).filter(stops::isTold).ifPresent(
+                                stands -> BooleanMeaning.asAComparison(e).ifPresent(comparison ->
+                                        stops.reading(stands, in.conditions()
+                                                .comparison(comparison, names, read).stated()
+                                                .proposition())));
+                    }
+
+                    @Override
+                    public boolean asksNoMore() {
+                        return stops.isShown();
+                    }
+                }));
+    }
+
+    /**
      * The walk of {@code body}, reading what each construct states, or, where {@code metOnly} is
-     * held, putting each construct that may state something into it and reading nothing of it.
+     * held, handing each construct that may state something to it and reading nothing of it.
      */
     private static ComparisonReadings read(String behavior, AnalysisBody analysis,
                                            InputReading read, InputReads reads,
                                            ComparisonWitnesses.AtComparisons witnesses,
-                                           Optional<List<AConstructMet>> metOnly) {
+                                           Optional<AtAConstruct> metOnly) {
         Core body = analysis.core();
         List<Reading> readings = new ArrayList<>();
         List<ForkMet> forks = new ArrayList<>();
@@ -1981,6 +2026,10 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                              LiveFlow flow, List<OnTheWay> assumed, boolean live,
                              List<Reading> out, List<ForkMet> forks,
                              ConditionNumbering numbering) {
+        // Here and nowhere inside: what a step enters around what it walks, it leaves after it.
+        if (in.metOnly().filter(AtAConstruct::asksNoMore).isPresent()) {
+            return;
+        }
         Symbols symbols = in.symbols();
         // The way this node is reached on, for whoever asks whether a part of a fork's condition is
         // evaluated at all.
@@ -1996,17 +2045,16 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 in.constructions().handing(Core.withoutStanding(e), assumed);
             }
         }
-        // The one place the two readings part: what is done at a construct. Where only where each
-        // stands is asked, it is said and nothing of it is read; everything else in this walk,
-        // every way it takes into what lies below, is the same for both. A construct the policy
+        // The one place the readings part: what is done at a construct. Where no line is drawn, it
+        // is handed on and no line of it is drawn; everything else in this walk,
+        // every way it takes into what lies below, is the same for each. A construct the policy
         // refuses where nothing it computes is read on the way to the answer is no line either
         // reading draws, and the policy says so to both ({@link BoundaryPolicy#refuses}).
         StatedAt stated;
         if (in.metOnly().isPresent()) {
             ConstructOccurrence written = mayState(e);
             if (written != null && BoundaryPolicy.refuses(live).isEmpty()) {
-                in.metOnly().get().add(new AConstructMet(in.context().of(written), applying,
-                        ChoicesAConditionIsReadThrough.of(e, reads, in.read())));
+                in.metOnly().get().met(e, in.context().of(written), applying, reads, in);
             }
             stated = null;
         } else {

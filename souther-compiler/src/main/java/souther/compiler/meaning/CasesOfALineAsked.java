@@ -1140,8 +1140,9 @@ public final class CasesOfALineAsked {
      * them as they stand — once over each, and not by choosing among them.
      */
     private void pastTheSteps(List<DecidingCase.Cases> notWalked) {
-        stopped.add((ofTheStatement.ranOut() ? CompositionBudget.QUESTIONS_A_STATEMENT_IS_ASKED
-                : CompositionBudget.CASES_A_LINE_IS_ASKED_IN).reached());
+        stopped.add(ofTheStatement.ranOut()
+                ? CompositionBudget.QUESTIONS_A_STATEMENT_IS_ASKED.reached()
+                : CompositionBudget.CASES_A_LINE_IS_ASKED_IN.reached());
         notWalked.forEach(each -> stopped.addAll(each.notTakenApartAt(figuresOf)));
     }
 

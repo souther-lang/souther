@@ -1447,7 +1447,7 @@ public final class Partitions {
             case MeasureClosure.Drawing.FromTheReading _ ->
                     MeasureClosure.of(base.positions(), asked, read);
             case MeasureClosure.Drawing.NoneWasMade it -> MeasureClosure.bodyNotRead(
-                    it.behavior(), MeasureClosure.of(base.positions(), asked, read));
+                    it.behavior(), it.why(), MeasureClosure.of(base.positions(), asked, read));
         };
         return new Partitioning(measurements, asked, base.uncertain(),
                 // Read after every position was measured, so that what a position's classes would

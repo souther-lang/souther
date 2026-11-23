@@ -68,6 +68,12 @@ public record ConditionsReadThroughTooManyChoices(String name, String behavior)
 
     /** What is told of {@code conditions}, each where the walk of the body met it. */
     static WhatToDeclare told(List<AComparisonRead> conditions) {
+        Set<ModelOccurrence> past = past(conditions);
+        return past.isEmpty() ? WhatToDeclare.NOTHING : WhatToDeclare.of(past, conditions);
+    }
+
+    /** The ones of {@code conditions} that are told of. */
+    static Set<ModelOccurrence> past(List<AComparisonRead> conditions) {
         Set<ModelOccurrence> past = new LinkedHashSet<>();
         for (AComparisonRead each : conditions) {
             if (WhatToDeclare.readings(each.through())
@@ -75,6 +81,6 @@ public record ConditionsReadThroughTooManyChoices(String name, String behavior)
                 past.add(each.copy());
             }
         }
-        return past.isEmpty() ? WhatToDeclare.NOTHING : WhatToDeclare.of(past, conditions);
+        return past;
     }
 }

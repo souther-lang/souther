@@ -696,6 +696,12 @@ public sealed interface ReportMessage extends Message {
 
     record WrittenInABehaviorItIsReadOnce(int conditions) implements ReportMessage, Prose {}
 
+    record LeftToBeChanged(String figures, String suggested) implements ReportMessage, Prose {}
+
+    record DeclaredAsABehaviorItReadsItsComparisonsOnce(String helper, int applications,
+                                                        Message inside)
+            implements ReportMessage, Prose {}
+
     record PositionNotRead(String at, Message why, Message stopped)
             implements ReportMessage, Prose {}
 

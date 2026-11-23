@@ -221,6 +221,20 @@ public final class GuardThresholds {
                             PathReachability.Arrivals arrives,
                             RuleReachNumbering reaches,
                             ComparisonWitnesses.AtComparisons witnesses) {
+        return of(behavior, states, emitted, plan, read, elements, arrives, reaches, witnesses,
+                WhatStopsMeasuring.nowhere());
+    }
+
+    /** The same, made no further than where {@code stops} says the measuring of the body ended:
+     *  what is answered of a body it ended in is no answer about the body. */
+    public static Guards of(String behavior, AnalysisBody states, Core emitted,
+                            CoverageSites.Plan plan,
+                            InputReading read,
+                            ElementBindings elements,
+                            PathReachability.Arrivals arrives,
+                            RuleReachNumbering reaches,
+                            ComparisonWitnesses.AtComparisons witnesses,
+                            WhatStopsMeasuring stops) {
         // A behavior with no representation for the analysis to read leaves nothing to read. This
         // reading is of that tree — where the language's operations stand — so where there is none
         // there are no rules to be had from it, and the answer is the same one a behavior with no
@@ -240,7 +254,7 @@ public final class GuardThresholds {
         // same walk for all of them. And the ways of each case are taken past what the run got
         // past working out, a region many of them share narrowed by the same answers each time.
         return OneReading.over(() -> guardsOf(behavior, states, emitted, plan, read, elements,
-                arrives, reaches, witnesses));
+                arrives, reaches, witnesses, stops));
     }
 
     /**
@@ -260,6 +274,22 @@ public final class GuardThresholds {
         }
         return OneReading.over(() -> appliedOn(ComparisonReadings.metOf(behavior, states, read,
                 namesOf(read, elements), witnesses)));
+    }
+
+    /**
+     * Where reading the conditions the body states ends, as {@code stops} says: each is read of the
+     * walk of {@link #comparisonsRead}, as the one that draws its lines reads it, and no line is
+     * drawn of it.
+     */
+    public static void conditionsRead(String behavior, AnalysisBody states, InputReading read,
+                                      ElementBindings elements, WhatStopsMeasuring stops) {
+        if (states != null) {
+            OneReading.over(() -> {
+                ComparisonReadings.conditionsRead(behavior, states, read,
+                        namesOf(read, elements), stops);
+                return null;
+            });
+        }
     }
 
     /** Each of {@code met} that is a construct of the model, with every application of the
@@ -311,7 +341,8 @@ public final class GuardThresholds {
                                    ElementBindings elements,
                                    PathReachability.Arrivals arrives,
                                    RuleReachNumbering reaches,
-                                   ComparisonWitnesses.AtComparisons witnesses) {
+                                   ComparisonWitnesses.AtComparisons witnesses,
+                                   WhatStopsMeasuring stopsMeasuring) {
         List<LineEvidence> found = new ArrayList<>();
         RulesWithNoLine.Gathered withoutALine = new RulesWithNoLine.Gathered();
         ReadingsReadOn.Taking readOn = new ReadingsReadOn.Taking();
@@ -427,6 +458,10 @@ public final class GuardThresholds {
                                                     toItsValue.toACase(), arrivals, false, read,
                                                     each.witnesses()),
                                             toItself::aRowArrives);
+                            stopsMeasuring.deciding(stated, arrived);
+                            if (stopsMeasuring.isShown()) {
+                                return Guards.NONE;
+                            }
                             // And what is shown of a run that some row takes stopping in it, which
                             // the line it draws does not say: of each operation a run works out
                             // to evaluate it, that no run stops in it, that one does, or neither.

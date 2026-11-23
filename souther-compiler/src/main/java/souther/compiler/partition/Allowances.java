@@ -57,6 +57,7 @@ public final class Allowances {
     public static final Set<CompositionBudget> SETTABLE = Collections.unmodifiableSet(
             EnumSet.of(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO,
                     CompositionBudget.CONDITIONS_A_DECISION_TAKES_IN_TO_PROVE,
+                    CompositionBudget.QUESTIONS_A_STATEMENT_IS_ASKED,
                     CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN,
                     CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION,
                     CompositionBudget.READINGS_OF_ONE_CONDITION));

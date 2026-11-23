@@ -26,6 +26,7 @@ import souther.compiler.source.SourceId;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.ConditionsStoppedAtAFigure;
 import souther.compiler.query.RowWitnesses;
+import souther.compiler.query.ToBeChangedFirst;
 import souther.compiler.query.WhereTheReadingsDiffer;
 import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.SourceConstructOrigin;
@@ -81,7 +82,7 @@ class WhatWasObservedDecidesWhatAReportMayNameTest {
                 null, List.of(), shown(), AdequacyReport.ConditionsShown.NONE, Map.of(), Map.of(),
                 Map.of(), Map.of(), PathReachability.Answers.Contradictions.NONE, Map.of(),
                 List.of(), Map.of(), List.of(), Map.of(), Map.of(), Map.of(),
-                ConditionsStoppedAtAFigure.Stopped.NOTHING);
+                ConditionsStoppedAtAFigure.Stopped.NOTHING, ToBeChangedFirst.Left.NOTHING);
     }
 
     /** Where this report shows each of the two forks. A place per fork and not per arm: the arms of

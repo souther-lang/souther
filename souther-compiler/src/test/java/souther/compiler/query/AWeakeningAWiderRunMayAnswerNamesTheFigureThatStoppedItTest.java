@@ -233,6 +233,8 @@ class AWeakeningAWiderRunMayAnswerNamesTheFigureThatStoppedItTest {
                     new Weakening.ABorderNotHeldAgainstTheLinesBesideIt(border(), why));
         }
         out.put("BodyNotInEvaluation", new Weakening.BodyNotInEvaluation("b"));
+        out.put("BehaviorToBeChangedFirst", new Weakening.BehaviorToBeChangedFirst("b",
+                CompositionBudget.QUESTIONS_A_STATEMENT_IS_ASKED.reached()));
         out.put("BoundaryNotDerived", new Weakening.BoundaryNotDerived("b"));
         out.put("InputNotRead", new Weakening.InputNotRead("b"));
         out.put("PairSpaceTruncated", new Weakening.PairSpaceTruncated("b", 9,

@@ -182,6 +182,16 @@ public enum WeakeningWord {
      */
     BODY_NOT_IN_EVALUATION,
 
+    /**
+     * A behavior whose body was left unread because its author is told what to change so that
+     * measuring it does not run into a figure.
+     *
+     * <p>Beside the one above and not that one. Nothing is wrong with the body and the image
+     * carries it: a run asked to measure it all the same reads it, and what a reader does here is
+     * make the change the report names.
+     */
+    BEHAVIOR_TO_BE_CHANGED_FIRST,
+
     /** The boundary of the behavior could not be worked out, so no measure that reads one could be
      *  finished. Every one of them was asked for and started, which is what tells this from a
      *  measure nobody asked for. */

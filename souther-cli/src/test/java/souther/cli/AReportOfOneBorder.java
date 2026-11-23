@@ -44,6 +44,7 @@ import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.PartitionDerivation;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.query.RowWitnesses;
+import souther.compiler.query.ToBeChangedFirst;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.source.SourceId;
 import souther.compiler.diag.Citation;
@@ -323,7 +324,7 @@ final class AReportOfOneBorder {
                 AdequacyReport.ConditionsShown.NONE, rulePlaces(lines), java.util.Map.of(),
                 java.util.Map.of(), Map.of(), PathReachability.Answers.Contradictions.NONE,
                 Map.of(), List.of(), Map.of(), List.of(), Map.of(), Map.of(), Map.of(),
-                ConditionsStoppedAtAFigure.Stopped.NOTHING);
+                ConditionsStoppedAtAFigure.Stopped.NOTHING, ToBeChangedFirst.Left.NOTHING);
         return new AdequacyReport(AdequacyReport.SCHEMA_VERSION, "test", WeakeningSet.none(),
                 List.of(new AdequacyReport.ModuleReport("example.wide",
                         new SourceId("wide.sou"), List.of(behavior), List.of(),

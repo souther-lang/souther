@@ -415,6 +415,15 @@ public final class Compilation {
         db.set(new Adequacy.Chosen(), choice);
     }
 
+    /**
+     * That this build leaves a behavior unmeasured where its author is told what to change and
+     * measuring it as written runs into a figure ({@link ToBeChangedFirst}), before anything is
+     * asked of it. Where it is not said, every behavior is measured to the end.
+     */
+    public void leaveWhatIsToBeChanged() {
+        db.set(new Adequacy.LeavingWhatIsToBeChanged(), true);
+    }
+
     /** What a report at {@code level} needs of the rows, which is this level's whole part in it. */
     private static RowObservation observationFor(Adequacy.Level level) {
         if (level.runsInstrumentedRows()) {

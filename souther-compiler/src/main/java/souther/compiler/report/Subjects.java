@@ -71,6 +71,8 @@ final class Subjects {
             // Named by the behavior, which is what this answer is of.
             case Weakening.BodyNotInEvaluation it ->
                     new Subject.OfABehavior(it.behavior());
+            case Weakening.BehaviorToBeChangedFirst it ->
+                    new Subject.OfABehavior(it.behavior());
             case Weakening.BoundaryNotDerived it -> new Subject.OfABehavior(it.behavior());
             case Weakening.InputNotRead it -> new Subject.OfABehavior(it.behavior());
             // The behavior, and not how large the space was or what it was walked against. Those

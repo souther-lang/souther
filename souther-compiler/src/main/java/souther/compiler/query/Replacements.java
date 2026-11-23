@@ -358,8 +358,8 @@ public final class Replacements {
                     case BodyReading.NoBody _ -> {
                         return ReplacementEvidence.noBody();
                     }
-                    case BodyReading.NotInElaboration _ -> {
-                        return ReplacementEvidence.bodyNotInEvaluation(named);
+                    case BodyReading.Unread why -> {
+                        return ReplacementEvidence.bodyNotRead(named, why);
                     }
                     case BodyReading.Read _ -> { }
                 }
@@ -380,7 +380,8 @@ public final class Replacements {
                 List<ReplacementReading.Account> accounts =
                         read == null ? null : read.get(named);
                 if (accounts == null) {
-                    return ReplacementEvidence.bodyNotInEvaluation(named);
+                    return ReplacementEvidence.bodyNotRead(named,
+                            new BodyReading.NotInElaboration());
                 }
                 Map<Replacement, Searched> searched = accounts.stream().anyMatch(each ->
                         each.standing() instanceof ReplacementReading.Standing.Open)

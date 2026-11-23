@@ -7,6 +7,7 @@ import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.RowRef;
 import souther.compiler.observe.RunSensitivity;
+import souther.compiler.partition.BodyReading;
 import souther.compiler.partition.CasesTheRowsTook;
 import souther.compiler.partition.ClosureGap;
 import souther.compiler.partition.CompositionBudget;
@@ -112,6 +113,7 @@ public sealed interface Weakening {
             case ModelReadingIncomplete it -> it.cause().figures();
             case PairSpaceTruncated it -> it.limits();
             case MeetingsNotWalked it -> it.limits();
+            case BehaviorToBeChangedFirst it -> List.of(it.figure());
             case DecisionReadingIncomplete it -> switch (it.why()) {
                 case DecisionReading.Enumeration.Complete _ -> List.of();
                 case DecisionReading.Enumeration.StoppedAtAFigure(CompositionBudget figure) ->
@@ -504,6 +506,33 @@ public sealed interface Weakening {
         public RunSensitivity runSensitivity() {
             return RunSensitivity.UNAFFECTED;
         }
+    }
+
+    /**
+     * The body of one behavior was left unread for its author to change, told what to declare so
+     * that measuring it costs less ({@link ToBeChangedFirst}).
+     *
+     * <p>Not {@link BodyNotInEvaluation}: the image carries the body, and a run asked to measure
+     * it all the same reads it.
+     *
+     * @param figure the figure measuring it as written runs into
+     */
+    record BehaviorToBeChangedFirst(String behavior, Figure figure) implements Weakening {
+
+        /** Left for the figure measuring it runs into, and a run that allows more measures it. */
+        @Override
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.MAY_CHANGE;
+        }
+    }
+
+    /** What a measure of {@code behavior} went without where nothing read its body. */
+    static Weakening ofABodyNotRead(String behavior, BodyReading.Unread why) {
+        return switch (why) {
+            case BodyReading.NotInElaboration _ -> new BodyNotInEvaluation(behavior);
+            case BodyReading.ToBeChangedFirst(var figure) ->
+                    new BehaviorToBeChangedFirst(behavior, figure);
+        };
     }
 
     /**

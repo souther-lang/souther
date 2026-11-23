@@ -30,19 +30,22 @@ class AStopAtAFigureACompilationMaySetIsToldAtThatFigureTest {
     /** A model whose compilation stops at a budget, held to {@code figure}, not the one declared. */
     private record Stopping(String model, int figure) {}
 
+    /** The first of some thresholds two numbers and their sum are all above, compared: as many as
+     *  a line is decided in more cases than are said one by one. */
+    private static final String SEARCH = """
+            module demo exposing (g)
+
+            behavior g : (x: Int, y: Int) -> Bool
+            let g (x, y) =
+                Option.withDefault(0, List.find(t -> x > t && y > t && x + y > t,
+                    [1, 2, 3, 4, 5])) > 2
+            """;
+
     /** For each budget a compilation may set, a model whose compilation stops at it. */
     private static final Map<CompositionBudget, Stopping> STOPPING = Map.of(
-            // The first of seven thresholds two numbers and their sum are all above, compared:
-            // each line decides where every threshold before the one found was missed, more ways
-            // of choosing than none, so with none taken apart every line is cut off.
-            CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO, new Stopping("""
-                    module demo exposing (g)
-
-                    behavior g : (x: Int, y: Int) -> Bool
-                    let g (x, y) =
-                        Option.withDefault(0, List.find(t -> x > t && y > t && x + y > t,
-                            [1, 2, 3, 4, 5, 6, 7])) > 3
-                    """, 0),
+            // Each line of a search decides where every threshold before the one found was missed,
+            // more ways of choosing than none, so with none taken apart every line is cut off.
+            CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO, new Stopping(SEARCH, 0),
             // A way whose conditions clash past a construction: the proof through the construction
             // fits in the figure, and the proof of the conditions alone does not, so the way is
             // said as one the proof did not tell.
@@ -68,20 +71,21 @@ class AStopAtAFigureACompilationMaySetIsToldAtThatFigureTest {
                     behavior g : (w: Window) -> Int
                     let g (w) = if List.any(x -> w.n == x, [0, 1, 2, 3, 4]) then 1 else 0
                     """, 4),
-            // The last condition of a chain of five calls is read once for each way the calls
-            // before it went, thirty in all, which is more than a figure of fourteen readings.
+            // The last condition of a chain of calls is read once for each way the calls before it
+            // went, which is more than a figure of two readings.
             CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION, new Stopping(
-                    ACaseChainIsReadNoFurtherInAllThanOneConditionIsReadTest.model(5), 14),
-            // The same statement, with one step to work out where each line decides in: it is
-            // read in more than that, so every line is cut off.
-            CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN, new Stopping("""
+                    ACaseChainIsReadNoFurtherInAllThanOneConditionIsReadTest.model(3), 2),
+            // The first of three thresholds found, asked in more cases than one question.
+            CompositionBudget.QUESTIONS_A_STATEMENT_IS_ASKED, new Stopping("""
                     module demo exposing (g)
 
                     behavior g : (x: Int, y: Int) -> Bool
                     let g (x, y) =
-                        Option.withDefault(0, List.find(t -> x > t && y > t && x + y > t,
-                            [1, 2, 3, 4, 5, 6, 7])) > 3
-                    """, 1));
+                        Option.withDefault(0, List.find(t -> x > t && y > t, [1, 2, 3])) > 1
+                    """, 1),
+            // The search again, with one step to work out where each line decides in: it is read
+            // in more than that, so every line is cut off.
+            CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN, new Stopping(SEARCH, 1));
 
     @Test
     void everyBudgetACompilationMaySetIsHeldByAModelStoppingAtIt() {

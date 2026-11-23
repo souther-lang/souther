@@ -106,7 +106,8 @@ derives is one, and no caller chooses which.
 
 `--warnings error` refuses the build that warned: nothing is written and the exit code is non-zero.
 It gates every warning and not only the adequacy ones, so a build that wants to fail on coverage
-alone wants `souther examples --strict`, which refuses coverage findings and nothing else.
+alone wants `souther examples --strict`, which refuses coverage findings and the behaviors it left
+unmeasured.
 `compile --adequacy all --warnings error` and `examples --strict` refuse the same coverage findings.
 The default is `report`, which prints them and writes the classes.
 
@@ -478,12 +479,18 @@ diff.
 
 ```
 souther examples <file.sou>... [-cp|--class-path <path>] [--module <name>]
-                               [--behavior <name>] [--generate] [--strict]
+                               [--behavior <name>] [--generate] [--strict] [--to-the-end]
 ```
 
 Reports how well the `example` rows cover the model — which partitions, boundaries and branch arms
 no row reaches. `--generate` prints commented rows for what nothing covers, the points of a border
 among them, and `--strict` exits non-zero on a gap the report names.
+
+A behavior is left unmeasured where measuring it as written stops at a figure of the compiler's own
+in a condition this compiler can say how to change: what is past the figure would not be measured
+however long the run went on. The report says the figure and what to declare as a behavior, and
+every other behavior is measured. `--strict` exits non-zero on one left so, since
+nobody looked at what its rows cover. `--to-the-end` measures it as it is written.
 
 `--generate` also offers rows that try the inputs of the rows of called behaviors in their callers.
 These owe nothing: the header counts them apart as optional rows and a comment over each says
@@ -513,8 +520,9 @@ found a gap; `not satisfied` (`not_satisfied` in the JSON) where one found a gap
 where nothing that could find a gap was asked about, or one of those measures could not be made. A
 measure that does not apply — the arms of a `>->` composition, which has none of its own — is neither
 asked nor missing, and does not hold the answer open. `--strict`
-refuses `not_satisfied` and nothing else, which is the same set of findings `compile --adequacy
-all --warnings error` refuses. It decides the exit status and no more: the report is the
+refuses `not_satisfied`, which is the same set of findings `compile --adequacy
+all --warnings error` refuses, and a behavior left unmeasured for its author to change, which that
+compile measures. It decides the exit status and no more: the report is the
 same whether or not it was written.
 
 `undetermined` is not, by itself, evidence that the model is inadequate. It means at least one

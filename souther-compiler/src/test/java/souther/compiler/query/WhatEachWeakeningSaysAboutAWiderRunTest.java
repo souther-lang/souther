@@ -76,6 +76,8 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
         table.put("ProofContradicted", "answers/UNAFFECTED");
         table.put("ProofOfAWayContradicted", "answers/UNAFFECTED");
         table.put("ArmsUnsettled", "answers/UNAFFECTED");
+        // Left unread for a figure measuring it runs into, and a run that allows more measures it.
+        table.put("BehaviorToBeChangedFirst", "answers/MAY_CHANGE");
         // The one arm that is a figure the query graph hands the analysis.
         table.put("PairSpaceTruncated", "answers/MAY_CHANGE");
         // And the figure the readings of one row are tried against: a build allowed more tries the
@@ -230,7 +232,8 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
             case Weakening.ModelReadingIncomplete _ -> "asks the gap";
             case Weakening.RewriteUndecided _ -> "asks why it was left open";
             case Weakening.OutputCasesUnreadable _, Weakening.InputCasesUnreadable _,
-                 Weakening.BodyNotInEvaluation _, Weakening.BoundaryNotDerived _,
+                 Weakening.BodyNotInEvaluation _, Weakening.BehaviorToBeChangedFirst _,
+                 Weakening.BoundaryNotDerived _,
                  Weakening.InputNotRead _, Weakening.PairSpaceTruncated _,
                  Weakening.BorderReadingsNotExhausted _,
                  Weakening.ItemsPlaceNotWorkedOut _, Weakening.AReadingNotTiedToItsLine _,
@@ -265,6 +268,8 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
         out.add(new Weakening.OutputCasesUnreadable("b", Set.of(unread)));
         out.add(new Weakening.InputCasesUnreadable("b", 0, Set.of(unread)));
         out.add(new Weakening.BodyNotInEvaluation("b"));
+        out.add(new Weakening.BehaviorToBeChangedFirst("b",
+                WorkFigure.PAIRS_OF_CLASSES_COUNTED.at(4)));
         out.add(new Weakening.BoundaryNotDerived("b"));
         out.add(new Weakening.InputNotRead("b"));
         out.add(new Weakening.ProofContradicted(new CoverageSites.Obligation("b",

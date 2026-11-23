@@ -69,7 +69,8 @@ class AWeightNotDecidedIsNeverLostToTheShapeOfTheBorderMeasureTest {
         assertTrue(causes(open).contains(WEIGHT), causes(open).toString());
 
         Measure<List<BorderAssessment>> unread = BoundaryDerivation.of(List.of(),
-                WEIGHTS_WENT_WITHOUT, new MeasureClosure.OfTheBorder.BodyNotRead("b", Set.of()),
+                WEIGHTS_WENT_WITHOUT, new MeasureClosure.OfTheBorder.BodyNotRead("b",
+                        new BodyReading.NotInElaboration(), Set.of()),
                 null);
         assertInstanceOf(Measurement.FailedToMeasure.class, unread);
         assertTrue(causes(unread).contains(WEIGHT), causes(unread).toString());

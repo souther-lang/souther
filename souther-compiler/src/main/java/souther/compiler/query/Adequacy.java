@@ -123,6 +123,7 @@ import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 import souther.compiler.observe.Disposition;
 import souther.compiler.observe.ExpectationState;
+import souther.compiler.observe.Figure;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.MeasureReason;
 import souther.compiler.observe.RowIdentity;
@@ -198,6 +199,7 @@ import souther.compiler.partition.StatementsOfAnInput;
 import souther.compiler.partition.TakenConstraint;
 import souther.compiler.partition.WhereARunStopped;
 import souther.compiler.partition.WayToTheBorder;
+import souther.compiler.partition.WhatStopsMeasuring;
 import souther.compiler.reading.CoverageRead;
 import souther.compiler.reading.PathAccess;
 import souther.compiler.reading.WayIn;
@@ -457,6 +459,31 @@ public final class Adequacy {
     /** Whether {@code behavior} of {@code module} is one this build measures. */
     public static boolean chosen(Db db, String module, String behavior) {
         return choiceOf(db).includes(module, behavior);
+    }
+
+    /**
+     * Whether the run leaves a behavior unmeasured where its author is told what to change and
+     * measuring it as written stops at a figure ({@link ToBeChangedFirst}). Absent is that it
+     * measures every behavior it chooses.
+     */
+    public record LeavingWhatIsToBeChanged() implements Input<Boolean> {}
+
+    /** Whether this build leaves what is to be changed ({@link LeavingWhatIsToBeChanged}). */
+    static boolean leavesWhatIsToBeChanged(Db db) {
+        return Boolean.TRUE.equals(db.ask(new LeavingWhatIsToBeChanged()).value());
+    }
+
+    /** What of {@code behavior} of {@code module} is left for its author to change. */
+    public static ToBeChangedFirst.Left leftToBeChanged(Db db, String module, String behavior) {
+        ToBeChangedFirst.Left left = db.ask(new ToBeChangedFirst(module, behavior)).value();
+        return left == null ? ToBeChangedFirst.Left.NOTHING : left;
+    }
+
+    /** Whether the body of {@code behavior} of {@code module} is one this build reads to measure
+     *  it: one it chooses, and does not leave for its author to change. */
+    private static boolean readsTheBodyOf(Db db, String module, String behavior) {
+        return chosen(db, module, behavior)
+                && leftToBeChanged(db, module, behavior).figure().isEmpty();
     }
 
     /**
@@ -1554,9 +1581,11 @@ public final class Adequacy {
             RuleReadingContext ruleReading = RuleReadingContext.of(reading.value(),
                     db.ask(new Front.Reading()).value(), db.readings(), Front.dayOf(db));
             for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
-                // Left out of the answer where this build measures others only, as one it cannot
-                // read is: nothing reads what is answered of it.
-                if (!chosen(db, name, behavior.name())) {
+                // Left out of the answer where this build reads none of its body, as one it cannot
+                // read is: nothing reads what is answered of it. One left for its author to change
+                // on where its lines decide is not left out: that is asked of what arrives.
+                if (!chosen(db, name, behavior.name())
+                        || conditionsReadToAStop(db, name, behavior.name()).isPresent()) {
                     continue;
                 }
                 // A composition has no body of its own and so no places of its own, and a behavior
@@ -1573,7 +1602,7 @@ public final class Adequacy {
                 }
                 // Read per behavior, and the two absences told apart where they are classified.
                 // A body this image has none of is not a behavior the model gives none.
-                BodyReading.Read both = bodyReading(db, name, checked.value(), spec.name())
+                BodyReading.Read both = bodyHeld(db, name, checked.value(), spec.name())
                         instanceof BodyReading.Read it ? it : null;
                 Hir.FnDef fn = db.ask(new Bodies.SettledFn(name, spec.name())).value();
                 if (both == null || fn == null) {
@@ -1624,7 +1653,7 @@ public final class Adequacy {
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             Map<String, souther.compiler.partition.DecisionReading> out = new LinkedHashMap<>();
             for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
-                if (!chosen(db, name, behavior.name())) {
+                if (!readsTheBodyOf(db, name, behavior.name())) {
                     continue;
                 }
                 // A composition has no body of its own, and a behavior whose input this compilation
@@ -1707,7 +1736,7 @@ public final class Adequacy {
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             Map<String, CoverageRead.Read> out = new LinkedHashMap<>();
             for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
-                if (!chosen(db, name, behavior.name())) {
+                if (!readsTheBodyOf(db, name, behavior.name())) {
                     continue;
                 }
                 // Read off the one classification every other reader of this walk reads. A
@@ -1745,6 +1774,17 @@ public final class Adequacy {
      * and neither is a question about what a body says.
      */
     static BodyReading bodyReading(
+            Db db, String module, Bodies.Elaborated checked, String behavior) {
+        ToBeChangedFirst.Left left = leftToBeChanged(db, module, behavior);
+        return left.figure().<BodyReading>map(BodyReading.ToBeChangedFirst::new)
+                .orElseGet(() -> bodyHeld(db, module, checked, behavior));
+    }
+
+    /**
+     * The same, of a body whether or not it is left for its author to change: what is told of a
+     * body before it is measured, which is what it is left on, is read of this.
+     */
+    private static BodyReading bodyHeld(
             Db db, String module, Bodies.Elaborated checked, String behavior) {
         // A behavior this build measures none of has its body here and unread. The lines its
         // declarations and its clauses draw are still read, which is what a behavior that is
@@ -2899,11 +2939,14 @@ public final class Adequacy {
      * <p>The reading of the input itself is not here. It holds a way of asking the declarations a
      * further question, so it compares by which of them built it — held in an answer, it would make
      * the answer a thing two compilations of one source could not find equal.
+     *
+     * <p>{@code leftAt} is the figure the body was left for its author to change at, where it was
+     * ({@link ToBeChangedFirst}): what is divided is then a body nothing read.
      */
     record BodyDivided(souther.compiler.partition.Partitions.Partitioning geometry,
                        java.util.Map<souther.compiler.partition.ConditionOccurrence,
                                souther.compiler.diag.Citation> conditionsMet,
-                       Map<Integer, Citation> rulesReachedAt) {}
+                       Map<Integer, Citation> rulesReachedAt, Optional<Figure> leftAt) {}
 
     /**
      * Where the reading that divided one behavior met each condition it places itself.
@@ -3006,20 +3049,44 @@ public final class Adequacy {
 
         @Override
         public Answer<BodyDivided> compute(Db db) {
-            return over(db, name, behavior, null);
+            ToDivide held = toDivideAsHeld(db, name, behavior);
+            if (held == null) {
+                return Answer.absent();
+            }
+            // Where its conditions are read no further it is not divided, and where a line of it
+            // is not worked out in a construct some change is told of it is divided no further:
+            // either way it is the body left for the change that is divided, which is unread.
+            Optional<Figure> figure = conditionsReadToAStop(db, name, behavior);
+            if (figure.isEmpty()) {
+                WhatStopsMeasuring stops = WhatStopsMeasuring.atTheFirstOf(
+                        ToBeChangedFirst.told(db, name, behavior));
+                Optional<BodyDivided> toItsEnd = divided(db, name, held, stops);
+                if (toItsEnd.isPresent()) {
+                    return Answer.of(toItsEnd.get());
+                }
+                figure = stops.figure();
+            }
+            return Answer.of(divided(db, name, held.left(figure.orElseThrow()),
+                    WhatStopsMeasuring.nowhere()).orElseThrow());
         }
 
         /**
-         * The same, divided over {@code builtAgainst} where there is one: the reading a value is
+         * A body divided over {@code builtAgainst} where there is one: the reading a value is
          * built against, closed over more paths than the measurement's is ({@link InputsOf}).
          */
         static Answer<BodyDivided> over(Db db, String name, String behavior,
                                         InputDomain builtAgainst) {
             ToDivide divided = toDivide(db, name, behavior, builtAgainst);
-            if (divided == null) {
-                return Answer.absent();
-            }
-            Coverages.Partitioned read = Coverages.partitioningOf(divided.spec(), divided.read(),
+            return divided == null ? Answer.absent()
+                    : Answer.of(divided(db, name, divided, WhatStopsMeasuring.nowhere())
+                            .orElseThrow());
+        }
+
+        /** {@code divided}, divided, or empty where {@code stops} says the measuring of its body
+         *  ended. */
+        static Optional<BodyDivided> divided(Db db, String name, ToDivide divided,
+                                             WhatStopsMeasuring stops) {
+            return Coverages.partitioningOf(divided.spec(), divided.read(),
                     divided.body(), divided.plan(),
                     atTheLinesOf(db.ask(new ArrivedAtLines(name)).value(), divided.spec()),
                     statedOf(db.ask(new Bodies.StatedContracts(name)).value(), divided.spec()),
@@ -3028,10 +3095,49 @@ public final class Adequacy {
                     // the two came to would be bought by nobody.
                     db.ask(new Front.Adequacy()).value().measures()
                             .allowanceForBehaviorDistinctions(),
-                    divided.witnesses());
-            return Answer.of(new BodyDivided(read.geometry(), read.conditionsMet(),
-                    read.rulesReachedAt()));
+                    divided.witnesses(), stops).map(read -> new BodyDivided(read.geometry(),
+                            read.conditionsMet(), read.rulesReachedAt(),
+                            divided.body() instanceof BodyReading.ToBeChangedFirst(var figure)
+                                    ? Optional.of(figure) : Optional.empty()));
         }
+    }
+
+    /**
+     * The figure the first of one behavior's conditions told to be read through too many choices
+     * was read no further at, where one was ({@link WhatStopsMeasuring}).
+     *
+     * <p>Asked of the conditions and of nothing on the way to them, so before a division asks what
+     * arrives where ({@link PathReached}): a body whose conditions are read no further is one whose
+     * ways are not read either.
+     */
+    public record ConditionsReadToAStop(String name, String behavior)
+            implements Key<Optional<Figure>> {
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Optional<Figure>> compute(Db db) {
+            Set<ModelOccurrence> told =
+                    ToBeChangedFirst.throughTooManyChoices(db, name, behavior);
+            ToDivide divided = told.isEmpty() ? null : toDivideAsHeld(db, name, behavior);
+            if (divided == null || !(divided.body() instanceof BodyReading.Read it)
+                    || it.analysis() == null) {
+                return Answer.of(Optional.empty());
+            }
+            WhatStopsMeasuring stops = WhatStopsMeasuring.atTheFirstOf(told);
+            GuardThresholds.conditionsRead(behavior, it.analysis(), divided.read(),
+                    ElementBindings.of(it.analysis(), divided.read().rules().newtypes()), stops);
+            return Answer.of(stops.figure());
+        }
+    }
+
+    /** What {@link ConditionsReadToAStop} answers, none where it does not. */
+    static Optional<Figure> conditionsReadToAStop(Db db, String module, String behavior) {
+        Optional<Figure> figure = db.ask(new ConditionsReadToAStop(module, behavior)).value();
+        return figure == null ? Optional.empty() : figure;
     }
 
     /**
@@ -3045,13 +3151,38 @@ public final class Adequacy {
     record ToDivide(Hir.SpecBehavior spec, souther.compiler.inputs.InputReading read,
                     souther.compiler.partition.BodyReading body,
                     souther.compiler.coverage.CoverageSites.Plan plan,
-                    Coverages.WitnessesAtSites witnesses) {}
+                    Coverages.WitnessesAtSites witnesses) {
+
+        /** The same, the body left for its author to change at {@code figure}. */
+        ToDivide left(Figure figure) {
+            return new ToDivide(spec, read, new BodyReading.ToBeChangedFirst(figure), plan,
+                    witnesses);
+        }
+    }
 
     /**
      * What {@code behavior}'s body is divided over, read against {@code builtAgainst} where there
      * is one; null where there is nothing to divide.
      */
     static ToDivide toDivide(Db db, String name, String behavior, InputDomain builtAgainst) {
+        return toDivide(db, name, behavior, builtAgainst, Adequacy::bodyReading);
+    }
+
+    /** The same, of the body whether or not it is left for its author to change
+     *  ({@link #bodyHeld}). */
+    private static ToDivide toDivideAsHeld(Db db, String name, String behavior) {
+        return toDivide(db, name, behavior, null, Adequacy::bodyHeld);
+    }
+
+    /** Which body is read of a behavior of a module, of those an elaboration holds. */
+    @FunctionalInterface
+    private interface BodyOf {
+
+        BodyReading of(Db db, String module, Bodies.Elaborated checked, String behavior);
+    }
+
+    private static ToDivide toDivide(Db db, String name, String behavior, InputDomain builtAgainst,
+                                     BodyOf bodyOf) {
         // The assembly. What says whether there is anything to divide is the behavior's own
         // signature: a module one of whose declarations did not come out still has behaviors
         // whose boundary was built, and those are divided like any other.
@@ -3095,7 +3226,7 @@ public final class Adequacy {
                 // Which of the three this elaboration holds, settled before anything reads a
                 // body. The other reading of the same body travels with it, which is where a
                 // rule about the strings at a position still stands as the author wrote it.
-                bodyReading(db, name, checked, behavior),
+                bodyOf.of(db, name, checked, behavior),
                 plan,
                 new Coverages.WitnessesAtSites() {
                     @Override
@@ -5231,7 +5362,7 @@ public final class Adequacy {
 
         @Override
         public Answer<List<AComparisonRead>> compute(Db db) {
-            ToDivide divided = toDivide(db, name, behavior, null);
+            ToDivide divided = toDivideAsHeld(db, name, behavior);
             return divided == null ? Answer.absent()
                     : Answer.of(Coverages.comparisonsRead(divided.spec(), divided.read(),
                             divided.body(), divided.plan(), divided.witnesses()));
@@ -5435,12 +5566,12 @@ public final class Adequacy {
             return new BranchEvidence(new Measure.NotApplicable<>(reason));
         }
 
-        /** The model says this behavior writes a body and the image this run was measured in does
-         *  not carry it, so what it owes was not read. */
-        public static BranchEvidence bodyNotInEvaluation(String behavior) {
+        /** The model says this behavior writes a body and nothing read it, for {@code why}, so what
+         *  it owes was not read. */
+        public static BranchEvidence bodyNotRead(String behavior, BodyReading.Unread why) {
             return new BranchEvidence(new Measurement.FailedToMeasure<>(
                     BodyWasNotRead.BODY_WAS_NOT_READ,
-                    WeakeningSet.of(new Weakening.BodyNotInEvaluation(behavior))));
+                    WeakeningSet.of(Weakening.ofABodyNotRead(behavior, why))));
         }
 
         public static BranchEvidence notAsked(BranchEvidence.NotAsked reason) {
@@ -5819,11 +5950,9 @@ public final class Adequacy {
                 // A claim about the model, which is why it is the same answer a composition gets.
                 case souther.compiler.partition.BodyReading.NoBody _ ->
                         BranchEvidence.noArms(BranchEvidence.NoArms.NO_BODY);
-                // The model says there is a body and this image has none of it, so what it owes is
-                // unknown — which is not the same as owing nothing, and reads identically without
-                // this.
-                case souther.compiler.partition.BodyReading.NotInElaboration _ ->
-                        BranchEvidence.bodyNotInEvaluation(behavior);
+                // The model says there is a body and nothing read it, so what it owes is unknown —
+                // which is not the same as owing nothing, and reads identically without this.
+                case BodyReading.Unread why -> BranchEvidence.bodyNotRead(behavior, why);
                 case souther.compiler.partition.BodyReading.Read _ -> null;
             };
             if (absent != null) {

@@ -61,11 +61,11 @@ import java.util.function.UnaryOperator;
  * which asks the type of the position ({@code Set<Int>} holds {@code [1, 2]} and {@code [2, 1]}
  * as one value) and is {@code Comparisons.same}'s to say.
  *
- * @param text    what a row prints
+ * @param spelled what a row prints
  * @param value   what a decoder builds
- * @param meaning the value written out, which two spellings of one value share
+ * @param means   the value written out, which two spellings of one value share
  */
-public record FixtureTemplate(String text, Hir.Expr value, String meaning) {
+public record FixtureTemplate(FixtureText spelled, Hir.Expr value, FixtureText means) {
 
     /** Nothing generated is anywhere, and a fixture built here is never quoted back at a source. */
     private static final SourcePos NOWHERE = new SourcePos(0, 0);
@@ -74,23 +74,28 @@ public record FixtureTemplate(String text, Hir.Expr value, String meaning) {
      *  typed, so there is no stretch of any file to underline. */
     private static final Region NO_SOURCE = null;
 
-    public FixtureTemplate {
-        if (text == null || text.isBlank()) {
-            throw new IllegalArgumentException("a fixture template is written text");
-        }
-        if (meaning == null || meaning.isBlank()) {
-            throw new IllegalArgumentException("a fixture template means some written value");
-        }
-    }
-
     /** The same value and spelling, meaning {@code written} out. */
     public FixtureTemplate meaningAs(String written) {
-        return new FixtureTemplate(text, value, written);
+        return new FixtureTemplate(spelled, value, FixtureText.word(written));
     }
 
     /** A value whose spelling is all it is known by. */
     public FixtureTemplate(String text, Hir.Expr value) {
-        this(text, value, text);
+        this(FixtureText.word(text), value);
+    }
+
+    private FixtureTemplate(FixtureText spelled, Hir.Expr value) {
+        this(spelled, value, spelled);
+    }
+
+    /** What a row prints. */
+    public String text() {
+        return spelled.written();
+    }
+
+    /** The value written out, which two spellings of one value share. */
+    public String meaning() {
+        return means.written();
     }
 
     public static FixtureTemplate integer(long value) {
@@ -262,7 +267,7 @@ public record FixtureTemplate(String text, Hir.Expr value, String meaning) {
             case Hir.Apply apply when apply.args().size() == 1
                     && apply.args().getFirst() instanceof Hir.StringLit iso
                     && List.of("Date(", "Time(", "DateTime(", "Instant(")
-                            .stream().anyMatch(text::startsWith) ->
+                            .stream().anyMatch(text()::startsWith) ->
                     new ObservedValue.Temporal(iso.value());
             default -> null;
         };
@@ -278,7 +283,8 @@ public record FixtureTemplate(String text, Hir.Expr value, String meaning) {
     public static FixtureTemplate newtype(TypeReachName.Written type, FixtureTemplate inner) {
         String written = type.rendered();
         ValueName.OfType named = new ValueName.OfType(written, type.denotes());
-        return new FixtureTemplate(written + "(" + inner.text() + ")",
+        return new FixtureTemplate(
+                FixtureText.around(written + "(", List.of(inner.spelled()), ")"),
                 Hir.Apply.synthetic(written, new ReachName.InScope(named), null,
                         new ApplicationOrigin.ComposedFixture(), List.of(inner.value()), NOWHERE,
                         NO_SOURCE));
@@ -299,12 +305,12 @@ public record FixtureTemplate(String text, Hir.Expr value, String meaning) {
      */
     public static FixtureTemplate collection(List<FixtureTemplate> elements) {
         List<Hir.Expr> values = new ArrayList<>();
-        List<String> written = new ArrayList<>();
+        List<FixtureText> written = new ArrayList<>();
         for (FixtureTemplate each : elements) {
             values.add(each.value());
-            written.add(each.text());
+            written.add(each.spelled());
         }
-        return new FixtureTemplate("[" + String.join(", ", written) + "]",
+        return new FixtureTemplate(FixtureText.around("[", written, "]"),
                 new Hir.ListLit(List.copyOf(values), SourceConstructOrigin.unwritten(), NOWHERE,
                         NO_SOURCE));
     }
@@ -338,7 +344,8 @@ public record FixtureTemplate(String text, Hir.Expr value, String meaning) {
 
     /** One entry of a map: the pair a fixture writes a key and its value as. */
     public static FixtureTemplate entry(FixtureTemplate key, FixtureTemplate value) {
-        return new FixtureTemplate("(" + key.text() + ", " + value.text() + ")",
+        return new FixtureTemplate(
+                FixtureText.around("(", List.of(key.spelled(), value.spelled()), ")"),
                 new Hir.Tuple(List.of(key.value(), value.value()), NOWHERE, NO_SOURCE));
     }
 
@@ -401,14 +408,15 @@ public record FixtureTemplate(String text, Hir.Expr value, String meaning) {
         if (moved.isEmpty()) {
             throw new IllegalArgumentException("a spread that moves nothing is the value itself");
         }
-        List<String> written = new ArrayList<>();
+        List<FixtureText> written = new ArrayList<>();
         List<Hir.FieldInit> inits = new ArrayList<>();
+        written.add(base.spelled());
         for (Map.Entry<String, FixtureTemplate> field : moved.entrySet()) {
-            written.add(field.getKey() + " = " + field.getValue().text());
+            written.add(fieldWritten(field));
             inits.add(new Hir.FieldInit(field.getKey(), field.getValue().value(), NOWHERE));
         }
         return new FixtureTemplate(
-                type.rendered() + " { ..." + base.text() + ", " + String.join(", ", written) + " }",
+                FixtureText.around(type.rendered() + " { ...", written, " }"),
                 Hir.NewData.syntheticWithEveryFieldWritten(Hir.Name.reached(type, NOWHERE), inits,
                         List.of(spread), NOWHERE, NO_SOURCE));
     }
@@ -450,8 +458,8 @@ public record FixtureTemplate(String text, Hir.Expr value, String meaning) {
         Hir.Block block = new Hir.Block(List.of(each), edited.value(), RuleOrigin.unwritten(),
                 null, NOWHERE, NO_SOURCE);
         return new FixtureTemplate(
-                map.rendered() + "(" + each.name() + " -> " + edited.text() + ", " + list.text()
-                        + ")",
+                FixtureText.around(map.rendered() + "(" + each.name() + " -> ",
+                        List.of(edited.spelled(), list.spelled()), ")"),
                 Hir.Apply.synthetic(map.rendered(), map, references.next(),
                         new ApplicationOrigin.ComposedFixture(), List.of(block, list.value()),
                         NOWHERE, NO_SOURCE));
@@ -461,14 +469,18 @@ public record FixtureTemplate(String text, Hir.Expr value, String meaning) {
      *  over in, and which is why they are handed over as something that has one. */
     public static FixtureTemplate record(TypeReachName.Written type,
                                          SequencedMap<String, FixtureTemplate> fields) {
-        List<String> written = new ArrayList<>();
+        List<FixtureText> written = new ArrayList<>();
         List<Hir.FieldInit> inits = new ArrayList<>();
         for (Map.Entry<String, FixtureTemplate> field : fields.entrySet()) {
-            written.add(field.getKey() + " = " + field.getValue().text());
+            written.add(fieldWritten(field));
             inits.add(new Hir.FieldInit(field.getKey(), field.getValue().value(), NOWHERE));
         }
-        return new FixtureTemplate(type.rendered() + " { " + String.join(", ", written) + " }",
+        return new FixtureTemplate(FixtureText.around(type.rendered() + " { ", written, " }"),
                 Hir.NewData.syntheticWithEveryFieldWritten(Hir.Name.reached(type, NOWHERE), inits,
                         List.of(), NOWHERE, NO_SOURCE));
+    }
+
+    private static FixtureText fieldWritten(Map.Entry<String, FixtureTemplate> field) {
+        return FixtureText.around(field.getKey() + " = ", List.of(field.getValue().spelled()), "");
     }
 }

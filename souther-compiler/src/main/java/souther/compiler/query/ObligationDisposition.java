@@ -400,6 +400,8 @@ public sealed interface ObligationDisposition {
                      // A body this image does not carry says nothing about a point of a line
                      // either: whether a row stands at one is not what it is short of.
                      Weakening.BodyNotInEvaluation _,
+                     // Nor a body left unread for its author to change, for the same reason.
+                     Weakening.BehaviorToBeChangedFirst _,
                      Weakening.BoundaryNotDerived _,
                      Weakening.InputNotRead _,
                      Weakening.PairSpaceTruncated _,
