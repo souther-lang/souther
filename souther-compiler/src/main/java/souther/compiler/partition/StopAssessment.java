@@ -157,18 +157,14 @@ final class StopAssessment {
 
         /**
          * Neither is shown of {@code site}, or, where that is null, of a stop no site names; and
-         * {@code restsOn}, where the stops left untold that it rests on are, as far as the readings
-         * found them.
+         * {@code restsOn}, where the first stop left untold that it rests on is, where a reading
+         * found it.
          */
-        record Unresolved(Site site, WhyAStopIsNotShown why, List<StopOrigin> restsOn)
+        record Unresolved(Site site, WhyAStopIsNotShown why, Optional<StopOrigin> restsOn)
                 implements Judgement {
 
-            public Unresolved {
-                restsOn = List.copyOf(restsOn);
-            }
-
             public Unresolved(Site site, WhyAStopIsNotShown why) {
-                this(site, why, List.of());
+                this(site, why, Optional.empty());
             }
         }
     }
@@ -243,15 +239,14 @@ final class StopAssessment {
     }
 
     /**
-     * Where the stops {@code working} leaves untold are, as a report names each
-     * ({@link StopOrigin#of}): where the readings that left them found them
+     * Where the first stop {@code working} leaves untold is, as a report names it
+     * ({@link StopOrigin#of}): where the reading that left it found it
      * ({@link NotAccountedFor#untoldAt}), and not every one there may be.
      */
-    private static List<StopOrigin> untoldIn(UndividedByARelation.Working working,
-                                             InputReading read) {
+    private static Optional<StopOrigin> untoldIn(UndividedByARelation.Working working,
+                                                 InputReading read) {
         BehaviorAnswers answers = read.rules().declarations().answers();
-        return working.leftUntold().untoldAt().stream()
-                .map(at -> StopOrigin.of(at, answers)).toList();
+        return working.leftUntold().untoldAt().map(at -> StopOrigin.of(at, answers));
     }
 
     /** {@code places}, each that works out what an earlier one does on the same way left out. */

@@ -13,6 +13,7 @@ import souther.compiler.types.Type;
 
 import java.math.BigInteger;
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -95,8 +96,8 @@ class AWorkingPutTogetherKeepsWhichStopsItLeavesUntoldTest {
         both.ownStopOfAQuotientByAValueUntold(q);
         both.aStopWhereNoRowIs(noRow);
         assertTrue(both.working().leavesUntoldBeyond(List.of(q)));
-        assertEquals(List.of(q, noRow), both.working().leftUntold().untoldAt(),
-                "and each stop it left untold says where it is");
+        assertEquals(Optional.of(q), both.working().leftUntold().untoldAt(),
+                "and says where the first stop it left untold is");
 
         AffineReading.WhatWasTold absorbing = new AffineReading.WhatWasTold();
         absorbing.ownStopOfAQuotientByAValueUntold(q);
@@ -104,7 +105,11 @@ class AWorkingPutTogetherKeepsWhichStopsItLeavesUntoldTest {
         apart.aStopWhereNoRowIs(noRow);
         absorbing.absorb(apart);
         assertTrue(absorbing.working().leavesUntoldBeyond(List.of(q)));
-        assertEquals(List.of(q, noRow), absorbing.working().leftUntold().untoldAt());
+        assertEquals(Optional.of(q), absorbing.working().leftUntold().untoldAt());
+        AffineReading.WhatWasTold onlyApart = new AffineReading.WhatWasTold();
+        onlyApart.absorb(apart);
+        assertEquals(Optional.of(noRow), onlyApart.working().leftUntold().untoldAt(),
+                "a place a reading apart found is kept where it is the first");
     }
 
     /** Some operation left untold, and a stop left untold at {@code node}. */
@@ -113,8 +118,9 @@ class AWorkingPutTogetherKeepsWhichStopsItLeavesUntoldTest {
                 NotAccountedFor.aStopAt(node));
     }
 
-    /** Where a stop one reading left untold is, is said by the readings together, whether or not
-     *  they agree on what they tell, and by whatever a working is put beside or read past. */
+    /** Where the first stop a reading left untold is, is said by the readings together, whether
+     *  or not they agree on what they tell, and by whatever a working is put beside or read past:
+     *  the first reading's where it has one. */
     @Test
     void whereAReadingLeftAStopUntoldIsKeptByEveryWayOfPuttingWorkingsTogether() {
         Core here = quotient();
@@ -125,15 +131,17 @@ class AWorkingPutTogetherKeepsWhichStopsItLeavesUntoldTest {
         UndividedByARelation.Working toldWhole = new UndividedByARelation.Working(List.of(),
                 Told.EVERY);
 
-        assertEquals(List.of(here), UndividedByARelation.Working.together(
+        assertEquals(Optional.of(here), UndividedByARelation.Working.together(
                 List.of(toldWhole, leaving)).leftUntold().untoldAt());
-        assertEquals(List.of(here, there), UndividedByARelation.Working.together(
+        assertEquals(Optional.of(here), UndividedByARelation.Working.together(
                 List.of(leaving, leavingAStopAt(there))).leftUntold().untoldAt());
-        assertEquals(List.of(here),
+        assertEquals(Optional.of(there), UndividedByARelation.Working.together(
+                List.of(leavingAStopAt(there), leaving)).leftUntold().untoldAt());
+        assertEquals(Optional.of(here),
                 leaving.after(aStopNothingAnswersFor()).leftUntold().untoldAt());
-        assertEquals(List.of(here),
+        assertEquals(Optional.of(here),
                 aStopNothingAnswersFor().after(leaving).leftUntold().untoldAt());
-        assertEquals(List.of(here), leaving.notOnEveryRun().leftUntold().untoldAt());
+        assertEquals(Optional.of(here), leaving.notOnEveryRun().leftUntold().untoldAt());
     }
 
     private static UndividedByARelation.IntOperation operationAt(Core node) {

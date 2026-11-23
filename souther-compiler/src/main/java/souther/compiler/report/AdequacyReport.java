@@ -7497,15 +7497,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                              SourceRendering rendering, SourceId declaredIn) {
         StringBuilder out = new StringBuilder();
         for (AStopNotShown each : notShown) {
-            Message places = each.restsOn().isEmpty() ? null
-                    : placesSaid(each.restsOn(), page, rendering, declaredIn);
+            Message place = each.restsOn()
+                    .map(origin -> placeSaid(origin, page, rendering, declaredIn)).orElse(null);
             Message why = switch (each.why()) {
-                case NO_OPERATION_TOLD -> places == null ? new ReportMessage.NoOperationIsReadThere()
-                        : new ReportMessage.NoOperationIsReadAt(places);
+                case NO_OPERATION_TOLD -> place == null ? new ReportMessage.NoOperationIsReadThere()
+                        : new ReportMessage.NoOperationIsReadAt(place);
                 case ON_ROWS_OF_THE_STATEMENT -> new ReportMessage.TheComparisonStopsOnRowsItStates();
-                case NOT_EVERY_OPERATION_TOLD -> places == null
+                case NOT_EVERY_OPERATION_TOLD -> place == null
                         ? new ReportMessage.AnotherPartIsNotRead()
-                        : new ReportMessage.AnotherPartIsNotReadAt(places);
+                        : new ReportMessage.AnotherPartIsNotReadAt(place);
                 case SOMETHING_BEFORE_IT_MAY_STOP -> new ReportMessage.SomethingBeforeItMayStopARun();
                 case A_CONDITION_NOT_READ -> new ReportMessage.AConditionOnTheWayIsNotRead();
                 case NOT_OVER_THE_INPUT -> new ReportMessage.ItIsOverAValueTheBodyWorksOut();
@@ -7520,20 +7520,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         return new ReportMessage.Verbatim(out.toString());
     }
 
-    /** Places a run may stop at, as the words after a stop not resolved say them: each down every
-     *  call to where the proof that a run gets past gave out ({@link #placeSaid}). */
-    private static Message placesSaid(List<StopOrigin> places, Page page,
-                                      SourceRendering rendering, SourceId declaredIn) {
-        StringBuilder out = new StringBuilder();
-        for (StopOrigin each : places) {
-            Message one = placeSaid(each, page, rendering, declaredIn);
-            out.append(page.say(out.isEmpty() ? one : new ReportMessage.AlsoAt(one)));
-        }
-        return new ReportMessage.Verbatim(out.toString());
-    }
-
     /**
-     * One place a run may stop at, and, where it is a call, what each behavior on the way is told
+     * A place a run may stop at, as the words after a stop not resolved say it, and, where it is a
+     * call, what each behavior on the way is told
      * of, one after another and not one inside another: the words of a language that puts the verb
      * last do not hold a call inside what is said of the call before it.
      */
@@ -11840,11 +11829,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 ObjectNode one = unresolved.addObject();
                 each.operation().ifPresent(operation -> one.put("operation", operation));
                 one.put("reason", word(each.why()));
-                if (!each.restsOn().isEmpty()) {
-                    ArrayNode restsOn = one.putArray("restsOn");
-                    each.restsOn().forEach(place -> placeWritten(restsOn.addObject(), place,
-                            sources));
-                }
+                each.restsOn().ifPresent(place -> placeWritten(one.putObject("restsOn"), place,
+                        sources));
             }
         }
         if (finding.about() instanceof About.ARuleWhoseStopIsNotShown(var it)

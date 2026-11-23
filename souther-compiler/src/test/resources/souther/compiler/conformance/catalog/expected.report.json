@@ -4713,7 +4713,7 @@
         },
         "unresolved" : [ {
           "reason" : "no_operation_told",
-          "restsOn" : [ {
+          "restsOn" : {
             "kind" : "worked_out",
             "at" : {
               "sourceId" : "1",
@@ -4723,17 +4723,7 @@
                 "kind" : "here"
               }
             }
-          }, {
-            "kind" : "worked_out",
-            "at" : {
-              "sourceId" : "1",
-              "line" : 47,
-              "column" : 47,
-              "writtenAt" : {
-                "kind" : "here"
-              }
-            }
-          } ]
+          }
         } ]
       }, {
         "kind" : "rule_unaccounted",
@@ -7876,7 +7866,7 @@
         },
         "unresolved" : [ {
           "reason" : "no_operation_told",
-          "restsOn" : [ {
+          "restsOn" : {
             "kind" : "call",
             "module" : "conformance.catalog",
             "behavior" : "現価を引く",
@@ -7891,7 +7881,7 @@
                 "kind" : "here"
               }
             }
-          } ]
+          }
         } ]
       } ]
     }, {

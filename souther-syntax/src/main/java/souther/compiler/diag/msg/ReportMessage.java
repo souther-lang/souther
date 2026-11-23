@@ -561,18 +561,15 @@ public sealed interface ReportMessage extends Message {
     record NoOperationIsReadThere() implements ReportMessage, Prose {}
 
     /**
-     * The same, and where the stops left untold are, {@code at}: places a run may stop at, the
-     * first said by {@link TheConstructionOf}, {@link TheCallOf} or {@link WhatIsWorkedOutAt}, each
-     * after it by {@link AlsoAt}, and a call followed by what its behavior is told of.
+     * The same, and where the first stop left untold is, {@code at}: a place a run may stop at,
+     * said by {@link TheConstructionOf}, {@link TheCallOf} or {@link WhatIsWorkedOutAt}, a call
+     * followed by what its behavior is told of.
      */
     record NoOperationIsReadAt(Message at) implements ReportMessage, Prose {}
 
-    /** {@link AnotherPartIsNotRead}, and where the stops left untold in that part are,
-     *  {@code at}, said as {@link NoOperationIsReadAt} says them. */
+    /** {@link AnotherPartIsNotRead}, and where the first stop left untold in that part is,
+     *  {@code at}, said as {@link NoOperationIsReadAt} says it. */
     record AnotherPartIsNotReadAt(Message at) implements ReportMessage, Prose {}
-
-    /** One more place a run may stop at, after the first. */
-    record AlsoAt(Message at) implements ReportMessage, Prose {}
 
     /** A place a run may stop at: the construction of {@code type} written at {@code at}, of which
      *  it is not shown that every run making it keeps its invariant. */

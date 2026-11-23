@@ -15,7 +15,6 @@ import souther.compiler.types.TypeKey;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -284,10 +283,7 @@ class ACallOfABehaviorIsGottenPastByTheRunsTheBehaviorAnswersTest {
                 .json(SourceRendering.namedByIdentity(compilation.texts())));
 
         DocumentShape.assertShapedLikeTheSchema(document);
-        List<JsonNode> places = new ArrayList<>();
-        for (JsonNode restsOn : document.findValues("restsOn")) {
-            restsOn.forEach(places::add);
-        }
+        List<JsonNode> places = document.findValues("restsOn");
         assertTrue(places.stream().anyMatch(place -> place.at("/kind").asString().equals("call")
                 && place.at("/module").asString().equals("m")
                 && place.at("/behavior").asString().equals("pinsOf")
@@ -327,10 +323,7 @@ class ACallOfABehaviorIsGottenPastByTheRunsTheBehaviorAnswersTest {
                 .json(SourceRendering.namedByIdentity(compilation.texts())));
 
         DocumentShape.assertShapedLikeTheSchema(document);
-        List<JsonNode> calls = new ArrayList<>();
-        for (JsonNode restsOn : document.findValues("restsOn")) {
-            restsOn.forEach(calls::add);
-        }
+        List<JsonNode> calls = document.findValues("restsOn");
         assertEquals(List.of("billing"), calls.stream()
                 .filter(place -> place.at("/behavior").asString().equals("calculate"))
                 .map(place -> place.at("/module").asString()).toList(), document::toString);
@@ -360,14 +353,14 @@ class ACallOfABehaviorIsGottenPastByTheRunsTheBehaviorAnswersTest {
                     boolean typed;
                     try {
                         new AStopNotShown(operation ? Optional.of("x + 1") : Optional.empty(), why,
-                                places ? List.of(somewhere) : List.of());
+                                places ? Optional.of(somewhere) : Optional.empty());
                         typed = true;
                     } catch (IllegalArgumentException refused) {
                         typed = false;
                     }
                     String written = "{\"reason\": \"" + AdequacyReport.word(why) + "\""
                             + (operation ? ", \"operation\": \"x + 1\"" : "")
-                            + (places ? ", \"restsOn\": [{\"kind\": \"worked_out\"}]" : "")
+                            + (places ? ", \"restsOn\": {\"kind\": \"worked_out\"}" : "")
                             + "}";
                     assertEquals(typed, schemaTakes(written, ITEM), written);
                 }

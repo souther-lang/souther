@@ -5187,12 +5187,8 @@
                   "description": "The operation, as written. Absent exactly where the reason is of no operation: a run may stop in something worked out that no operation names, or on rows the statement says of its own."
                 },
                 "restsOn": {
-                  "type": "array",
-                  "minItems": 1,
-                  "items": {
-                    "$ref": "#/$defs/stopPlace"
-                  },
-                  "description": "Of `no_operation_told` and `not_every_operation_told` only: where the stops left untold that it rests on are, as the readings that left them found them, and not every one there may be. Absent where none was found."
+                  "$ref": "#/$defs/stopPlace",
+                  "description": "Of `no_operation_told` and `not_every_operation_told` only: where the first stop left untold that it rests on is, as the reading that left it found it, and not every one there may be. Absent where none was found."
                 },
                 "reason": {
                   "enum": [
