@@ -4,12 +4,14 @@ import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -101,8 +103,8 @@ class ARowThatTellsALineFromTheOneBesideItIsComposedTest {
      * instead, the search was never made and the block said nothing while the report asked for a
      * row.
      *
-     * <p>The search finds one: {@code (1, 3)} is above {@code y <= 2x} and on {@code y <= 3x}, so
-     * the two lines answer it differently. It is offered as a row, and the sentence names it.
+     * <p>The search finds one, and what it offers is held to the lines themselves: each row offered
+     * is a pair the two lines answer differently, whichever pair the search came to first.
      */
     @Test
     void aLineOnAnOrderWithNoValueBesideItIsStillSearched() {
@@ -124,13 +126,23 @@ class ARowThatTellsALineFromTheOneBesideItIsComposedTest {
                   | (12.0m, 24.0m) -> true
                 """);
 
-        assertEquals(List.of("no row tells `-2 * x + y = 0` from `-3 * x + y = 0`,"
-                        + " and a row at `x = 1, y = 3` would"), findings(report),
-                () -> "the rows meet every point this order owes one at and still leave a line"
-                        + " standing:\n" + report);
-        assertEquals(List.of("(1m, 3m)"), offered(report),
-                () -> "and the block offers the row the search found, rather than passing over a"
-                        + " line whose point against it the order cannot write:\n" + report);
+        List<String> found = findings(report);
+        assertEquals(1, found.size(), () -> "the rows meet every point this order owes one at and"
+                + " still leave a line standing:\n" + report);
+        assertTrue(found.get(0).startsWith(
+                        "no row tells `-2 * x + y = 0` from `-3 * x + y = 0`"),
+                () -> "and it is the line beside the one the model draws:\n" + report);
+        List<String> rows = offered(report);
+        assertFalse(rows.isEmpty(), () -> "the block offers a row rather than passing over a line"
+                + " whose point against it the order cannot write:\n" + report);
+        for (String row : rows) {
+            String[] pair = row.replaceAll("[()m ]", "").split(",");
+            BigDecimal x = new BigDecimal(pair[0]);
+            BigDecimal y = new BigDecimal(pair[1]);
+            assertTrue((y.compareTo(x.multiply(BigDecimal.TWO)) <= 0)
+                            != (y.compareTo(x.multiply(BigDecimal.valueOf(3))) <= 0),
+                    () -> "a row offered is one the two lines answer differently: " + row);
+        }
     }
 
     /** The model, with the rows handed in. */

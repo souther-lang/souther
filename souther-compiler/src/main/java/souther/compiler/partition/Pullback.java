@@ -3710,6 +3710,15 @@ final class Pullback {
         if (theRule != null && theRule.working() != null) {
             return AffineReading.WorkedOut.ofWhatIsToldOf(theRule.working());
         }
+        return asRead(theRule, arithmetic);
+    }
+
+    /**
+     * The same, off the reading of the arithmetic alone and not what the rule said the rows get
+     * past: what a run works out where nothing asks apart the stops of what the rule restated.
+     */
+    private AffineReading.WorkedOut asRead(
+            Trial theRule, Supplier<AffineReading.OfAComparison> arithmetic) {
         AffineReading.OfAComparison read = arithmetic.get();
         if (theRule == null || !(read instanceof AffineReading.OfAComparison.Stopped stopped)) {
             return AffineReading.OfAComparison.worksOut(read);
@@ -13755,8 +13764,16 @@ final class Pullback {
         StatedComparison stated = armsOfAComparison.newest();
         Trial concluded = triedAndConcluded.get(read);
         Trial theRule = concluded != null ? concluded : trial();
-        Once<AffineReading.WorkedOut> worksOut =
-                new Once<>(() -> worksOut(theRule, arithmeticOf(stated, there)));
+        // What a row taking the arm gets past is what the rule says; where a run taking it stops
+        // is what the reading says. A rule that read the comparison again leaves the stop of
+        // each operation it restated to where the comparison asks it apart
+        // ({@link ComparisonReadings.Reading#quotients}), which asks only what every run works
+        // out, and nothing on an arm.
+        Once<AffineReading.WorkedOut> worksOut = new Once<>(() -> {
+            Once<AffineReading.OfAComparison> arithmetic = arithmeticOf(stated, there);
+            return new AffineReading.WorkedOut(worksOut(theRule, arithmetic).toGetPast(),
+                    asRead(theRule, arithmetic).stops());
+        });
         Once<StopEvidence> evaluated = new Once<>(() -> answered == null
                 ? StopEvidence.ofWhatIsToldOf(UndividedByARelation.Working.AS_THE_FORM)
                 : AffineReading.stopsOfEvaluating(answered.value(), answered.at(), this.read,

@@ -29,6 +29,7 @@ import net.unit8.notation199x.pattern.Meter;
 import souther.compiler.values.ValueSet;
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -1803,6 +1804,85 @@ public final class LevelRealizer {
         return step.signum() == 0 ? BigInteger.ONE : step;
     }
 
+    /**
+     * The bounds among {@code bounds} that reach {@code terms}: each weighing one of them, or a
+     * number a bound reaching them weighs. The others hold numbers no bound on the way to the terms
+     * names, so they leave what the bounds together leave each term as it is, and eliminating them
+     * is work that tells nothing about the terms. In the order {@code bounds} has them.
+     */
+    static <A> List<LaterNumbersEliminated.Bound<A>> reaching(
+            Collection<A> terms, List<LaterNumbersEliminated.Bound<A>> bounds) {
+        Set<A> reached = new HashSet<>(terms);
+        boolean[] taken = new boolean[bounds.size()];
+        for (boolean grew = true; grew; ) {
+            grew = false;
+            for (int each = 0; each < bounds.size(); each++) {
+                Set<A> weighs = bounds.get(each).form().coefs().keySet();
+                if (!taken[each] && weighs.stream().anyMatch(reached::contains)) {
+                    taken[each] = true;
+                    reached.addAll(weighs);
+                    grew = true;
+                }
+            }
+        }
+        List<LaterNumbersEliminated.Bound<A>> out = new ArrayList<>();
+        for (int each = 0; each < bounds.size(); each++) {
+            if (taken[each]) {
+                out.add(bounds.get(each));
+            }
+        }
+        return out;
+    }
+
+    /**
+     * What an elimination leaves each number at its place in the order: its level, or none where
+     * the elimination stopped short of it, so that it is walked by what the region alone leaves
+     * it. Null only where no rational values meet the bounds, which is a proof that nothing does;
+     * an elimination stopped short proves nothing of the kind.
+     */
+    static <A> List<List<LaterNumbersEliminated.Bound<A>>> levelsOf(
+            LaterNumbersEliminated<A> eliminated) {
+        return switch (eliminated) {
+            case LaterNumbersEliminated.Eliminated<A> all -> all.levels();
+            case LaterNumbersEliminated.NoneLeft<A> _ -> null;
+            case LaterNumbersEliminated.StoppedShort<A> stopped -> {
+                List<List<LaterNumbersEliminated.Bound<A>>> reached = new ArrayList<>();
+                for (int place = 0; place < stopped.place(); place++) {
+                    reached.add(List.of());
+                }
+                reached.addAll(stopped.reached());
+                yield reached;
+            }
+        };
+    }
+
+    /**
+     * Where {@code end} puts a position: at or below it where {@code above}, at or over it
+     * otherwise, and short of it where {@code strict}; null where no place can be written.
+     *
+     * <p>A whole position is put at the nearest whole number on the side the bound leaves, which
+     * is where the whole values it leaves stop. Any other is put at {@code end} where a decimal
+     * writes it, and otherwise at a decimal past it ({@link Search#written}), which keeps every
+     * value the bound leaves: the walk takes nothing out that the bound did not.
+     */
+    static Endpoint endAt(ExactRatio end, boolean strict, boolean above, boolean whole) {
+        if (whole) {
+            ExactAnswer<BigInteger> next = above ? end.floor() : end.ceiling();
+            if (!(next instanceof ExactAnswer.Held<BigInteger>(BigInteger at))) {
+                return null;
+            }
+            if (strict && end.isWhole()) {
+                at = above ? at.subtract(BigInteger.ONE) : at.add(BigInteger.ONE);
+            }
+            return Endpoint.inclusive(Count.of(new BigDecimal(at)));
+        }
+        Count written = Search.written(end, above ? RoundingMode.CEILING : RoundingMode.FLOOR);
+        if (written == null) {
+            return null;
+        }
+        return new Endpoint(written, !(strict && written.exactly().compareTo(end) == 0));
+    }
+
     /** The region a walk of one level is held to, and where each position runs in it. */
     private record AtTheLevel(SearchRegion region, Map<NumericTerm, NumericDomain.Bounds> runs) {}
 
@@ -2074,14 +2154,17 @@ public final class LevelRealizer {
          * position's level, with the positions before it at their values, leave exactly the
          * values some rational values of the rest complete.
          *
-         * <p>The pairs the elimination puts together are steps of this search: they are its work,
+         * <p>Only the bounds that reach the positions are eliminated ({@link #reaching}): the rest
+         * are of numbers nothing on the way to a position names, and leave every level as it is.
+         * The pairs the elimination puts together are steps of this search: they are its work,
          * counted where its walks are. Where it stops short, the positions it did not reach are
          * walked by what the region alone leaves them, as before.
          */
         private List<List<LaterNumbersEliminated.Bound<NumericTerm>>> eliminated() {
-            List<LaterNumbersEliminated.Bound<NumericTerm>> bounds = within.boundsTakenIn();
             List<NumericTerm> order = new ArrayList<>();
             terms.forEach(each -> order.add(each.getKey().term()));
+            List<LaterNumbersEliminated.Bound<NumericTerm>> bounds =
+                    reaching(order, within.boundsTakenIn());
             Set<NumericTerm> after = new LinkedHashSet<>();
             bounds.forEach(each -> after.addAll(each.form().coefs().keySet()));
             after.removeAll(order);
@@ -2089,28 +2172,14 @@ public final class LevelRealizer {
             LaterNumbersEliminated<NumericTerm> eliminated = LaterNumbersEliminated.of(bounds,
                     order, Math.max(0, STEPS_A_SEARCH_MAY_TAKE - steps.taken));
             steps.taken += (int) Math.min(eliminated.pairsCombined(), Integer.MAX_VALUE);
-            return switch (eliminated) {
-                case LaterNumbersEliminated.Eliminated<NumericTerm> all -> all.levels();
-                case LaterNumbersEliminated.NoneLeft<NumericTerm> _ -> null;
-                case LaterNumbersEliminated.StoppedShort<NumericTerm> stopped -> {
-                    List<List<LaterNumbersEliminated.Bound<NumericTerm>>> reached =
-                            new ArrayList<>();
-                    for (int place = 0; place < stopped.place(); place++) {
-                        reached.add(List.of());
-                    }
-                    reached.addAll(stopped.reached());
-                    yield reached;
-                }
-            };
+            return levelsOf(eliminated);
         }
 
         /**
          * Where the bounds at position {@code i}'s level leave it with the positions before it at
          * the values the walk gave them ({@link #eliminated}); open where its level holds none.
          *
-         * <p>An end no decimal writes is rounded inward to the next whole number where the position
-         * is whole, and left off where it is not: a range left wider holds every value the bounds
-         * leave, which is the direction the walk depends on.
+         * <p>Each end is where {@link #endAt} puts it.
          */
         private NumericDomain.Bounds leftByWhatWasTakenIn(int i) {
             if (i >= levels.size() || levels.get(i).isEmpty()) {
@@ -2150,25 +2219,6 @@ public final class LevelRealizer {
                 }
             }
             return new NumericDomain.Bounds(min, max);
-        }
-
-        /** The end {@code end} puts a position at: below it where {@code above} and over it
-         *  otherwise, short of it where {@code strict}; null where no place can be written. */
-        private static Endpoint endAt(ExactRatio end, boolean strict, boolean above,
-                                      boolean whole) {
-            if (whole) {
-                ExactAnswer<BigInteger> next = above ? end.floor() : end.ceiling();
-                if (!(next instanceof ExactAnswer.Held<BigInteger>(BigInteger at))) {
-                    return null;
-                }
-                if (strict && end.isWhole()) {
-                    at = above ? at.subtract(BigInteger.ONE) : at.add(BigInteger.ONE);
-                }
-                return Endpoint.inclusive(Count.of(new BigDecimal(at)));
-            }
-            return end.writtenDecimal() instanceof ExactAnswer.Held<Optional<BigDecimal>>(
-                    Optional<BigDecimal> written) && written.isPresent()
-                    ? new Endpoint(Count.of(written.get()), !strict) : null;
         }
 
         /** What {@link #eliminated} left each position, once the walk asked. */

@@ -106,6 +106,20 @@ class AStopShownAtAnOperationIsOneTheProgramRunsIntoTest {
         // a call before the sum that stops every run of the way is not got past
         FORMS.put("aCallBeforeTheSumThatStops", new Form("q >= " + GREATEST + " && p == 0",
                 "h(p) + (q + 1) >= 2"));
+        // a choice read arm by arm stops on one arm and not the other: what is said of the
+        // quotient is said of the runs that take its arm, whichever arm a reading was on
+        FORMS.put("aStopOnOneArmOfAChoice", new Form("q == 0",
+                "(if e > 0 then e else Rational.toInt(DOWN, 4 / p)) >= 2"));
+        // the same where the arm's answer settles the comparison whatever it is: no line is drawn
+        // on that arm, and a run taking it still works the quotient out
+        FORMS.put("aStopOnAnArmThatSettlesTheComparison", new Form("q == 0",
+                "(if e > 0 then e else Rational.toInt(DOWN, 1 / p)) >= 2"));
+        // the same, the choice given to a name the comparison reads
+        FORMS.put("aChoiceGivenToAName", new Form("p == 0",
+                "{ let c = if e > 0 then q + 1 else e\n c + 1 } >= 2"));
+        // and a helper choosing between arms, called on what the same helper answered
+        FORMS.put("aChoiceOnAChoice", new Form("e == e",
+                "k(k(e, p), q) >= 2"));
     }
 
     static Stream<String> forms() {
@@ -131,6 +145,9 @@ class AStopShownAtAnOperationIsOneTheProgramRunsIntoTest {
 
                     behavior h : (z: Int) -> Int
                     let h (z) = Rational.toInt(DOWN, 1 / z)
+
+                    let k (a: Int, b: Int): Int =
+                        if a > 0 then a else Rational.toInt(DOWN, 1 / b)
                     """);
             for (Map.Entry<String, Form> each : FORMS.entrySet()) {
                 String behavior = behaviorOf(each.getKey());
