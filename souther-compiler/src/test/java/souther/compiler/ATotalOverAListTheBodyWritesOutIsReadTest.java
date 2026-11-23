@@ -53,17 +53,16 @@ class ATotalOverAListTheBodyWritesOutIsReadTest {
             WhyAPlaceIsUndividedIsSaid.of(UndividedPosition.Reason.RULE_MEASURED_ON_ITS_RUNS);
 
     /**
-     * {@code report} without where every run is shown to stop. A sum written out tells each
+     * {@code report} without where a run is said to stop. A sum written out is a step for each
      * addition it works out, and is shown to stop where two of the pays together pass the type; a
-     * total over a list written out is one operation, and is shown to stop where the whole total
-     * passes it, as is a total over what a closure makes of each element of one, once each
-     * application is worked out. Whether a run that gets there is shown to exist turns on the form
-     * the operation is read in, so the stop is left out whether it is said as shown or as not
-     * resolved. What else is read of them is the same.
+     * total over a list written out is one step, and is shown to stop where the whole total passes
+     * it, as is a total over what a closure makes of each element of one. Which steps a run may
+     * stop at, and where they are written, turn on how the total is written, so the stops a
+     * behavior is said to have are left out whatever they say. What else is read of them is the
+     * same.
      */
     private static String besideWhereEveryRunStops(String report) {
-        return report.replaceAll("(?m)^.*(may stop a run:.*every run stops|stop not resolved:.*a"
-                + " run that gets there stops).*\\R", "");
+        return report.replaceAll("(?m)^    stops .*\\R((      ·|          ·) .*\\R)*", "");
     }
 
     /** The report, with where in the guard each comparison is written left out. */
@@ -180,7 +179,8 @@ class ATotalOverAListTheBodyWritesOutIsReadTest {
     @Test
     void aTotalBehindAnAdditionOfTheFoldIsTheSum() {
         String report = measured("List.fold((acc, m) -> acc + m.pay, 0, [a, b, c])");
-        assertEquals(measured(SUM), report);
+        assertEquals(besideWhereEveryRunStops(measured(SUM)), besideWhereEveryRunStops(report));
+        assertTrue(report.contains("· may stop a run:"), report);
     }
 
     /** The same, the list being what a helper answers: a helper is read where its parameters are
@@ -191,8 +191,11 @@ class ATotalOverAListTheBodyWritesOutIsReadTest {
                 data No
                 let monthsOf (x: Month, y: Month, z: Month): List<Month> = [x, y, z]
                 """);
-        assertEquals(measured(model, SUM),
-                measured(model, "List.fold((acc, m) -> acc + m.pay, 0, monthsOf(a, b, c))"));
+        String report =
+                measured(model, "List.fold((acc, m) -> acc + m.pay, 0, monthsOf(a, b, c))");
+        assertEquals(besideWhereEveryRunStops(measured(model, SUM)),
+                besideWhereEveryRunStops(report));
+        assertTrue(report.contains("· may stop a run:"), report);
     }
 
     @Test
