@@ -5353,7 +5353,7 @@ public final class Adequacy {
         /** What the proof that the runs get past gave out at, {@code at}: a construction, a call
          *  of a behavior, with what that behavior is told of, or something else worked out. */
         private static CallPassage.WhyOpen whyOpenAt(Db db, Core at) {
-            if (at instanceof Core.Construct made) {
+            if (Core.withoutStanding(at) instanceof Core.Construct made) {
                 return new CallPassage.WhyOpen.AConstruction(made.pos(), made.typeName().name());
             }
             if (AnOperationApplied.of(at) instanceof AnOperationApplied applied

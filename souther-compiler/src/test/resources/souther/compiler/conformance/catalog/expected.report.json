@@ -7854,7 +7854,21 @@
           "lowered" : 0
         },
         "unresolved" : [ {
-          "reason" : "no_operation_told"
+          "reason" : "in_a_call",
+          "call" : {
+            "behavior" : "現価を引く",
+            "at" : {
+              "sourceId" : "2",
+              "line" : 98,
+              "column" : 62,
+              "writtenAt" : {
+                "kind" : "here"
+              }
+            },
+            "passage" : {
+              "reason" : "no_body"
+            }
+          }
         } ]
       } ]
     }, {
