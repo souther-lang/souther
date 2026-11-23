@@ -126,9 +126,11 @@ souther examples businesstrip.sou
 
 It answers on the positions of an input — which classes the behavior's own rules divide it into, and which of them no row stands in — on the boundary values those rules place, on the rules of the body and which of them a row goes through, and on the invariants of the types the behavior reaches, which are owed a row wherever such a value is constructed. What nothing covers is marked `!`, and `--strict` exits non-zero over those, which is the form a build takes.
 
+A boundary on a number only a run works out, such as a sum over a list, has no rule saying which input lands on it. The compiler writes candidate rows, runs them, and reads what each came to. Where none reaches the point, the report names the candidates it tried. That does not make the point unreachable: a row written by hand may still reach it.
+
 Where measuring a behavior stops at a limit of the compiler in a condition the compiler can say how to change, the report says that instead of measuring the rest of it. `--strict` refuses such a behavior too, and `--to-the-end` measures it as it is written.
 
-An adequacy line closes the report. It is not a grade: where the report could not settle a question it says `undetermined` and lists what each open position is waiting on, separating what a wider search would decide from what only a new row can. A limit of the compiler is never reported as an answer about the model.
+An adequacy line closes the report. It is not a grade: where the report could not settle a question it says `undetermined` and lists what each open position is waiting on, separating what a wider search would decide from what only a new row can. A limit of the compiler is never reported as an answer about the model. `--strict` passes an `undetermined` report, so an exit of 0 there says no gap was found, not that every measure was made.
 
 ```sh
 souther examples businesstrip.sou --behavior submitTrip   # one behavior
@@ -136,7 +138,7 @@ souther examples businesstrip.sou --generate              # rows for what nothin
 souther examples businesstrip.sou --strict                # refuse over the gaps
 ```
 
-`--generate` writes the rows themselves, with the inputs filled in and `<?>` where the answer is owed — a row the report then counts as waiting for one. The [tutorial](https://souther-lang.org/tutorial/) works a model up from a record layout to a covered one by reading this report.
+`--generate` writes the rows themselves, with the inputs filled in and `<?>` where the answer is owed — a row the report then counts as waiting for one. It also offers a behavior the inputs that the rows of the behaviors it calls were written with. Those rows owe nothing: the header counts them apart as optional, and each carries the comment `suggested input; no uncovered obligation`. The [tutorial](https://souther-lang.org/tutorial/) works a model up from a record layout to a covered one by reading this report.
 
 ## Run a behavior
 
