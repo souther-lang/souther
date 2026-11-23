@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.abort.AbortKind;
 import souther.compiler.abort.AbortSites;
 import souther.compiler.check.ARowsRun;
+import souther.compiler.check.Choice;
 import souther.compiler.check.ClausesInOrder;
 import souther.compiler.check.StopOrigin;
 import souther.compiler.check.ValueTemplates;
@@ -20,9 +21,11 @@ import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.WhatKeepsEveryRunGoing;
 import souther.compiler.inputs.WhyAStopIsNotShown;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
+import souther.compiler.types.Type;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
@@ -30,6 +33,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -388,9 +392,14 @@ final class StopsOfABody {
     private List<StopAssessment.Site> sitesOf(Core step, Reached reached) {
         Core node = Core.withoutStanding(step);
         List<StopAssessment.Site> out = new ArrayList<>();
+        // An operation of two Ints is its operator over what its operands come to.
+        UndividedByARelation.IntOperation own = ownOperation(node, reached.reads());
+        if (own != null) {
+            return List.of(new StopAssessment.Site.PastItsEnds(own));
+        }
         StopEvidence evidence = evaluated(node, reached.reads());
-        // Its own operations, and not those of a step it is worked out of, which are judged
-        // there: what the reading of it tells beside what the readings of those tell.
+        // Any other: its own operations, and not those of a step it is worked out of, which are
+        // judged there: what the reading of it tells beside what the readings of those tell.
         List<UndividedByARelation.IntOperation> ofWhatItIsMadeOf = new ArrayList<>();
         for (Core under : stepsUnder(node)) {
             ofWhatItIsMadeOf.addAll(evaluated(under, reached.reads()).operations().operations());
@@ -415,6 +424,140 @@ final class StopsOfABody {
         // (StopEvidence#everyStopSaid), is that working it out here stops no run. Where it leaves
         // one untold, or to another owner, nothing here reads it.
         return out.isEmpty() && !evidence.everyStopSaid() ? null : out;
+    }
+
+    /**
+     * The operation of whole numbers {@code node} is, as its operator over what each operand comes
+     * to, with the names {@code at} has: a sum, a difference, or a product by a number written, of
+     * two {@code Int}s, past the ends of an {@code Int}. Each operand is a form of the input's
+     * numbers where it reads as one ({@link AffineReading#formOf}), and otherwise the value its
+     * owner says it comes to, from where and by which ways a row makes it
+     * ({@link WorkedOutToReachIt#originOf}, {@link WorkedOutToReachIt#attainmentsOf}). Null where
+     * it is no such operation, or an operand is neither.
+     */
+    private UndividedByARelation.IntOperation ownOperation(Core node, InputReads at) {
+        if (!(node instanceof Core.Binary binary) || binary.type() != Type.INT) {
+            return null;
+        }
+        LinearForm<UndividedByARelation.IntOperand> left = operand(binary.left(), at);
+        LinearForm<UndividedByARelation.IntOperand> right = operand(binary.right(), at);
+        if (left == null || right == null) {
+            return null;
+        }
+        ExactAnswer<LinearForm<UndividedByARelation.IntOperand>> form = switch (binary.op()) {
+            case ADD -> left.plus(right);
+            case SUB -> left.minus(right);
+            case MUL -> right.coefs().isEmpty() ? left.times(right.constant())
+                    : left.coefs().isEmpty() ? right.times(left.constant()) : null;
+            default -> null;
+        };
+        if (!(form instanceof ExactAnswer.Held<LinearForm<UndividedByARelation.IntOperand>>(
+                var worked))) {
+            return null;
+        }
+        return new UndividedByARelation.IntOperation(worked,
+                BigInteger.valueOf(Long.MIN_VALUE), BigInteger.valueOf(Long.MAX_VALUE), List.of(),
+                true, new UndividedByARelation.IntOperation.Origin(node));
+    }
+
+    /**
+     * What {@code operand} comes to as an operand of an operation ({@link #ownOperation}), or
+     * null where that is not said: a form of the input's numbers, an operation of two
+     * {@code Int}s over what its own operands come to, or a value worked out, held as one number
+     * the value's owner says where it comes from.
+     */
+    private LinearForm<UndividedByARelation.IntOperand> operand(Core operand, InputReads at) {
+        LinearForm<NumericTerm> form = AffineReading.formOf(operand, at, read, new ElementsMet(),
+                AffineReading.Unkept.EVERY_NAME_AFRESH);
+        if (form != null) {
+            return form.over(term -> LinearForm.atom(
+                    new UndividedByARelation.IntOperand.OfTheInput(term)));
+        }
+        UndividedByARelation.IntOperation worked = ownOperation(Core.withoutStanding(operand), at);
+        if (worked != null) {
+            return worked.form();
+        }
+        WorkedOutToReachIt owner = WorkedOutToReachIt.of(read);
+        Denotation value = new Denotation(operand, at);
+        WhereAValueComesFrom origin = owner.originOf(value);
+        if (origin == null) {
+            return null;
+        }
+        return LinearForm.atom(new UndividedByARelation.IntOperand.OfAValueWorkedOut(
+                heldAs(Core.withoutStanding(operand)), origin,
+                attainmentsOf(value, Collections.newSetFromMap(new IdentityHashMap<>()))));
+    }
+
+    /**
+     * The number a value worked out is held as in an operation over it: named as an author reads
+     * it ({@link ComparisonAssessment#written}), and apart from every other value however alike the
+     * two read, so that no two values are one number for being written alike. One node is one
+     * number wherever it is asked.
+     */
+    private NumericTerm heldAs(Core node) {
+        return heldAs.computeIfAbsent(node, _ -> {
+            String written = ComparisonAssessment.written(node);
+            int alike = writtenAlike.merge(written, 1, Integer::sum);
+            return new NumericTerm.ValueOf(TermPath.of(alike == 1 ? written
+                    : written + " #" + alike));
+        });
+    }
+
+    private final Map<Core, NumericTerm> heldAs = new IdentityHashMap<>();
+    private final Map<String, Integer> writtenAlike = new HashMap<>();
+
+    /**
+     * Each way a row makes {@code value} come to a number of the input ({@link Attainment}). A
+     * {@code let} comes to what its body does, and a name to what it stands for. A choice comes to
+     * what each arm answers, on the rows that take the arm: the answer as the walk met it, under
+     * what stood on the way to it, the arm's condition among it — and no way of an arm whose way
+     * is not a relation of numbers of the input, which no row is shown to take. Anything else is
+     * what its owner says ({@link WorkedOutToReachIt#attainmentsOf}). {@code through} holds what is
+     * being gone through, so a name reached again says nothing more.
+     */
+    private Attainments attainmentsOf(Denotation value, Set<Core> through) {
+        Core node = Core.withoutStanding(value.value());
+        if (!through.add(node)) {
+            return Attainments.NONE;
+        }
+        try {
+            if (node instanceof Core.LetIn let) {
+                return attainmentsOf(new Denotation(let.body(),
+                        value.at().and(let.binder(), let.value())), through);
+            }
+            if (node instanceof Core.Read) {
+                Denotation stands = value.at().standing(node, read.rules().symbols(),
+                        read.rules().newtypes());
+                if (stands != null && Core.withoutStanding(stands.value()) != node) {
+                    return attainmentsOf(stands, through);
+                }
+            }
+            Choice choice = Choice.of(node);
+            if (choice == null) {
+                return WorkedOutToReachIt.of(read).attainmentsOf(value);
+            }
+            List<Attainment> ways = new ArrayList<>();
+            boolean leftUnmade = false;
+            for (Choice.Arm arm : choice.arms()) {
+                for (WhereARunMayStop.Reached met : where.reachedAt(arm.answers())) {
+                    List<TakenConstraint.Affine> taken = StopAssessment.asRelations(met.way());
+                    if (taken == null) {
+                        continue;
+                    }
+                    Attainments ofTheArm = attainmentsOf(
+                            new Denotation(arm.answers(), met.reads()), through);
+                    leftUnmade |= ofTheArm.leftUnmade();
+                    for (Attainment one : ofTheArm.ways()) {
+                        List<TakenConstraint.Affine> holding = new ArrayList<>(one.holding());
+                        holding.addAll(taken);
+                        ways.add(new Attainment(one.form(), holding));
+                    }
+                }
+            }
+            return new Attainments(ways, leftUnmade);
+        } finally {
+            through.remove(node);
+        }
     }
 
     /** What a run works out evaluating {@code node} with the names {@code at} has, read once for
@@ -478,8 +621,110 @@ final class StopsOfABody {
             return new StopAssessment.Judgement.Unresolved(site,
                     WhyAStopIsNotShown.SOMETHING_BEFORE_IT_MAY_STOP);
         }
-        return StopAssessment.aStopLookedFor(site, gotPast.operations(), gotPast.divisors(), left,
-                way, read);
+        return lookedForByEachWay(site, gotPast, left, way);
+    }
+
+    /** How many ways of the values worked out an operation and what comes before it are over are
+     *  put to a search before what is left is said untried: as many as a search for an
+     *  assignment on the way tries of one position. */
+    private static final int MOST_WAYS_TRIED =
+            CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT.maximum();
+
+    /**
+     * That a run on {@code way} stops at {@code site} past {@code gotPast}
+     * ({@link StopAssessment#aStopLookedFor}), where the operations are over values a run works
+     * out as well as numbers of the input: looked for by each way a row makes those values come
+     * to numbers of the input ({@link Attainment}), one value being one number wherever it is
+     * read, so a way is put in the place of the value in the site and in everything before it
+     * alike, and what a row meets for it is put on the way. The first way a stop is shown by is
+     * the answer; where none is, the first answer, or that what was left untried may hold one.
+     */
+    private StopAssessment.Judgement lookedForByEachWay(StopAssessment.Site site, GotPast gotPast,
+                                                        WhatAWayLeavesOfAValue left,
+                                                        List<TakenConstraint.Affine> way) {
+        Map<NumericTerm, Attainments> worked = new LinkedHashMap<>();
+        if (site instanceof StopAssessment.Site.PastItsEnds(var operation)) {
+            valuesWorkedOutIn(operation, worked);
+        }
+        gotPast.operations().forEach(each -> valuesWorkedOutIn(each, worked));
+        if (worked.isEmpty()) {
+            return StopAssessment.aStopLookedFor(site, gotPast.operations(), gotPast.divisors(),
+                    left, way, read);
+        }
+        List<NumericTerm> values = List.copyOf(worked.keySet());
+        List<Map<NumericTerm, Attainment>> ways = new ArrayList<>();
+        boolean cutShort = !waysOf(values, 0, new LinkedHashMap<>(), worked, ways);
+        StopAssessment.Judgement first = null;
+        for (Map<NumericTerm, Attainment> one : ways) {
+            List<TakenConstraint.Affine> holding = new ArrayList<>(way);
+            one.values().forEach(each -> holding.addAll(each.holding()));
+            List<UndividedByARelation.IntOperation> before = new ArrayList<>();
+            gotPast.operations().forEach(each -> before.add(atTheWay(each, one)));
+            StopAssessment.Site there = site instanceof StopAssessment.Site.PastItsEnds(var op)
+                    ? new StopAssessment.Site.PastItsEnds(atTheWay(op, one)) : site;
+            StopAssessment.Judgement judged = StopAssessment.aStopLookedFor(there, before,
+                    gotPast.divisors(), left, holding, read);
+            if (judged instanceof StopAssessment.Judgement.Stops) {
+                return judged;
+            }
+            if (first == null) {
+                first = judged;
+            }
+        }
+        return first == null || cutShort
+                ? new StopAssessment.Judgement.Unresolved(site,
+                        WhyAStopIsNotShown.NO_VALUE_FOUND_WITHIN_WHAT_IS_TRIED)
+                : first;
+    }
+
+    /** Each value worked out {@code operation} is over, with the ways a row makes it a number,
+     *  into {@code out}. */
+    private static void valuesWorkedOutIn(UndividedByARelation.IntOperation operation,
+                                          Map<NumericTerm, Attainments> out) {
+        for (UndividedByARelation.IntOperand each : operation.form().coefs().keySet()) {
+            if (each instanceof UndividedByARelation.IntOperand.OfAValueWorkedOut(var atom, var _,
+                    Attainments attainments)) {
+                out.putIfAbsent(atom, attainments);
+            }
+        }
+    }
+
+    /** Every way of putting a way of each of {@code values} from {@code at} on, after
+     *  {@code sofar}, into {@code out}, as many as {@link #MOST_WAYS_TRIED}; false where more were
+     *  left, or some value's ways were left unmade. */
+    private static boolean waysOf(List<NumericTerm> values, int at,
+                                  Map<NumericTerm, Attainment> sofar,
+                                  Map<NumericTerm, Attainments> worked,
+                                  List<Map<NumericTerm, Attainment>> out) {
+        if (at == values.size()) {
+            if (out.size() >= MOST_WAYS_TRIED) {
+                return false;
+            }
+            out.add(Map.copyOf(sofar));
+            return true;
+        }
+        Attainments ways = worked.get(values.get(at));
+        boolean all = !ways.leftUnmade();
+        for (Attainment way : ways.ways()) {
+            sofar.put(values.get(at), way);
+            all &= waysOf(values, at + 1, sofar, worked, out);
+            sofar.remove(values.get(at));
+        }
+        return all;
+    }
+
+    /** {@code operation} over numbers of the input, each value worked out it is over put as
+     *  {@code ways} says a row makes it; itself where it is over none. */
+    private static UndividedByARelation.IntOperation atTheWay(
+            UndividedByARelation.IntOperation operation, Map<NumericTerm, Attainment> ways) {
+        LinearForm<UndividedByARelation.IntOperand> form = operation.form().over(each ->
+                each instanceof UndividedByARelation.IntOperand.OfAValueWorkedOut(var atom, var _,
+                        var _) && ways.get(atom) instanceof Attainment way
+                        ? way.form().over(term -> LinearForm.atom(
+                                new UndividedByARelation.IntOperand.OfTheInput(term)))
+                        : LinearForm.atom(each));
+        return new UndividedByARelation.IntOperation(form, operation.least(), operation.greatest(),
+                operation.after(), operation.ofTheRepresentation(), operation.origin());
     }
 
     /** What a value has to get past before a step: each operation within its ends, and each

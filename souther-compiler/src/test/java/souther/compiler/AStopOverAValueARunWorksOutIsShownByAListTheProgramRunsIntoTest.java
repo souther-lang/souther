@@ -138,7 +138,7 @@ class AStopOverAValueARunWorksOutIsShownByAListTheProgramRunsIntoTest {
         STOPPING.put("theOperationAfterOneWorkedOutFirst", new Form(
                 "Option.withDefault(0, List.max(ds)) + 1 + (q + 1) <= 10",
                 "(Option.withDefault(0, List.max(ds)) + 1) * 0 + (q + 1) * 0 <= 10",
-                "i.q + 2"));
+                "i.ds[*] + i.q + 2"));
         // a list as long as the longest a size's passing the type is asked of, which is one a list
         // can be
         STOPPING.put("aSizeOfTheLongestAListCanBePassingTheType", new Form(

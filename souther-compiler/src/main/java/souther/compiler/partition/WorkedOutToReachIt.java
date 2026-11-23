@@ -1451,8 +1451,23 @@ final class WorkedOutToReachIt {
         return attainmentsOf(value, onTheWay);
     }
 
+    /**
+     * What {@code value} is where it is a {@code let}: its body, with the name the {@code let}
+     * gives bound to the value it gives it, as a walk of the body binds it. A {@code let} comes to
+     * what its body comes to. Null where it is no {@code let}, or gives a build of a value, whose
+     * template is read where the value is defined.
+     */
+    private static Denotation inTheBodyOfALet(Denotation value) {
+        return Core.withoutStanding(value.value()) instanceof Core.LetIn let
+                && !(Core.withoutStanding(let.value()) instanceof Core.MaterialisedValue)
+                ? new Denotation(let.body(), value.at().and(let.binder(), let.value())) : null;
+    }
+
     private Attainments attainmentsOf(Denotation value, ArmsTaken arms) {
         Core written = Core.withoutStanding(value.value());
+        if (inTheBodyOfALet(value) instanceof Denotation body) {
+            return attainmentsOf(body, arms);
+        }
         Symbols symbols = read.rules().symbols();
         DeclarationNewtypes newtypes = read.rules().newtypes();
         if (value.at().folded(written, symbols, newtypes).orElse(null) instanceof Long number) {
@@ -1726,6 +1741,9 @@ final class WorkedOutToReachIt {
 
     private WhereAValueComesFrom originNotYetAsked(Denotation value, ArmsTaken arms) {
         Core written = Core.withoutStanding(value.value());
+        if (inTheBodyOfALet(value) instanceof Denotation body) {
+            return originOf(body, arms);
+        }
         Symbols symbols = read.rules().symbols();
         DeclarationNewtypes newtypes = read.rules().newtypes();
         if (value.at().folded(written, symbols, newtypes).orElse(null) instanceof Long number) {
