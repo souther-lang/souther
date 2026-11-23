@@ -28,7 +28,6 @@ import souther.compiler.inputs.AConstructionStopNotShown;
 import souther.compiler.inputs.AConstructionStopShown;
 import souther.compiler.inputs.AStopShown;
 import souther.compiler.inputs.AStopNotShown;
-import souther.compiler.inputs.WhatAConstructionAsks;
 import souther.compiler.inputs.WhatKeepsEveryRunGoing;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputNumber;
@@ -45,6 +44,8 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.ValuesAt;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.RulesWithNoLine;
+import souther.compiler.inputs.StepWhereARunMayStop;
+import souther.compiler.inputs.StepWhereAStopIsNotShown;
 import souther.compiler.meaning.AuthoredPointMapping;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.WhereAnApplicationIsMade;
@@ -77,9 +78,7 @@ import souther.compiler.types.Type;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
-import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -385,7 +384,6 @@ public final class GuardThresholds {
         Map<ValueName.Helper, Boolean> runsOnce = new HashMap<>();
         // What is shown of a run stopping on its way to each rule, said once every rule is read:
         // which rules a construction is said under is asked of all of them.
-        List<StopsAtARule> stopsAtTheRules = new ArrayList<>();
         for (ComparisonReadings.Reading each : comparisons.comparisons()) {
             // Which comparison of the model this is. Total over what this walk reads, and read off
             // what makes the tree rather than off what the models here happen to hold: the table
@@ -486,33 +484,6 @@ public final class GuardThresholds {
                                                             .apply(each.stopsWhere().get())),
                                             read)
                                     : List.of();
-                            List<AStopShown> shown = StopAssessment.stopsShown(judged, read);
-                            // And the values at which every run getting to it stops in what it
-                            // works out.
-                            List<SearchRegion> before = regionsOf(toItself.toIt());
-                            List<EveryRunStops> stops = !stopsAsked ? List.<EveryRunStops>of()
-                                    : everyRunStops(arrived, each.worksOutOnEach(),
-                                            each.stopsIn(), read,
-                                            before, each.statedAsACondition().isPresent(),
-                                            decides -> regionsOf(toItself.toACase()
-                                                    .apply(decides)),
-                                            each.places());
-                            // And whether a run that gets to it works out something of which
-                            // neither is shown, beside a stop shown in something else.
-                            List<AStopNotShown> stopsNotShown =
-                                    StopAssessment.stopsNotShown(judged);
-                            // And the region of the input that keeps every run getting to it from
-                            // taking a number past its type in what it works out, wherever it
-                            // works it out.
-                            Optional<WhatKeepsEveryRunGoing> keeping = !stopsAsked
-                                    ? Optional.empty()
-                                    : UndividedByARelation.boundsThatKeepEveryRunGoing(
-                                            each.whatARunWorksOut().stream()
-                                                    .map(ComparisonReadings.Reading
-                                                            .WorkedOutAt::stops)
-                                                    .toList(), read)
-                                            .map(region -> theRegion(each, places, region,
-                                                    read));
                             // And, apart from that, whether what a run works out to get past it
                             // is read far enough to say where a line of it lies: a stop no
                             // operation tells, one told where no row is asked to stop in it, or
@@ -523,27 +494,13 @@ public final class GuardThresholds {
                                     && !(arrived instanceof ComparisonAssessment.AnswersNowhere)
                                     && (somethingWorkedOutIsNotAllTold(each, toItsValue, read)
                                             || StopAssessment.mayDivideByNought(judged));
-                            // And what is shown of a run on the way stopping at each construction
-                            // it may work out first. Asked where a row takes the way, and not
-                            // where one arrives: what arrives is what got past every construction
-                            // on the way, and a run a construction stops takes the way and does
-                            // not arrive. Each construction is asked whether a run gets to it on
-                            // its own way ({@link ConstructionStopAssessment}).
-                            List<ConstructionStopAssessment.Judgement> made =
-                                    toItself.toIt().leavesARow()
-                                            ? ConstructionStopAssessment.of(each, before, read)
-                                            : List.of();
                             reached(cuts, stated, each, readingsOf(arrived), aCase, aPart);
-                            RuleCitation.Written rule = lineAt(behavior, stated, at,
-                                    each.occurrence().origin(), each.at(),
+                            lineAt(behavior, stated, at, each.occurrence().origin(), each.at(),
                                     whereMet(each, helper -> runsOnce.computeIfAbsent(helper,
                                             called -> plan.runsOnce(called, emitted))),
                                     reaches, arrived, each.readOn(), stopsNotFullyRead, found,
                                     between, throughADerivedValue, partnered, withoutALine,
                                     readOn);
-                            stopsAtTheRules.add(new StopsAtARule(rule,
-                                    ModelOccurrences.of(stated), shown, made,
-                                    placesRead(arrived), stopsNotShown, stops, keeping));
                         }
                         // Not a rule with no line here: its outcome is about no row, whichever of
                         // the reasons refused it ({@link NotABoundary}), so there is nothing for a
@@ -554,7 +511,7 @@ public final class GuardThresholds {
                 }
             }
         }
-        stopsSaid(stopsAtTheRules, read, withoutALine);
+        stepsSaid(comparisons.stops().judged(), read, withoutALine);
         // And every truth and comparison a fork's condition asks, under the construct of the model
         // that answers it, which is the construct a run is seen coming out of. A truth asked of a
         // name the body was handed is answered by no construct, and no run is seen at it.
@@ -1255,104 +1212,34 @@ public final class GuardThresholds {
     }
 
     /**
-     * What is shown of a run stopping on its way to one rule, said once every rule of the body is
-     * read ({@link #stopsSaid}).
-     *
-     * @param rule          the rule, as a report cites it
-     * @param readAt        the copy of the model's code it was read at
-     * @param shown         each operation a run getting to it is shown to stop in
-     * @param constructions what is shown of each construction a run on the way to it may work out
-     *                      first ({@link ConstructionStopAssessment}); none where no row takes the
-     *                      way there
-     * @param reads         the places the comparison reads, or empty where they cannot be named
-     * @param notShown      each operation of which neither is shown
-     * @param everyRunStops the values at which every run getting to it stops, where known
-     * @param keeping       the region of the input that keeps every run getting to it from taking
-     *                      a number past its type there, said of every finding of a stop it makes
+     * What is shown of a run stopping at each step of the body ({@link StopsOfABody}), into
+     * {@code withoutALine}, each at the step where it is written: that some run stops there, with
+     * the values at which every run getting there stops where those are known; and, apart from
+     * that, that whether a run stops there is not resolved, with those values where no run is
+     * shown to stop — they are proved all the same, and that alone leaves nothing unresolved.
      */
-    private record StopsAtARule(RuleCitation.Written rule, ModelOccurrences readAt,
-                                List<AStopShown> shown,
-                                List<ConstructionStopAssessment.Judgement> constructions,
-                                Optional<Set<TermPath>> reads, List<AStopNotShown> notShown,
-                                List<EveryRunStops> everyRunStops,
-                                Optional<WhatKeepsEveryRunGoing> keeping) {
-
-        /** Whether what is said of {@code judged} bears on what this rule reads. */
-        boolean bearsOn(ConstructionStopAssessment.Judgement judged) {
-            WhatAConstructionAsks.Bearing bearing = ConstructionStopAssessment.bearingOf(judged);
-            return bearing != null && reads.map(bearing::bearsOn).orElse(true);
-        }
-    }
-
-    /**
-     * Where some run on the way to each of {@code rules} is shown to stop, and where whether one
-     * does is not resolved, into {@code withoutALine}, in the order the rules were read.
-     *
-     * <p>A construction is said under the rules whose comparison reads a place of a number it asks
-     * of ({@link WhatAConstructionAsks.Bearing}): it asks the same of every run, and said under
-     * every rule a run gets to past it, it is said as many times as there are rules. Where none of
-     * the rules it is on the way to that read one says anything of it — none reads one, or under
-     * each the way holds what it asks — it is said under every rule it is on the way to, so that a
-     * stop at it on the way to another is never said nowhere. And where what the comparison reads
-     * cannot be named, under that rule.
-     */
-    private static void stopsSaid(List<StopsAtARule> rules, InputReading read,
+    private static void stepsSaid(List<StopsOfABody.AtAStep> steps, InputReading read,
                                   RulesWithNoLine.Gathered withoutALine) {
-        Set<Core> borne = Collections.newSetFromMap(new IdentityHashMap<>());
-        for (StopsAtARule rule : rules) {
-            for (ConstructionStopAssessment.Judgement judged : rule.constructions()) {
-                if (rule.bearsOn(judged)) {
-                    borne.add(judged.made());
-                }
-            }
-        }
-        for (StopsAtARule rule : rules) {
-            List<ConstructionStopAssessment.Judgement> said = rule.constructions().stream()
-                    .filter(judged -> rule.bearsOn(judged)
-                            || (ConstructionStopAssessment.bearingOf(judged) != null
-                                    && !borne.contains(judged.made())))
-                    .toList();
+        for (StopsOfABody.AtAStep each : steps) {
+            List<ConstructionStopAssessment.Judgement> made =
+                    each.construction().stream().toList();
+            List<AStopShown> shown = StopAssessment.stopsShown(each.operations(), read);
             List<AConstructionStopShown> constructionsShown =
-                    ConstructionStopAssessment.stopsShown(said, read);
-            List<AConstructionStopNotShown> constructionsNotShown =
-                    ConstructionStopAssessment.notShown(said);
-            // Where some run getting to it is shown to stop in it, or some run on the way to it at
-            // a construction, with the values at which every run there stops where those are
-            // known: those say where a run stops if one gets there, and not that one does.
-            boolean aStopIsShown = !rule.shown().isEmpty() || !constructionsShown.isEmpty();
+                    ConstructionStopAssessment.stopsShown(made, read);
+            boolean aStopIsShown = !shown.isEmpty() || !constructionsShown.isEmpty();
             if (aStopIsShown) {
-                withoutALine.mayStopARun(rule.rule(), rule.readAt(), rule.shown(),
-                        constructionsShown, rule.everyRunStops(), rule.keeping());
+                withoutALine.stopped(new StepWhereARunMayStop(each.step().pos(), shown,
+                        constructionsShown, each.everyRunStops(), each.keeping()));
             }
-            // And, apart from that, where whether a run stops is not resolved: something it
-            // works out of which neither is shown, or a construction on the way of which neither
-            // is. Of the rule, whatever places it is filed at, and with the values every run there
-            // stops at where no run is shown to: those are proved all the same, and that alone
-            // leaves nothing unresolved.
-            if (!rule.notShown().isEmpty() || !constructionsNotShown.isEmpty()) {
-                withoutALine.stopNotShown(rule.rule(), rule.readAt(), rule.notShown(),
-                        constructionsNotShown, aStopIsShown ? List.of() : rule.everyRunStops(),
-                        rule.keeping());
+            List<AStopNotShown> notShown = StopAssessment.stopsNotShown(each.operations());
+            List<AConstructionStopNotShown> constructionsNotShown =
+                    ConstructionStopAssessment.notShown(made);
+            if (!notShown.isEmpty() || !constructionsNotShown.isEmpty()) {
+                withoutALine.stopped(new StepWhereAStopIsNotShown(each.step().pos(), notShown,
+                        constructionsNotShown, aStopIsShown ? List.of() : each.everyRunStops(),
+                        each.keeping()));
             }
         }
-    }
-
-    /** The places the relations of the comparison read, or empty where it reads no relation, or
-     *  some of them read places that cannot be named. */
-    private static Optional<Set<TermPath>> placesRead(ComparisonAssessment arrived) {
-        List<UndividedByARelation> relations = arrived.relationsRead();
-        if (relations.isEmpty()) {
-            return Optional.empty();
-        }
-        Set<TermPath> reads = new LinkedHashSet<>();
-        for (UndividedByARelation relation : relations) {
-            Optional<Set<TermPath>> places = relation.placesRead();
-            if (places.isEmpty()) {
-                return Optional.empty();
-            }
-            reads.addAll(places.get());
-        }
-        return Optional.of(reads);
     }
 
     /**

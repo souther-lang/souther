@@ -1,7 +1,7 @@
 package souther.compiler.inputs;
 
 import souther.compiler.check.RuleCitation;
-import souther.compiler.check.RuleRef;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.meaning.CaseExpansion;
 import souther.compiler.types.ModelOccurrences;
 import souther.compiler.values.ValuesWithin;
@@ -37,10 +37,10 @@ import java.util.Optional;
  *                     asked of the reasons rather than read off this
  * @param unclassified the rules nothing worked out the questions of, each holding the measures it
  *                     leaves open
- * @param stopping     what is shown of a run stopping at each rule: that one does, or that whether
- *                     one does is not resolved, each rule once for each. Said beside the rules that
- *                     came to no line because it is what the same readers find of a rule, and
- *                     apart from them because it says nothing of whether the rule draws a line
+ * @param stopping     what is shown of a run stopping at each step of the body: that one does, or
+ *                     that whether one does is not resolved, each step once for each. Gathered by
+ *                     the same readers, and apart from the rules because a step is no rule and
+ *                     says nothing of whether a rule draws a line
  */
 public record RulesWithNoLine(List<RuleWithoutALine> reported,
                               List<StandingQuestion.Unclassified> unclassified,
@@ -208,34 +208,9 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
             costly.merge(one.key(), one, CasesAtARule::mergedWith);
         }
 
-        /** A rule some run on its way is shown to stop in, as {@code shown} and
-         *  {@code constructions} show it, with the values at which every run getting to the rule
-         *  stops, and the region of the input that keeps every run from stopping in it
-         *  ({@link RuleWhereARunMayStop}). */
-        public void mayStopARun(RuleCitation cited, ModelOccurrences readAt,
-                                List<AStopShown> shown,
-                                List<AConstructionStopShown> constructions,
-                                List<EveryRunStops> everyRunStops,
-                                Optional<WhatKeepsEveryRunGoing> keeping) {
-            stopped(RuleWhereARunMayStop.of(cited, readAt, shown, constructions, everyRunStops,
-                    keeping));
-        }
-
-        /** A rule where whether a run stops is not resolved, why, each construction on the way to
-         *  it of which neither is shown and why, and the values at which every run getting there
-         *  stops ({@link RuleWhereAStopIsNotShown}). */
-        public void stopNotShown(RuleCitation cited, ModelOccurrences readAt,
-                                 List<AStopNotShown> notShown,
-                                 List<AConstructionStopNotShown> asks,
-                                 List<EveryRunStops> everyRunStops,
-                                 Optional<WhatKeepsEveryRunGoing> keeping) {
-            stopped(RuleWhereAStopIsNotShown.of(cited, readAt, notShown, asks, everyRunStops,
-                    keeping));
-        }
-
-        /** One a reader already made, folded with what is said of the same rule alike. */
+        /** One a reader already made, folded with what is said of the same step alike. */
         public void stopped(WhatIsShownOfAStop one) {
-            stopping.merge(List.of(one.getClass(), one.rule()), one,
+            stopping.merge(List.of(one.getClass(), one.at()), one,
                     WhatIsShownOfAStop::mergedWith);
         }
 
@@ -347,17 +322,17 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
             other.costly().forEach(this::costly);
         }
 
-        /** What this gathering came to, which is what a reader hands on. Each rule's findings of a
+        /** What this gathering came to, which is what a reader hands on. Each step's findings of a
          *  stop carry one region that keeps its runs going, the region every reading of it says
          *  together, whichever of the findings each reading made. Whether it is said is asked
          *  where a report says it ({@link WhatKeepsEveryRunGoing#said}), and not here: what is
          *  gathered here may be put together with more, a reading of which may be what shows it. */
         public RulesWithNoLine found() {
-            Map<RuleRef, Optional<WhatKeepsEveryRunGoing>> kept = new LinkedHashMap<>();
-            stopping.values().forEach(one -> kept.merge(one.rule(), one.keeping(),
+            Map<SourcePos, Optional<WhatKeepsEveryRunGoing>> kept = new LinkedHashMap<>();
+            stopping.values().forEach(one -> kept.merge(one.at(), one.keeping(),
                     WhatKeepsEveryRunGoing::together));
             List<WhatIsShownOfAStop> stops = stopping.values().stream()
-                    .map(one -> one.keptBy(kept.get(one.rule()))).toList();
+                    .map(one -> one.keptBy(kept.get(one.at()))).toList();
             return new RulesWithNoLine(List.copyOf(reported.values()),
                     List.copyOf(unclassified.values()), stops,
                     List.copyOf(expanded.values()), List.copyOf(costly.values()));
