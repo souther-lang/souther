@@ -3145,17 +3145,23 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          * works out, as operations kept for where a run stops: a row is not shown to get past
          * them, and a stop is left untold only where something that may end a run is left that
          * nothing tells ({@link WorkedOutToReachIt#endsNoRunUntoldWhereItWasPassedOver}).
+         *
+         * <p>Asked where no value on the way is taken as another ({@link InputReads#untaken}):
+         * whether working {@code skipped} out may end a run is one question for every arm of the
+         * choices a reading was split by, and asked on each arm it is asked as many times as the
+         * arms multiply, a walk that shares nothing with the walk of the arm beside it.
          */
         void passedOver(WorkedOutToReachIt reached, Denotation skipped,
                         Predicate<Denotation> tells) {
-            Optional<Denotation> stop = reached.whereARunMayEndWhereItWasPassedOver(skipped);
+            Denotation asked = new Denotation(skipped.value(), skipped.at().untaken());
+            Optional<Denotation> stop = reached.whereARunMayEndWhereItWasPassedOver(asked);
             if (stop.isEmpty()) {
                 return;
             }
             leavingSomethingUntold();
             Optional<Denotation> untoldStop = tells == null ? stop
                     : reached.besideWhatIsTold(value -> toldAt(value.value()))
-                            .whereAStopIsLeftUntoldWhereItWasPassedOver(skipped, tells);
+                            .whereAStopIsLeftUntoldWhereItWasPassedOver(asked, tells);
             if (untoldStop.isPresent()) {
                 aStopUntoldAt(untoldStop.get().value());
             }

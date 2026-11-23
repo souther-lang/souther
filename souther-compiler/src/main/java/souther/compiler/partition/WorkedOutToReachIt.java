@@ -454,8 +454,10 @@ final class WorkedOutToReachIt {
                 return known;
             }
             SearchRegion narrowed = region;
+            // What entering the arm states is the arm's own condition, whichever arm of an earlier
+            // choice the reading that reached it was on: asked untaken, it is one reading of it.
             Proposition stated = WhatConditionsState.of(read)
-                    .arm(arm.fork(), arm.part(), arm.at()).proposition();
+                    .arm(arm.fork(), arm.part(), arm.at().untaken()).proposition();
             if (DemandReading.placedInTheRegion(stated, read)) {
                 for (TakenConstraint taken : DemandReading.regionAnswered(stated, read)
                         .narrowing()) {
