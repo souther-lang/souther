@@ -863,10 +863,10 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "(" + core + "Ljava/util/Set;Ljava/util/Set;)V", Reading.STRUCTURE,
                 "records each node under one held at two places, going down to its parts: a"
                         + " projection is held where its base is");
-        row(out, c + "partition/StopAssessment", "everythingBeforeIsAccountedFor",
+        row(out, c + "partition/StopAssessment", "leftUnaccountedBefore",
                 "(L" + c + "partition/ComparisonReadings$Reading;L" + c
                         + "partition/UndividedByARelation$Working;L" + c
-                        + "core/Evaluated$WorkedOutAfter;Z)Z",
+                        + "core/Evaluated$WorkedOutAfter;Z)Ljava/util/Optional;",
                 Reading.STRUCTURE, EVALUATION);
         row(out, c + "core/Evaluated$WorkedOutAfter", "entirely", "(" + core + ")Z",
                 Reading.STRUCTURE,

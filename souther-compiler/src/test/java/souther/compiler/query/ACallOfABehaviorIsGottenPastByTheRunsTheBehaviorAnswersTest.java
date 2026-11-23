@@ -433,6 +433,24 @@ class ACallOfABehaviorIsGottenPastByTheRunsTheBehaviorAnswersTest {
                 || report.contains("a run may stop at the call of second at "), report);
     }
 
+    /** An operation another part of the comparison may stop a run before is told with the part
+     *  its being unresolved turned on: here the call worked out before it. */
+    @Test
+    void anOperationLeftOpenByAPartBeforeItNamesThatPart() {
+        Compilation compilation = readByItsRules("""
+                data Out = Low | High
+                behavior first : (n: Int) -> Int
+                let first (n) = Int.floorMod(100, n)
+                behavior both : (a: Int, n: Int) -> Out
+                let both (a, n) = if first(a) + (n + 1) >= 5 then Low else High
+                """);
+        List<String> open = notResolved(reportOf(compilation, "both"));
+
+        assertTrue(open.stream().anyMatch(line -> line.contains("another part of the comparison"
+                + " may end the run first, and whether it does is not checked; a run may stop at"
+                + " the call of first at ")), open::toString);
+    }
+
     /** What a passage is left open at is said of the behavior's own body: an operation in it, or
      *  that it has none. */
     @Test

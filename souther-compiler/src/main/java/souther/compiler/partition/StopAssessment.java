@@ -7,6 +7,7 @@ import souther.compiler.check.StopOrigin;
 import souther.compiler.check.WhatARunMayEndFor;
 import souther.compiler.core.Core;
 import souther.compiler.core.Evaluated;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.AStopNotShown;
 import souther.compiler.inputs.AStopShown;
 import souther.compiler.inputs.InputFact;
@@ -24,6 +25,7 @@ import souther.compiler.numeric.Rel;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
@@ -417,14 +419,19 @@ final class StopAssessment {
      * says nothing is left untold ({@code workingAccountsForTheRest}), where it is of a kind the
      * working reads itself: not a call of a declaration, whose body is no part of the comparison
      * and so of no working, and whose owner says nothing of what it ends a run for.
+     *
+     * <p>Answered with what is not accounted for, so that what is told of a stop not resolved is
+     * what the answer turned on: none where everything is accounted for, and otherwise the node
+     * written first of those that are not ({@link SourcePos#IN_A_STEADY_ORDER}), or no node where
+     * the statement is no comparison whose nodes are asked.
      */
-    private static boolean everythingBeforeIsAccountedFor(ComparisonReadings.Reading each,
-                                                          UndividedByARelation.Working working,
-                                                          Evaluated.WorkedOutAfter after,
-                                                          boolean workingAccountsForTheRest) {
+    private static Optional<LeftBefore> leftUnaccountedBefore(ComparisonReadings.Reading each,
+                                                              UndividedByARelation.Working working,
+                                                              Evaluated.WorkedOutAfter after,
+                                                              boolean workingAccountsForTheRest) {
         if (!(each.statement() instanceof ComparisonReadings.Stated.AComparison(
                 var comparison))) {
-            return false;
+            return Optional.of(new LeftBefore(Optional.empty()));
         }
         Set<Core> told = Collections.newSetFromMap(new IdentityHashMap<>());
         working.operations().forEach(operation -> {
@@ -434,18 +441,23 @@ final class StopAssessment {
         });
         Set<Core> asked = Collections.newSetFromMap(new IdentityHashMap<>());
         each.quotients().forEach(quotient -> asked.add(Core.withoutStanding(quotient)));
-        boolean[] every = {true};
+        List<Core> left = new ArrayList<>();
         Consumer<Core> check = node -> {
             Core bare = Core.withoutStanding(node);
             if (!after.contains(node) && !accountedFor(bare, told, asked,
                     workingAccountsForTheRest)) {
-                every[0] = false;
+                left.add(bare);
             }
         };
         Core.forEachDistinctNode(comparison.left(), check);
         Core.forEachDistinctNode(comparison.right(), check);
-        return every[0];
+        return left.isEmpty() ? Optional.empty() : Optional.of(new LeftBefore(left.stream()
+                .min(Comparator.comparing(Core::pos, SourcePos.IN_A_STEADY_ORDER))));
     }
+
+    /** That something a run works out before a step is not accounted for, and the node written
+     *  first of what is not, where the statement's nodes are asked. */
+    private record LeftBefore(Optional<Core> node) {}
 
     private static boolean accountedFor(Core node, Set<Core> told, Set<Core> asked,
                                         boolean workingAccountsForTheRest) {
@@ -598,9 +610,12 @@ final class StopAssessment {
         boolean workingAccountsForTheRest = !working.leavesUntoldBeyond(each.quotients())
                 && (!(site instanceof Site.PastItsEnds) || working.onEveryRun());
         Evaluated.WorkedOutAfter after = workedOutAfter(each, siteNode);
-        if (!everythingBeforeIsAccountedFor(each, working, after, workingAccountsForTheRest)) {
+        Optional<LeftBefore> leftBefore = leftUnaccountedBefore(each, working, after,
+                workingAccountsForTheRest);
+        if (leftBefore.isPresent()) {
+            BehaviorAnswers answers = read.rules().declarations().answers();
             return new Judgement.Unresolved(site, WhyAStopIsNotShown.NOT_EVERY_OPERATION_TOLD,
-                    untoldIn(working, each, read));
+                    leftBefore.get().node().map(node -> StopOrigin.of(node, answers)));
         }
         Optional<UndividedByARelation.Working> earlier = each.workedOutBeforeIt();
         if (earlier.isEmpty()) {
