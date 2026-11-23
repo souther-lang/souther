@@ -158,7 +158,7 @@ final class NotAccountedFor {
             sum += System.identityHashCode(each);
         }
         for (Core each : untoldAt) {
-            sum += 31 * System.identityHashCode(each);
+            sum += System.identityHashCode(each);
         }
         return sum;
     }
