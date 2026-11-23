@@ -486,10 +486,10 @@ Reports how well the `example` rows cover the model — which partitions, bounda
 no row reaches. `--generate` prints commented rows for what nothing covers, the points of a border
 among them, and `--strict` exits non-zero on a gap the report names.
 
-A behavior is left unmeasured where this compiler has something to say about how it is written, and
-measuring it as written would stop at a figure of the compiler's own: what is past the figure would
-not be measured however long the run went on. The report says the figure and what to declare as a
-behavior, and every other behavior is measured. `--strict` exits non-zero on one left so, since
+A behavior is left unmeasured where measuring it as written stops at a figure of the compiler's own
+in a condition this compiler can say how to change: what is past the figure would not be measured
+however long the run went on. The report says the figure and what to declare as a behavior, and
+every other behavior is measured. `--strict` exits non-zero on one left so, since
 nobody looked at what its rows cover. `--to-the-end` measures it as it is written.
 
 `--generate` also offers rows that try the inputs of the rows of called behaviors in their callers.

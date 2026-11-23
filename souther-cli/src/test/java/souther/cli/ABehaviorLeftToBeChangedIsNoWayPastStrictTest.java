@@ -14,23 +14,21 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * measuring it stops at a figure, which is no failure of its own; {@code --strict} refuses it and
  * changes nothing the run writes but that.
  *
- * <p>The model is two arms through six choices one after another, each over an input of its own,
- * which is the fewest whose readings a condition's author is told of at the figures declared.
+ * <p>The model is one condition over what ten choices answer, which is the fewest of two arms each
+ * whose readings are past the figure of one condition's.
  */
 class ABehaviorLeftToBeChangedIsNoWayPastStrictTest {
 
     static final String MODEL = """
             module left
 
-            behavior paid : (n0: Int, h0: Int, h1: Int, h2: Int, h3: Int, h4: Int, h5: Int) -> Bool
-            let paid (n0, h0, h1, h2, h3, h4, h5) = {
-                let n1 = (if n0 < h0 then n0 else h0) + 1
-                let n2 = (if n1 < h1 then n1 else h1) + 1
-                let n3 = (if n2 < h2 then n2 else h2) + 1
-                let n4 = (if n3 < h3 then n3 else h3) + 1
-                let n5 = (if n4 < h4 then n4 else h4) + 1
-                let n6 = (if n5 < h5 then n5 else h5) + 1
-                n6 == 0
+            behavior paid : (f0: Bool, f1: Bool, f2: Bool, f3: Bool, f4: Bool, f5: Bool, f6: Bool,
+                f7: Bool, f8: Bool, f9: Bool) -> Bool
+            let paid (f0, f1, f2, f3, f4, f5, f6, f7, f8, f9) = {
+                let one = (if f0 then 1 else 2) + (if f1 then 1 else 2) + (if f2 then 1 else 2)
+                let two = (if f3 then 1 else 2) + (if f4 then 1 else 2) + (if f5 then 1 else 2)
+                let three = (if f6 then 1 else 2) + (if f7 then 1 else 2) + (if f8 then 1 else 2)
+                one + two + three + (if f9 then 1 else 2) == 12
             }
             """;
 

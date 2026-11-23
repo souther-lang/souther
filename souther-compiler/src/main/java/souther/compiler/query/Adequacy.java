@@ -199,6 +199,7 @@ import souther.compiler.partition.StatementsOfAnInput;
 import souther.compiler.partition.TakenConstraint;
 import souther.compiler.partition.WhereARunStopped;
 import souther.compiler.partition.WayToTheBorder;
+import souther.compiler.partition.WhatStopsMeasuring;
 import souther.compiler.reading.CoverageRead;
 import souther.compiler.reading.PathAccess;
 import souther.compiler.reading.WayIn;
@@ -462,7 +463,7 @@ public final class Adequacy {
 
     /**
      * Whether the run leaves a behavior unmeasured where its author is told what to change and
-     * measuring it as written runs into a figure ({@link ToBeChangedFirst}). Absent is that it
+     * measuring it as written stops at a figure ({@link ToBeChangedFirst}). Absent is that it
      * measures every behavior it chooses.
      */
     public record LeavingWhatIsToBeChanged() implements Input<Boolean> {}
@@ -1581,8 +1582,10 @@ public final class Adequacy {
                     db.ask(new Front.Reading()).value(), db.readings(), Front.dayOf(db));
             for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
                 // Left out of the answer where this build reads none of its body, as one it cannot
-                // read is: nothing reads what is answered of it.
-                if (!readsTheBodyOf(db, name, behavior.name())) {
+                // read is: nothing reads what is answered of it. One left for its author to change
+                // on where its lines decide is not left out: that is asked of what arrives.
+                if (!chosen(db, name, behavior.name())
+                        || conditionsReadToAStop(db, name, behavior.name()).isPresent()) {
                     continue;
                 }
                 // A composition has no body of its own and so no places of its own, and a behavior
@@ -1599,7 +1602,7 @@ public final class Adequacy {
                 }
                 // Read per behavior, and the two absences told apart where they are classified.
                 // A body this image has none of is not a behavior the model gives none.
-                BodyReading.Read both = bodyReading(db, name, checked.value(), spec.name())
+                BodyReading.Read both = bodyHeld(db, name, checked.value(), spec.name())
                         instanceof BodyReading.Read it ? it : null;
                 Hir.FnDef fn = db.ask(new Bodies.SettledFn(name, spec.name())).value();
                 if (both == null || fn == null) {
@@ -3043,7 +3046,15 @@ public final class Adequacy {
 
         @Override
         public Answer<BodyDivided> compute(Db db) {
-            return over(db, name, behavior, null);
+            // A body some change is told for was divided to say whether it is left for the change,
+            // and that division is the one there is.
+            if (ToBeChangedFirst.told(db, name, behavior).isEmpty()
+                    || conditionsReadToAStop(db, name, behavior).isPresent()) {
+                return over(db, name, behavior, null);
+            }
+            Answer<DividedToAStop.Came> came = db.ask(new DividedToAStop(name, behavior));
+            return came.present() && came.value() instanceof DividedToAStop.ToTheEnd(var divided)
+                    ? Answer.of(divided) : over(db, name, behavior, null);
         }
 
         /**
@@ -3053,10 +3064,16 @@ public final class Adequacy {
         static Answer<BodyDivided> over(Db db, String name, String behavior,
                                         InputDomain builtAgainst) {
             ToDivide divided = toDivide(db, name, behavior, builtAgainst);
-            if (divided == null) {
-                return Answer.absent();
-            }
-            Coverages.Partitioned read = Coverages.partitioningOf(divided.spec(), divided.read(),
+            return divided == null ? Answer.absent()
+                    : Answer.of(divided(db, name, divided, WhatStopsMeasuring.nowhere())
+                            .orElseThrow());
+        }
+
+        /** {@code divided}, divided, or empty where {@code stops} says the measuring of its body
+         *  ended. */
+        static Optional<BodyDivided> divided(Db db, String name, ToDivide divided,
+                                             WhatStopsMeasuring stops) {
+            return Coverages.partitioningOf(divided.spec(), divided.read(),
                     divided.body(), divided.plan(),
                     atTheLinesOf(db.ask(new ArrivedAtLines(name)).value(), divided.spec()),
                     statedOf(db.ask(new Bodies.StatedContracts(name)).value(), divided.spec()),
@@ -3065,9 +3082,87 @@ public final class Adequacy {
                     // the two came to would be bought by nobody.
                     db.ask(new Front.Adequacy()).value().measures()
                             .allowanceForBehaviorDistinctions(),
-                    divided.witnesses());
-            return Answer.of(new BodyDivided(read.geometry(), read.conditionsMet(),
-                    read.rulesReachedAt()));
+                    divided.witnesses(), stops).map(read -> new BodyDivided(read.geometry(),
+                            read.conditionsMet(), read.rulesReachedAt()));
+        }
+    }
+
+    /**
+     * The figure the first of one behavior's conditions told to be read through too many choices
+     * was read no further at, where one was ({@link WhatStopsMeasuring}).
+     *
+     * <p>Asked of the conditions and of nothing on the way to them, so before a division asks what
+     * arrives where ({@link PathReached}): a body whose conditions are read no further is one whose
+     * ways are not read either.
+     */
+    public record ConditionsReadToAStop(String name, String behavior)
+            implements Key<Optional<Figure>> {
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Optional<Figure>> compute(Db db) {
+            Set<ModelOccurrence> told =
+                    ToBeChangedFirst.throughTooManyChoices(db, name, behavior);
+            ToDivide divided = told.isEmpty() ? null : toDivideAsHeld(db, name, behavior);
+            if (divided == null || !(divided.body() instanceof BodyReading.Read it)
+                    || it.analysis() == null) {
+                return Answer.of(Optional.empty());
+            }
+            WhatStopsMeasuring stops = WhatStopsMeasuring.atTheFirstOf(told);
+            GuardThresholds.conditionsRead(behavior, it.analysis(), divided.read(),
+                    ElementBindings.of(it.analysis(), divided.read().rules().newtypes()), stops);
+            return Answer.of(stops.figure());
+        }
+    }
+
+    /** What {@link ConditionsReadToAStop} answers, none where it does not. */
+    static Optional<Figure> conditionsReadToAStop(Db db, String module, String behavior) {
+        Optional<Figure> figure = db.ask(new ConditionsReadToAStop(module, behavior)).value();
+        return figure == null ? Optional.empty() : figure;
+    }
+
+    /**
+     * One behavior's body divided up to the first construct some change is told of that where its
+     * lines decide is not worked out in, at a figure, or to its end where there is none
+     * ({@link WhatStopsMeasuring}).
+     *
+     * <p>The division {@link Dividing} answers with and not one made beside it, so a body is
+     * divided once whether or not it is left, and what it is left on is what dividing it came to.
+     * Of the body whether or not it is left for its author to change, since that is what it decides
+     * ({@link ToBeChangedFirst}); and of nothing that turns on it, which is why what arrives where
+     * is asked of every body whose conditions are read ({@link PathReached}).
+     */
+    record DividedToAStop(String name, String behavior) implements Key<DividedToAStop.Came> {
+
+        /** What dividing the body came to. */
+        sealed interface Came {}
+
+        /** It ended at {@code figure}. */
+        record AtAFigure(Figure figure) implements Came {}
+
+        /** It was divided to its end. */
+        record ToTheEnd(BodyDivided divided) implements Came {}
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Came> compute(Db db) {
+            ToDivide divided = toDivideAsHeld(db, name, behavior);
+            if (divided == null) {
+                return Answer.absent();
+            }
+            WhatStopsMeasuring stops = WhatStopsMeasuring.atTheFirstOf(
+                    ToBeChangedFirst.told(db, name, behavior));
+            Optional<BodyDivided> made = Dividing.divided(db, name, divided, stops);
+            return Answer.of(stops.figure().<Came>map(AtAFigure::new)
+                    .orElseGet(() -> new ToTheEnd(made.orElseThrow())));
         }
     }
 
@@ -5290,31 +5385,6 @@ public final class Adequacy {
             return divided == null ? Answer.absent()
                     : Answer.of(Coverages.comparisonsRead(divided.spec(), divided.read(),
                             divided.body(), divided.plan(), divided.witnesses()));
-        }
-    }
-
-    /**
-     * The figure measuring one behavior runs into, as reading its body shows before any line of it
-     * is asked where it decides or searched ({@link GuardThresholds#whatStopsMeasuring}).
-     *
-     * <p>Beside {@link ComparisonsRead} and dearer: what a comparison states is read for it, which
-     * that one does without. Asked of the body whether or not it is left for its author to change,
-     * since that is what it decides ({@link ToBeChangedFirst}).
-     */
-    public record WhatStopsMeasuring(String name, String behavior)
-            implements Key<Optional<Figure>> {
-
-        @Override
-        public String module() {
-            return name;
-        }
-
-        @Override
-        public Answer<Optional<Figure>> compute(Db db) {
-            ToDivide divided = toDivideAsHeld(db, name, behavior);
-            return divided == null ? Answer.absent()
-                    : Answer.of(Coverages.whatStopsMeasuring(divided.spec(), divided.read(),
-                            divided.body()));
         }
     }
 

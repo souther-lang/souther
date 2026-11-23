@@ -22,17 +22,18 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A behavior is left unmeasured for its author to change where a change is told and measuring it as
- * written runs into a figure, and measured where either is missing ({@link ToBeChangedFirst}).
+ * A behavior is left unmeasured for its author to change where measuring it stops at a figure in a
+ * construct a change is told of, and measured otherwise ({@link ToBeChangedFirst}).
  *
- * <p>What measuring costs is what the choices multiply to on the way down and not how many
- * applications or choices are written: each half is held by two models told alike, one of which
- * multiplies. A helper comparing a number, applied to two of them, draws a line decided in more
- * cases than one; the same over the cases of a sum draws none. A chain of choices over the inputs
- * is read once for every way through it; the same chain of choices each coming out one way is not.
+ * <p>What it is left on is what measuring comes to: at each figure the same behavior is left or
+ * not as a run that measures it to the end reports it stopped there or not. What the choices
+ * multiply to is told of how they are written, and ways no value meets are none of what is asked.
  *
- * <p>Asked of the questions and not of a measurement: none is made but by the one test of the
- * report, of a behavior left.
+ * <p>And the stop is at what the change is told of. A stop elsewhere in the body is one the change
+ * leaves, so the behavior is measured.
+ *
+ * <p>Asked of the questions and not of a measurement: none is made but to say what a run to the
+ * end reports, and by the one test of the report, of a behavior left.
  */
 class ABehaviorIsLeftToBeChangedWhereAChangeIsToldAndMeasuringIsDearTest {
 
@@ -42,7 +43,7 @@ class ABehaviorIsLeftToBeChangedWhereAChangeIsToldAndMeasuringIsDearTest {
     private static final CompositionBudget READINGS =
             CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION;
 
-    private static final Allowances ONE_QUESTION = Allowances.DECLARED.with(QUESTIONS, 1);
+    private static final Allowances ONE_QUESTION = questions(1);
 
     /** The readings of a condition held to a figure a chain of three choices runs into. */
     private static final Allowances FEW_READINGS = Allowances.DECLARED
@@ -69,6 +70,17 @@ class ABehaviorIsLeftToBeChangedWhereAChangeIsToldAndMeasuringIsDearTest {
             let asked (wanted) = List.any(room -> fits(wanted, room), [ Kitchen, Study ])
             """;
 
+    /** Whether both numbers are above some threshold: the ways a number is above one and not above
+     *  a lower one are counted among the cases, and no number meets them. */
+    private static final String THRESHOLDS = """
+            module m
+
+            let above (t: Int, x: Int, y: Int): Bool = x > t && y > t
+
+            behavior asked : (x: Int, y: Int) -> Bool
+            let asked (x, y) = List.any(t -> above(t, x, y), [ 1, 2, 3 ])
+            """;
+
     /** A chain of choices, each {@code chosen} of the last and an input of its own. */
     private static String chain(String chosen) {
         return """
@@ -86,9 +98,10 @@ class ABehaviorIsLeftToBeChangedWhereAChangeIsToldAndMeasuringIsDearTest {
                 """.formatted(chosen);
     }
 
-    private static Compilation compiled(String model, Allowances allowances) {
-        return ACompiledModel.compiles(
-                Compilation.ofSource(model, "Main").allowing(allowances));
+    private static final String CHOICES_THAT_MULTIPLY = chain("if a < b then a else b");
+
+    private static Allowances questions(int figure) {
+        return Allowances.DECLARED.with(QUESTIONS, figure);
     }
 
     private static Compilation leaving(String model, Allowances allowances) {
@@ -100,6 +113,17 @@ class ABehaviorIsLeftToBeChangedWhereAChangeIsToldAndMeasuringIsDearTest {
     private static Optional<String> figure(Compilation compilation) {
         return Adequacy.leftToBeChanged(compilation.db(), "m", "asked").figure()
                 .map(Figure::name);
+    }
+
+    /** Whether a run that measures {@code model} to the end says it stopped at {@code budget}. */
+    private static boolean measuredStopsAt(CompositionBudget budget, String model,
+                                           Allowances allowances) {
+        Compilation compilation = Compilation.ofSource(model, "Main").allowing(allowances);
+        compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.OFF));
+        ACompiledModel.compiles(compilation);
+        return AdequacyReport.of(compilation)
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()))
+                .contains("(" + budget.name() + ", ");
     }
 
     @Test
@@ -115,7 +139,7 @@ class ABehaviorIsLeftToBeChangedWhereAChangeIsToldAndMeasuringIsDearTest {
     @Test
     void aChainOfChoicesIsLeftAndTheSameChainOfChoicesThatComeOutOneWayIsMeasured() {
         assertEquals(Optional.of(READINGS.name()),
-                figure(leaving(chain("if a < b then a else b"), FEW_READINGS)));
+                figure(leaving(CHOICES_THAT_MULTIPLY, FEW_READINGS)));
 
         Compilation oneWay = leaving(chain("if 1 < 2 then a else b"), FEW_READINGS);
         assertTrue(oneWay.db().ask(new ConditionsReadThroughTooManyChoices("m", "asked")).value()
@@ -123,24 +147,60 @@ class ABehaviorIsLeftToBeChangedWhereAChangeIsToldAndMeasuringIsDearTest {
         assertEquals(Optional.empty(), figure(oneWay));
     }
 
+    /** At the last figure it is left at and at the first it is not, as it is measured there. */
+    @Test
+    void itIsLeftAtTheFiguresMeasuringItToTheEndStopsAt() {
+        int left = 1;
+        while (figure(leaving(THRESHOLDS, questions(left * 2))).isPresent()) {
+            left *= 2;
+        }
+
+        assertEquals(Optional.of(QUESTIONS.name()), figure(leaving(THRESHOLDS, questions(left))));
+        assertTrue(measuredStopsAt(QUESTIONS, THRESHOLDS, questions(left)), "at " + left);
+        assertFalse(measuredStopsAt(QUESTIONS, THRESHOLDS, questions(left * 2)),
+                "at " + left * 2);
+    }
+
+    /** The comparison of the body asks more than the helper does, and no change is told of it:
+     *  declared as a behavior, the helper leaves what stopped where it was. */
+    @Test
+    void aBodyThatStopsWhereNothingIsToldOfIsMeasuredThoughAChangeIsToldElsewhere() {
+        String elsewhere = """
+                module m
+
+                let fits (n: Int): Bool = n >= 1
+
+                behavior asked : (a: Int, b: Int, c: Int, d: Int) -> Bool
+                let asked (a, b, c, d) =
+                    List.any(n -> fits(n), [ a, b ])
+                        && List.any(n -> n >= 5, [ a, b, c, d ])
+                """;
+        int helper = 1;
+        while (figure(leaving(elsewhere, questions(helper))).isPresent()) {
+            helper++;
+        }
+
+        assertFalse(leaving(elsewhere, questions(helper)).db()
+                .ask(new HelpersReadOnApplicationsAroundThem("m", "asked")).value().isEmpty(),
+                "a change is told of the helper");
+        assertTrue(measuredStopsAt(QUESTIONS, elsewhere, questions(helper)),
+                "measuring it stops all the same, at " + helper);
+    }
+
     /** Dear and told of nothing: waiting is the only way to what its rows do not cover. */
     @Test
     void aBehaviorNoChangeIsToldOfIsMeasuredHoweverDear() {
-        Compilation compilation = leaving("""
-                module m
-                behavior asked : (a: Int) -> Bool
-                let asked (a) = a >= 1
-                """, Allowances.DECLARED.with(QUESTIONS, 0));
+        String inTheBody = NUMBERS.replace("fits(limit, n), [", "n >= limit, [");
 
-        assertTrue(compilation.db().ask(new Adequacy.WhatStopsMeasuring("m", "asked")).value()
-                .isPresent(), "measuring it runs into the figure");
-        assertEquals(Optional.empty(), figure(compilation));
+        assertTrue(measuredStopsAt(QUESTIONS, inTheBody, ONE_QUESTION));
+        assertEquals(Optional.empty(), figure(leaving(inTheBody, ONE_QUESTION)));
     }
 
     @Test
-    void aBehaviorThatRunsIntoNoFigureIsMeasuredAndSoIsEveryOneWhereTheBuildDoesNotAsk() {
+    void aBehaviorThatStopsAtNoFigureIsMeasuredAndSoIsEveryOneWhereTheBuildDoesNotAsk() {
         assertEquals(Optional.empty(), figure(leaving(NUMBERS, Allowances.DECLARED)));
-        assertEquals(Optional.empty(), figure(compiled(NUMBERS, ONE_QUESTION)));
+        assertEquals(Optional.empty(), figure(ACompiledModel.compiles(
+                Compilation.ofSource(NUMBERS, "Main").allowing(ONE_QUESTION))));
     }
 
     /** What is told is what takes it out of the figure's way. */
@@ -152,25 +212,29 @@ class ABehaviorIsLeftToBeChangedWhereAChangeIsToldAndMeasuringIsDearTest {
                         let fits (limit, n) = n >= limit"""), ONE_QUESTION)));
     }
 
-    /** The body is read by no measure of the module, and that of the behavior beside it is. */
+    /** The body is read by no measure of the module, and that of the behavior beside it is. What
+     *  arrives where in it is asked only where its conditions are read. */
     @Test
     void theBodyIsReadByNoMeasureAndTheBodyBesideItIs() {
-        Db db = leaving(NUMBERS + """
+        String beside = """
 
                 behavior beside : (flag: Bool) -> Int
                 let beside (flag) = if flag then 1 else 0
-                """, ONE_QUESTION).db();
+                """;
+        Db db = leaving(NUMBERS + beside, ONE_QUESTION).db();
         Bodies.Elaborated checked = db.ask(new Bodies.Observable("m")).value();
 
         assertInstanceOf(BodyReading.ToBeChangedFirst.class,
                 Adequacy.bodyReading(db, "m", checked, "asked"));
         assertInstanceOf(BodyReading.Read.class,
                 Adequacy.bodyReading(db, "m", checked, "beside"));
-        List<String> beside = List.of("beside");
-        assertEquals(beside, List.copyOf(
+        assertEquals(List.of("beside"), List.copyOf(
                 db.ask(new Adequacy.DecisionReadings("m")).value().keySet()));
-        assertEquals(beside, List.copyOf(db.ask(new Adequacy.PathReached("m")).value().keySet()));
-        assertEquals(beside, List.copyOf(db.ask(new Adequacy.Meets("m")).value().keySet()));
+        assertEquals(List.of("beside"), List.copyOf(
+                db.ask(new Adequacy.Meets("m")).value().keySet()));
+        assertEquals(List.of("beside"), List.copyOf(
+                leaving(CHOICES_THAT_MULTIPLY + beside, FEW_READINGS).db()
+                        .ask(new Adequacy.PathReached("m")).value().keySet()));
     }
 
     /** Nothing was shown of its rows, so the verdict is open and no gap is told; what is told is

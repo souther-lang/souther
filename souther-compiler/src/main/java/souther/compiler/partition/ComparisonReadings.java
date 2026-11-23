@@ -42,7 +42,6 @@ import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.WhereAnApplicationIsMade;
 import souther.compiler.meaning.WhyUnread;
 import souther.compiler.meaning.WrittenLines;
-import souther.compiler.observe.Figure;
 import souther.compiler.types.ValueName;
 import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.semantics.HowAClosureIsApplied;
@@ -580,28 +579,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                         WithinOneApplication.Gathered oneApplication,
                         ComparisonWitnesses.AtComparisons witnesses, WaysToNodes ways,
                         WhereConstructionsAreMet constructions, Core whole, Core within,
-                        Optional<WayIn> calledAt, Optional<List<AConstructMet>> metOnly,
-                        Optional<WhatStopsMeasuring> stops) {
-
-        /** Whether nothing is read of what the body states as the walk goes on: where only where
-         *  each construct stands is asked, and once what stops measuring the body is shown. */
-        boolean readsNothing() {
-            return metOnly.isPresent()
-                    || stops.filter(WhatStopsMeasuring::isShown).isPresent();
-        }
-
-        /** Whether nothing is read of what stands on the way to a construct: where nothing is
-         *  read, and where what is asked is what stops measuring the body, which what each
-         *  construct states on each application says and the way to it does not. */
-        boolean readsNoWay() {
-            return metOnly.isPresent() || stops.isPresent();
-        }
-
-        /** {@code applying} past {@code condition} coming out {@code holding}. */
-        ClosureApplications past(Core condition, boolean holding, ClosureApplications applying) {
-            return readsNothing() ? applying.takingNothingRead()
-                    : applying.taking(condition, holding, read);
-        }
+                        Optional<WayIn> calledAt, Optional<AtAConstruct> metOnly) {
 
         /** The same reading, in the body of a recursive helper read at {@code at}, a call of it:
          *  its own tree, and the copy that call makes of each construct in it. */
@@ -609,7 +587,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             return new Body(behavior, read, Arrivals.inTheTree(helperBody), templates, outcomes,
                     decided, stated, conditions, called, helperBody, reads, armsNamed,
                     dependencies, oneApplication, witnesses, ways, constructions, whole,
-                    helperBody, Optional.of(at), metOnly, stops);
+                    helperBody, Optional.of(at), metOnly);
         }
 
         /** The trees a run on the way to a comparison here may have worked out anything of: the
@@ -654,22 +632,17 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      */
     static ComparisonReadings of(String behavior, AnalysisBody analysis, InputReading read,
                                  InputReads reads, ComparisonWitnesses.AtComparisons witnesses) {
-        return read(behavior, analysis, read, reads, witnesses, Optional.empty(),
-                Optional.empty());
+        return read(behavior, analysis, read, reads, witnesses, Optional.empty());
     }
 
-    /**
-     * The same walk of {@code body}, for the figure measuring it runs into: shown as each construct
-     * is read, and nothing read of what is past the one it is shown at
-     * ({@link WhatStopsMeasuring}). Asked of no witness, so a line only a row run to its comparison
-     * shows is taken in as it is read without one.
-     */
-    static Optional<Figure> whatStopsMeasuring(String behavior, AnalysisBody analysis,
-                                               InputReading read, InputReads reads) {
-        WhatStopsMeasuring stops = new WhatStopsMeasuring();
-        read(behavior, analysis, read, reads, ComparisonWitnesses.AtComparisons.NONE,
-                Optional.empty(), Optional.of(stops));
-        return stops.figure();
+    /** What is done at a construct that may state something, of a walk that reads nothing of what
+     *  any states ({@link #mayState}): handed the construct, the copy of it the walk met, the
+     *  applications of the closures it stands in and the names in force there. */
+    @FunctionalInterface
+    private interface AtAConstruct {
+
+        void met(Core e, ConstructOccurrence occurrence, ClosureApplications applying,
+                 InputReads reads, Body in);
     }
 
     /**
@@ -706,21 +679,40 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
     static List<AConstructMet> metOf(String behavior, AnalysisBody analysis, InputReading read,
                            InputReads reads, ComparisonWitnesses.AtComparisons witnesses) {
         List<AConstructMet> met = new ArrayList<>();
-        read(behavior, analysis, read, reads, witnesses, Optional.of(met), Optional.empty());
+        read(behavior, analysis, read, reads, witnesses, Optional.of(
+                (e, occurrence, applying, names, _) -> met.add(new AConstructMet(occurrence,
+                        applying, ChoicesAConditionIsReadThrough.of(e, names, read)))));
         return List.copyOf(met);
     }
 
     /**
+     * The same walk, reading the conditions {@code stops} is of until one ends the measuring of the
+     * body: each as {@link #of} reads it, with no line drawn of it and nothing read on the way to
+     * it, which what it states does not turn on.
+     */
+    static void conditionsRead(String behavior, AnalysisBody analysis, InputReading read,
+                               InputReads reads, WhatStopsMeasuring stops) {
+        read(behavior, analysis, read, reads, ComparisonWitnesses.AtComparisons.NONE, Optional.of(
+                (e, occurrence, _, names, in) -> {
+                    Optional<ModelOccurrence> stands = ModelOccurrence.statedAt(occurrence)
+                            .filter(stops::isTold);
+                    if (stands.isPresent() && !stops.isShown()) {
+                        BooleanMeaning.asAComparison(e).ifPresent(comparison ->
+                                stops.reading(stands.get(), in.conditions()
+                                        .comparison(comparison, names, read).stated()
+                                        .proposition()));
+                    }
+                }));
+    }
+
+    /**
      * The walk of {@code body}, reading what each construct states, or, where {@code metOnly} is
-     * held, putting each construct that may state something into it and reading nothing of it.
-     * Where {@code stops} is held, it takes in each as it is read, and nothing is read once it
-     * shows what stops measuring the body.
+     * held, handing each construct that may state something to it and reading nothing of it.
      */
     private static ComparisonReadings read(String behavior, AnalysisBody analysis,
                                            InputReading read, InputReads reads,
                                            ComparisonWitnesses.AtComparisons witnesses,
-                                           Optional<List<AConstructMet>> metOnly,
-                                           Optional<WhatStopsMeasuring> stops) {
+                                           Optional<AtAConstruct> metOnly) {
         Core body = analysis.core();
         List<Reading> readings = new ArrayList<>();
         List<ForkMet> forks = new ArrayList<>();
@@ -754,7 +746,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                         templates, outcomes, decided, stated, conditions,
                         CallContext.OF_THE_BODY, body, reads, armsNamed, dependencies,
                         oneApplication, witnesses, ways, constructions, body, body,
-                        Optional.empty(), metOnly, stops),
+                        Optional.empty(), metOnly),
                 reads, ClosureApplications.OUTSIDE,
                 LiveFlow.of(body), List.of(), true, readings, forks, numbering);
         // What each value the body builds states, read once. A value means the same wherever it is
@@ -772,7 +764,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                         templates, outcomes, decided, stated, conditions,
                         CallContext.OF_THE_BODY, null, null, armsNamed, dependencies,
                         oneApplication, witnesses, ways, constructions, body, template,
-                        Optional.empty(), metOnly, stops),
+                        Optional.empty(), metOnly),
                         defined, ClosureApplications.OUTSIDE, LiveFlow.of(template),
                         entry.assumed(), entry.live(),
                         readings, forks, numbering);
@@ -2009,81 +2001,6 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 read, witnesses);
     }
 
-    /** The construct {@code e}, read as {@code standing} says, with the way to it and what a run
-     *  works out getting there. */
-    private static Reading readingOf(Core e, StatedAt stated, ConstructOccurrence stands,
-                                     Citation where, BoundaryPolicy.Standing standing,
-                                     LinesReadOn readOn,
-                                     ComparisonWitnesses.AtAComparison witnesses,
-                                     ElementsNamed readsTheElements, Body in, InputReads reads,
-                                     ClosureApplications applying, List<OnTheWay> assumed,
-                                     ConditionNumbering numbering) {
-        // Where a run stops in it, which is no part of the lines it draws. Only a comparison
-        // the policy admits is read, and an application states no comparison to stop in.
-        Optional<Proposition> stopsWhere = standing instanceof BoundaryPolicy.Standing.Admitted
-                && stated.statement() instanceof Stated.AComparison(var comparison)
-                ? Optional.ofNullable(Cutting.whereTheRunStops(comparison, in.read(), reads,
-                        applying, in.conditions()))
-                : Optional.empty();
-        // And what each application of the closure it stands in works out, likewise.
-        Optional<List<Cutting.OnAnApplication>> worksOutOnEach =
-                standing instanceof BoundaryPolicy.Standing.Admitted
-                && stated.statement() instanceof Stated.AComparison(var comparison)
-                ? Cutting.whatEachApplicationWorksOut(comparison, in.read(), applying,
-                        in.conditions())
-                : Optional.empty();
-        // And what a run getting to it works out, where it is read once.
-        Optional<StopEvidence> stopsIn = worksOutOnEach.isEmpty()
-                && standing instanceof BoundaryPolicy.Standing.Admitted
-                && stated.statement() instanceof Stated.AComparison(var comparison)
-                ? Optional.of(in.conditions().comparison(comparison, reads, in.read()).stops()
-                        .get())
-                : Optional.empty();
-        // And what a run taking each arm of a choice it is read through works out there.
-        List<StopEvidence.OnAnArm> onTheArms = stopsIn.isPresent()
-                && stated.statement() instanceof Stated.AComparison(var comparison)
-                ? in.conditions().comparison(comparison, reads, in.read()).onTheArms().get()
-                : List.of();
-        // What a line of it is looked for beside is the way as statements of the elements the
-        // comparison reads: a condition on the way read of another element of one of its
-        // containers is about a value the line is not.
-        ElementsOnTheWay.Kept besideIt = ElementsOnTheWay.keptToOneElementEach(assumed,
-                readsTheElements, numbering.saidOnTheWay(List.of(assumed)));
-        Past past = pastOf(standing, e, in, reads);
-        return new Reading(stands, stated.statement(), where, reads, besideIt.way(), standing,
-                statedAsACondition(e, standing, stopsWhere, worksOutOnEach, reads, in,
-                        numbering), stopsWhere,
-                worksOutOnEach, stopsIn, onTheArms, applying, stated.written(), in.context(),
-                besideIt.said(), witnesses,
-                past.answered(), past.asks(), readsTheElements, readOn,
-                new Pullback.Once<>(() -> workedOutFirst(e, stated.statement(), in, reads)),
-                new Pullback.Once<>(() -> constructionsOnTheWay(e, past.asks(),
-                        besideIt.way(), applying, in)),
-                stated.statement() instanceof Stated.AComparison
-                        ? QuotientsEveryRunWorksOut.in(e) : List.of(),
-                stated.statement() instanceof Stated.AComparison
-                        ? EvaluationPlaces.of(e) : EvaluationPlaces.none(),
-                in.templates().definitions(),
-                new Pullback.Once<>(() -> Condition.of(e, reads, in.symbols(), in.newtypes(),
-                        numbering)));
-    }
-
-    /**
-     * Whether reading the comparison {@code e} shows what stops measuring the body
-     * ({@link WhatStopsMeasuring#reading}): asked before its lines are drawn, which is not paid for
-     * where it does, and of a comparison a line may be drawn on. The reading is the one the lines
-     * are drawn from, kept for them.
-     */
-    private static boolean isReadToAStop(Core e, Body in, InputReads reads, boolean live) {
-        if (in.stops().isEmpty() || mayState(e) == null
-                || !BoundaryPolicy.refuses(live).isEmpty()) {
-            return false;
-        }
-        BooleanMeaning.asAComparison(e).ifPresent(comparison -> in.stops().get().reading(
-                in.conditions().comparison(comparison, reads, in.read()).stated().proposition()));
-        return in.readsNothing();
-    }
-
     /**
      * @param applying the applications of the closures this position stands inside, moved by the
      *                 same steps as {@code reads}
@@ -2103,7 +2020,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         // And, of a construction of the behavior's own body or of a value's template, for whoever
         // asks whether a run on the way to a rule gets to it, and which; and of a call handed a
         // function value by a name, where a run goes into the body of the function value.
-        if (!in.readsNoWay() && in.context().equals(CallContext.OF_THE_BODY)) {
+        if (in.metOnly().isEmpty() && in.context().equals(CallContext.OF_THE_BODY)) {
             if (e instanceof Core.Construct made) {
                 in.constructions().met(made, assumed, reads, applying);
             }
@@ -2111,21 +2028,17 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 in.constructions().handing(Core.withoutStanding(e), assumed);
             }
         }
-        // The one place the readings part: what is done at a construct. Where only where each
-        // stands is asked, it is said and nothing of it is read, and nothing is read of one past
-        // what stops measuring the body; everything else in this walk, every way it takes into
-        // what lies below, is the same for each. A construct the policy
+        // The one place the readings part: what is done at a construct. Where no line is drawn, it
+        // is handed on and no line of it is drawn; everything else in this walk,
+        // every way it takes into what lies below, is the same for each. A construct the policy
         // refuses where nothing it computes is read on the way to the answer is no line either
         // reading draws, and the policy says so to both ({@link BoundaryPolicy#refuses}).
         StatedAt stated;
         if (in.metOnly().isPresent()) {
             ConstructOccurrence written = mayState(e);
             if (written != null && BoundaryPolicy.refuses(live).isEmpty()) {
-                in.metOnly().get().add(new AConstructMet(in.context().of(written), applying,
-                        ChoicesAConditionIsReadThrough.of(e, reads, in.read())));
+                in.metOnly().get().met(e, in.context().of(written), applying, reads, in);
             }
-            stated = null;
-        } else if (in.readsNothing() || isReadToAStop(e, in, reads, live)) {
             stated = null;
         } else {
             stated = statedAt(e, () -> WhatNamesStandFor.in(reads, in.read()), applying,
@@ -2180,15 +2093,54 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                                             where, in.read(), witnesses));
                 }
             }
-            // The lines it draws are all that is asked of it where what stops measuring the body
-            // is. What a run works out getting to it, and the way there, are read of a line this
-            // asks nothing further about.
-            if (in.stops().isPresent()) {
-                in.stops().get().drawing(standing);
-            } else {
-                out.add(readingOf(e, stated, stands, where, standing, readOn, witnesses,
-                        readsTheElements, in, reads, applying, assumed, numbering));
-            }
+            // Where a run stops in it, which is no part of the lines it draws. Only a comparison
+            // the policy admits is read, and an application states no comparison to stop in.
+            Optional<Proposition> stopsWhere = standing instanceof BoundaryPolicy.Standing.Admitted
+                    && stated.statement() instanceof Stated.AComparison(var comparison)
+                    ? Optional.ofNullable(Cutting.whereTheRunStops(comparison, in.read(), reads,
+                            applying, in.conditions()))
+                    : Optional.empty();
+            // And what each application of the closure it stands in works out, likewise.
+            Optional<List<Cutting.OnAnApplication>> worksOutOnEach =
+                    standing instanceof BoundaryPolicy.Standing.Admitted
+                    && stated.statement() instanceof Stated.AComparison(var comparison)
+                    ? Cutting.whatEachApplicationWorksOut(comparison, in.read(), applying,
+                            in.conditions())
+                    : Optional.empty();
+            // And what a run getting to it works out, where it is read once.
+            Optional<StopEvidence> stopsIn = worksOutOnEach.isEmpty()
+                    && standing instanceof BoundaryPolicy.Standing.Admitted
+                    && stated.statement() instanceof Stated.AComparison(var comparison)
+                    ? Optional.of(in.conditions().comparison(comparison, reads, in.read()).stops()
+                            .get())
+                    : Optional.empty();
+            // And what a run taking each arm of a choice it is read through works out there.
+            List<StopEvidence.OnAnArm> onTheArms = stopsIn.isPresent()
+                    && stated.statement() instanceof Stated.AComparison(var comparison)
+                    ? in.conditions().comparison(comparison, reads, in.read()).onTheArms().get()
+                    : List.of();
+            // What a line of it is looked for beside is the way as statements of the elements the
+            // comparison reads: a condition on the way read of another element of one of its
+            // containers is about a value the line is not.
+            ElementsOnTheWay.Kept besideIt = ElementsOnTheWay.keptToOneElementEach(assumed,
+                    readsTheElements, numbering.saidOnTheWay(List.of(assumed)));
+            Past past = pastOf(standing, e, in, reads);
+            out.add(new Reading(stands, stated.statement(), where, reads, besideIt.way(), standing,
+                    statedAsACondition(e, standing, stopsWhere, worksOutOnEach, reads, in,
+                            numbering), stopsWhere,
+                    worksOutOnEach, stopsIn, onTheArms, applying, stated.written(), in.context(),
+                    besideIt.said(), witnesses,
+                    past.answered(), past.asks(), readsTheElements, readOn,
+                    new Pullback.Once<>(() -> workedOutFirst(e, stated.statement(), in, reads)),
+                    new Pullback.Once<>(() -> constructionsOnTheWay(e, past.asks(),
+                            besideIt.way(), applying, in)),
+                    stated.statement() instanceof Stated.AComparison
+                            ? QuotientsEveryRunWorksOut.in(e) : List.of(),
+                    stated.statement() instanceof Stated.AComparison
+                            ? EvaluationPlaces.of(e) : EvaluationPlaces.none(),
+                    in.templates().definitions(),
+                    new Pullback.Once<>(() -> Condition.of(e, reads, in.symbols(), in.newtypes(),
+                            numbering))));
         }
         // A fork the reading of the runs takes a way out of, under the closures the walk is in. A
         // value standing as a wider type is no fork, and a fork under it is met one step down.
@@ -2214,29 +2166,30 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 boolean runsWhenLeftIs = both.op().rightRunsWhenLeftIs();
                 walk(both.left(), in, reads, applying, flow, assumed, live, out, forks,
                         numbering);
-                walk(both.right(), in, reads, in.past(both.left(), runsWhenLeftIs, applying), flow,
-                        (in.readsNoWay() || applying.saysWhatStandsInIt()) ? assumed
+                boolean readsNothing = in.metOnly().isPresent();
+                walk(both.right(), in, reads,
+                        readsNothing ? applying.takingNothingRead()
+                                : applying.taking(both.left(), runsWhenLeftIs, in.read()), flow,
+                        (readsNothing || applying.saysWhatStandsInIt()) ? assumed
                                 : taking(Condition.of(both.left(), reads, symbols, in.newtypes(),
                                         numbering), runsWhenLeftIs, in.read(), assumed,
                                         in.conditions(), numbering),
                         live, out, forks, numbering);
             }
-            // Where nothing on the way is read, the condition is walked for the constructs in it and
-            // not read for what the arms are entered under. What it states of an application goes
-            // with the applications still, unless nothing is read at all.
-            case Core.If iff when in.readsNoWay() -> {
+            // Where only where each construct stands is asked, the condition is walked for the
+            // constructs in it and read for nothing: what it states is what the arms are entered
+            // under, and no application told of is told by that.
+            case Core.If iff when in.metOnly().isPresent() -> {
                 in.ways().enteringACondition();
                 walk(iff.cond(), in, reads, applying, flow, assumed, live, out, forks, numbering);
                 in.ways().leavingACondition();
                 Choice.Decides then = Choice.Decides.ofCondition(iff, true);
                 Choice.Decides els = Choice.Decides.ofCondition(iff, false);
                 walk(iff.then(), in, reads.choosing(then, symbols, in.newtypes()),
-                        in.past(iff.cond(), true, applying)
-                                .choosing(then, symbols, in.newtypes(), null),
+                        applying.takingNothingRead().choosing(then, symbols, in.newtypes(), null),
                         flow, assumed, live, out, forks, numbering);
                 walk(iff.els(), in, reads.choosing(els, symbols, in.newtypes()),
-                        in.past(iff.cond(), false, applying)
-                                .choosing(els, symbols, in.newtypes(), null),
+                        applying.takingNothingRead().choosing(els, symbols, in.newtypes(), null),
                         flow, assumed, live, out, forks, numbering);
             }
             // The condition under what stood above the fork, and each arm under what that arm proves
@@ -2364,12 +2317,12 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     Core.Case arm = match.cases().get(part);
                     Choice.Decides taken = Choice.Decides.ofCase(match, arm);
                     int which = part;
-                    boolean readsNothing = in.readsNothing();
+                    boolean readsNothing = in.metOnly().isPresent();
                     walk(arm.body(), in, reads.choosing(taken, symbols, in.newtypes()),
                             applying.choosing(taken, symbols, in.newtypes(),
                                     readsNothing ? null : on ->
                                     in.conditions().arm(match, which, on).proposition()), flow,
-                            in.readsNoWay() ? assumed
+                            readsNothing ? assumed
                                     : entering(match, arm, part, in.read(), reads, assumed,
                                             numbering),
                             live, out, forks, numbering);
@@ -2397,7 +2350,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                         ScopeStep.forEachChild(seeded.step(), (body, into) -> walk(body, in,
                                 inside.entering(into, symbols, in.newtypes()),
                                 through.into(seeded.step(), into, inside, in.read(),
-                                                !in.readsNothing())
+                                                in.metOnly().isEmpty())
                                         .carryingIntoTheFirst(seeded.accumulator(), seed),
                                 flow, assumed, live, out, forks, numbering));
                         in.oneApplication().leaving();
@@ -2430,17 +2383,17 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             // a run handed it is on the way that arm is: what entering the arm states goes onto the
             // way in here, as it does onto the way of what is written inside the arm.
             case Core.Block block -> {
-                boolean readsNoWay = in.readsNoWay();
-                if (!readsNoWay && in.context().equals(CallContext.OF_THE_BODY)) {
+                if (in.metOnly().isEmpty() && in.context().equals(CallContext.OF_THE_BODY)) {
                     in.constructions().made(block, assumed);
                 }
                 in.oneApplication().entering(block, shortOfEachElement(block, reads, in));
-                List<OnTheWay> handed = readsNoWay ? assumed
+                boolean readsNothing = in.metOnly().isPresent();
+                List<OnTheWay> handed = readsNothing ? assumed
                         : past(assumed, writtenUnder(block, reads, in, numbering));
                 ScopeStep.forEachChild(block, (child, step) -> {
                     ClosureApplications applied =
-                            applying.into(block, step, reads, in.read(), !in.readsNothing());
-                    if (child == block.body() && !readsNoWay) {
+                            applying.into(block, step, reads, in.read(), !readsNothing);
+                    if (child == block.body() && !readsNothing) {
                         answeredBy(block, applied, in);
                     }
                     walk(child, in, reads.entering(step, symbols, in.newtypes()), applied, flow,
@@ -2460,12 +2413,12 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 for (int part = 0; part < arms.size(); part++) {
                     Choice.Arm arm = arms.get(part);
                     int which = part;
-                    boolean readsNothing = in.readsNothing();
+                    boolean readsNothing = in.metOnly().isPresent();
                     walk(arm.answers(), in, reads.choosing(arm.decidedBy(), symbols, in.newtypes()),
                             applying.choosing(arm.decidedBy(), symbols, in.newtypes(),
                                     readsNothing ? null : on ->
                                     in.conditions().arm(attempt, which, on).proposition()), flow,
-                            in.readsNoWay() ? assumed
+                            readsNothing ? assumed
                                     : past(assumed, numbering.said(attempting(attempt, part,
                                             in.read(), reads, numbering))),
                             live, out, forks, numbering);

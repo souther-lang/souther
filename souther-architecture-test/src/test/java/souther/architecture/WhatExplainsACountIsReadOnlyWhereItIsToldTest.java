@@ -174,7 +174,8 @@ class WhatExplainsACountIsReadOnlyWhereItIsToldTest {
                         + "Lsouther/compiler/check/ElementBindings;"
                         + "Lsouther/compiler/check/PathReachability$Arrivals;"
                         + "Lsouther/compiler/partition/RuleReachNumbering;"
-                        + "Lsouther/compiler/partition/ComparisonWitnesses$AtComparisons;)"
+                        + "Lsouther/compiler/partition/ComparisonWitnesses$AtComparisons;"
+                        + "Lsouther/compiler/partition/WhatStopsMeasuring;)"
                         + "Lsouther/compiler/partition/GuardThresholds$Guards;")));
         by.put(READ_ON_BY_THE_GUARDS, Set.of(AMethod.of(
                 "souther/compiler/query/Coverages", "partitioningOf",
@@ -184,8 +185,9 @@ class WhatExplainsACountIsReadOnlyWhereItIsToldTest {
                         + "Lsouther/compiler/check/PathReachability$Arrivals;"
                         + "Lsouther/compiler/check/StatedContract;"
                         + "Lsouther/compiler/values/Allowance;"
-                        + "Lsouther/compiler/query/Coverages$WitnessesAtSites;)"
-                        + "Lsouther/compiler/query/Coverages$Partitioned;")));
+                        + "Lsouther/compiler/query/Coverages$WitnessesAtSites;"
+                        + "Lsouther/compiler/partition/WhatStopsMeasuring;)"
+                        + "Ljava/util/Optional;")));
         by.put(READ_ON_BY_THE_PARTITION, Set.of(AMethod.of(
                 "souther/compiler/query/Adequacy$Readings", "assess",
                 "(Lsouther/compiler/partition/MeasuredInput;"

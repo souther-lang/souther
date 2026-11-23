@@ -14,10 +14,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@code souther examples --to-the-end} measures a behavior a plain run leaves for its author to
  * change.
  *
- * <p>Deferred to the nightly: what is left is what is dear to measure, so a model the option makes
- * a difference to is one measuring takes long over, and no smaller one is left at the figures this
- * command holds a compilation to. What it finds is the option read and not handed on, which is as
- * well found by the morning.
+ * <p>Deferred to the nightly: what is left is what stops at a figure, so a model the option makes a
+ * difference to is measured up to one this command holds a compilation to, and no smaller one is
+ * left there. What it finds is the option read and not handed on, which is as well found by the
+ * morning.
  */
 @Nightly
 class ABehaviorLeftToBeChangedIsMeasuredToTheEndWhereAskedTest {

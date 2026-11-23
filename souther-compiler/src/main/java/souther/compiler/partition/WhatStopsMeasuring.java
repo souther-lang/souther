@@ -1,76 +1,101 @@
 package souther.compiler.partition;
 
-import souther.compiler.meaning.DecidingCase;
+import souther.compiler.inputs.BlockReason;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.observe.Figure;
+import souther.compiler.types.ModelOccurrence;
 
+import java.util.LinkedHashSet;
 import java.util.Optional;
+import java.util.Set;
 
 /**
- * The figure measuring one body runs into, told as its constructs are read and before any line of
- * it is asked where it decides or searched.
+ * Where the measuring of one body ends: at the first of some constructs of it that measuring
+ * stopped at a figure in.
  *
- * <p>Two things multiply on the way to what is measured, and each is held to a figure of its own
- * that gives up what is past it. The readings of one condition multiply with each choice its values
- * are made through ({@link CompositionBudget#TOTAL_READINGS_OF_ONE_CONDITION}): a condition is past
- * it where its reading stopped there. The cases the lines of one statement are asked in multiply
- * with each choice on the way to them ({@link CompositionBudget#QUESTIONS_A_STATEMENT_IS_ASKED}):
- * the cases are held as the choices they are made of ({@link DecidingCase.Cases}), so how many ways
- * there are of choosing one is counted without choosing, and a statement whose lines have more of
- * them than it is asked questions is past it.
+ * <p><b>What stopped, and nothing reckoned.</b> How many ways there are to choose a case is no
+ * number of questions asked: ways no value meets and ways no row takes are never walked, and of a
+ * line with more ways than are taken apart none is asked. So what is taken in here is what came of
+ * measuring, of the reader that spent the figure: the reading of a condition that says which figure
+ * it was read no further at, and the assessment of its lines that says where they decide was not
+ * worked out at which. The measuring that hands them over is the one a run that goes on makes, so a
+ * run that goes on reports the stop this names.
  *
- * <p>So a body told of here is dear to measure as it is written, and not measured whole for it:
- * the work up to the figure is done and what is past it is said not to be. Told once, at the first
- * that is met, so that reading the rest of the body is not paid for.
+ * <p><b>Of the constructs it is told, and of no other.</b> They are the ones a change is told of,
+ * so that what a reader is told to change is what stopped: a figure met at a construct nothing is
+ * told of ends nothing, however dear it is.
+ *
+ * <p>Nothing is measured past the first, so it is asked as the measuring goes on.
  */
-final class WhatStopsMeasuring {
+public final class WhatStopsMeasuring {
+
+    private final Set<ModelOccurrence> told;
 
     private Figure stops;
 
-    /** Takes in what a condition was read to state. */
-    void reading(Proposition stated) {
-        Figure inAll = CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION.reached();
-        if (Proposition.figuresOfReadingsIn(stated).contains(inAll)) {
-            stops = inAll;
+    private WhatStopsMeasuring(Set<ModelOccurrence> told) {
+        this.told = Set.copyOf(told);
+    }
+
+    /** At the first of {@code told} that measuring stops at a figure in. */
+    public static WhatStopsMeasuring atTheFirstOf(Set<ModelOccurrence> told) {
+        return new WhatStopsMeasuring(told);
+    }
+
+    /** At none: the measuring is made to its end. */
+    public static WhatStopsMeasuring nowhere() {
+        return new WhatStopsMeasuring(Set.of());
+    }
+
+    /** Whether measuring {@code construct} may end the measuring of the body. */
+    boolean isTold(ModelOccurrence construct) {
+        return told.contains(construct);
+    }
+
+    /** Takes in what {@code construct} was read to state. */
+    void reading(ModelOccurrence construct, Proposition stated) {
+        if (isTold(construct)) {
+            stopped(Proposition.figuresOfReadingsIn(stated));
         }
     }
 
-    /** Takes in the lines of one statement, read as {@code standing}. */
-    void drawing(BoundaryPolicy.Standing standing) {
-        if (standing instanceof BoundaryPolicy.Standing.Admitted(var read) && casesAtMost(read)
-                > CompositionBudget.QUESTIONS_A_STATEMENT_IS_ASKED.maximum()) {
-            stops = CompositionBudget.QUESTIONS_A_STATEMENT_IS_ASKED.reached();
+    /** Takes in what asking where the lines of {@code construct} decide came to. */
+    void deciding(ModelOccurrence construct, ComparisonAssessment assessed) {
+        if (!isTold(construct)) {
+            return;
+        }
+        Set<Figure> met = new LinkedHashSet<>();
+        notWorkedOutAt(assessed, met);
+        stopped(met);
+    }
+
+    private static void notWorkedOutAt(ComparisonAssessment assessed, Set<Figure> into) {
+        switch (assessed) {
+            case ComparisonAssessment.Several several -> several.parts().forEach(part ->
+                    notWorkedOutAt(part.line(), into));
+            case ComparisonAssessment.Unread unread -> unread.places().stops().forEach(stop -> {
+                if (stop.reason()
+                        instanceof BlockReason.WhereALineDecidesNotWorkedOut(var figures)) {
+                    into.addAll(figures);
+                }
+            });
+            default -> { }
         }
     }
 
-    /** Whether measuring the body was shown to run into a figure. */
-    boolean isShown() {
+    private void stopped(Set<Figure> met) {
+        if (stops == null && !met.isEmpty()) {
+            stops = Figure.inOrder(met).getFirst();
+        }
+    }
+
+    /** Whether the measuring ended. */
+    public boolean isShown() {
         return stops != null;
     }
 
-    /** The figure measuring the body runs into; empty where it was shown to run into none. */
-    Optional<Figure> figure() {
+    /** The figure the measuring ended at; empty where it goes on. */
+    public Optional<Figure> figure() {
         return Optional.ofNullable(stops);
-    }
-
-    /** How many cases the lines of one statement are asked in at most: one line of its own is
-     *  asked where it stands, and a line of several in no more of its cases than it is taken apart
-     *  into. */
-    private static long casesAtMost(ComparisonAssessment read) {
-        if (!(read instanceof ComparisonAssessment.Several several)) {
-            return 1;
-        }
-        long out = 0;
-        for (ComparisonAssessment.Several.Part part : several.parts()) {
-            if (part.line() instanceof ComparisonAssessment.Several lines) {
-                out += casesAtMost(lines);
-            } else {
-                for (DecidingCase each : part.cases()) {
-                    long most = CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.maximum();
-                    out += Math.min(most, each.standsFor().waysOfChoosing(most));
-                }
-            }
-        }
-        return out;
     }
 }

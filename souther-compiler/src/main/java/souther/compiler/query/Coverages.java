@@ -96,6 +96,7 @@ import souther.compiler.partition.Reachability;
 import souther.compiler.partition.ReadingsReadOn;
 import souther.compiler.partition.SaidOnTheWay;
 import souther.compiler.partition.WayToTheBorder;
+import souther.compiler.partition.WhatStopsMeasuring;
 import souther.compiler.partition.WhyKept;
 
 import java.math.BigInteger;
@@ -228,19 +229,6 @@ final class Coverages {
     }
 
     /**
-     * The figure measuring {@code behavior}'s body runs into, read against the same input and body
-     * as {@link #partitioningOf} ({@link GuardThresholds#whatStopsMeasuring}); empty where there is
-     * no body to read.
-     */
-    static Optional<Figure> whatStopsMeasuring(Hir.SpecBehavior behavior, InputReading read,
-                                               BodyReading reading) {
-        return reading instanceof BodyReading.Read it && it.analysis() != null
-                ? GuardThresholds.whatStopsMeasuring(behavior.name(), it.analysis(), read,
-                        ElementBindings.of(it.analysis(), read.rules().newtypes()))
-                : Optional.empty();
-    }
-
-    /**
      * The positions one behavior is measured at, with what its own comparisons divide them into.
      *
      * <p>Asked here rather than worked out again wherever it is needed. What a report says is not
@@ -257,8 +245,10 @@ final class Coverages {
      *                  places: one showing a count takes every value beside how many its container
      *                  holds, and one getting there at all — asked where a row is run, and handed
      *                  in
+     * @param stops     where the measuring of the body ends
+     * @return empty where the measuring ended in the body, which {@code stops} says the figure of
      */
-    static Partitioned partitioningOf(Hir.SpecBehavior behavior,
+    static Optional<Partitioned> partitioningOf(Hir.SpecBehavior behavior,
                                       souther.compiler.inputs.InputReading read,
                                       souther.compiler.partition.BodyReading reading,
                                       CoverageSites.Plan plan,
@@ -267,7 +257,8 @@ final class Coverages {
                                       souther.compiler.values.Allowance<
                                               souther.compiler.inputs.NumericTerm.FromOnePosition>
                                               distinctions,
-                                      WitnessesAtSites witnesses) {
+                                      WitnessesAtSites witnesses,
+                                      WhatStopsMeasuring stops) {
         // Which of the three this elaboration holds, settled before anything reads a body. A tree
         // and a `null` are two facts under one shape, and every reader below would tell them apart
         // again or stop telling them apart at all.
@@ -306,7 +297,10 @@ final class Coverages {
                 new RuleReachNumbering(read.symbols().module(), behavior.name());
         GuardThresholds.Guards guards = body == null ? GuardThresholds.Guards.NONE
                 : GuardThresholds.of(behavior.name(), analysis, body, plan, read, standing, arrives,
-                        reaches, atTheComparisonsOf(body, plan, witnesses));
+                        reaches, atTheComparisonsOf(body, plan, witnesses), stops);
+        if (stops.isShown()) {
+            return Optional.empty();
+        }
         // And what the declarations state between two of this input's positions. Such a rule places
         // no end at either of them, so the reading of ends has nothing to draw it from; read here,
         // it is a line like the two above and is arranged with them.
@@ -346,7 +340,7 @@ final class Coverages {
                         both(both(clauses.evidence(), guards.evidence()), derived.evidence()),
                         sets.statements(), sets.blocked(),
                         both(drawnBetween, derived.between()));
-        return new Partitioned(Partitions.withEvidence(partitioning, quantities,
+        return Optional.of(new Partitioned(Partitions.withEvidence(partitioning, quantities,
                 filed.evidence(), filed.blocked(), distinctions, ruleReading,
                 // And the lines this had nowhere to put, which are findings of the same kind: a rule
                 // of the model that came to no line at a position it is about.
@@ -379,7 +373,7 @@ final class Coverages {
                 guards.conditionsMet(),
                 // And the same for the rules it places itself, which is every rule written where
                 // this compilation holds no file to open.
-                reaches.reachedAt());
+                reaches.reachedAt()));
     }
 
     /**
