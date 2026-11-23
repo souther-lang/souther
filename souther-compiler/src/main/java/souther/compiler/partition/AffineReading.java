@@ -2180,7 +2180,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                                               StoppedValues.Held aside) {
                 RoundedToAWholeNumber.Written rounding = RoundedToAWholeNumber.written(node,
                         policy -> WrittenOutElements.reading(ruleSource.symbols(),
-                                ruleSource.newtypes()).standing(policy, at).value());
+                                ruleSource.newtypes()).standing(policy, at).value(),
+                        ruleSource.declarations().answers());
                 if (rounding == null || !(AffineForms.outcome(rounding.value(), at, this)
                         instanceof AffineForms.Outcome.Composed<NumericTerm, InputReads> number)) {
                     return false;
@@ -3472,12 +3473,13 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             UndividedByARelation.Working here = switch (step) {
                 case Evaluated.Step.Always always ->
                         toldEvaluating(always.expression(), at, ofTheInput, answersFor).working();
-                case Evaluated.Step.OnlyWhere only ->
-                        WorkedOutToReachIt.of(ofTheInput)
-                                .endsNoRun(new Denotation(only.expression(), at))
-                                ? new UndividedByARelation.Working(List.of(),
-                                        WhatARelationLeavesUndivided.Told.EVERY)
-                                : UndividedByARelation.Working.UNREAD;
+                case Evaluated.Step.OnlyWhere only -> WorkedOutToReachIt.of(ofTheInput)
+                        .whereARunMayEnd(new Denotation(only.expression(), at))
+                        .map(stop -> new UndividedByARelation.Working(List.of(),
+                                WhatARelationLeavesUndivided.Told.SOME, true, List.of(), false,
+                                NotAccountedFor.aStopAt(stop.value())))
+                        .orElseGet(() -> new UndividedByARelation.Working(List.of(),
+                                WhatARelationLeavesUndivided.Told.EVERY));
             };
             together = here.after(together);
         }

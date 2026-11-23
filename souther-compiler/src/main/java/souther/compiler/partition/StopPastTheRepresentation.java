@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.abort.GetsPast;
+import souther.compiler.check.ARowsRun;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.AnOperationApplied;
 import souther.compiler.check.WhatARunMayEndFor;
@@ -21,7 +22,7 @@ import java.util.Set;
  * {@code String} holds, or a collection holding more elements than one holds.
  *
  * <p>The classes of a behavior are drawn as though a run gets past such an operation
- * ({@link WorkedOutToReachIt#completionOfARowsRun}), since where the representation stops is no
+ * ({@link ARowsRun}), since where the representation stops is no
  * distinction a model made. That a run stops there is still so, and it is said once, of the
  * operation, rather than as a reason some values of every relation past it are open.
  *

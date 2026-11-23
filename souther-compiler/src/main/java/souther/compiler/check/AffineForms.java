@@ -1534,8 +1534,8 @@ public final class AffineForms {
         for (Core element : written.get().list().elements()) {
             elements.add(Core.withoutStanding(element));
         }
-        return WhatARunMayEndFor.endsNoneBeneathApart(container, elements)
-                ? written : Optional.empty();
+        return ARowsRun.getsPastBeneathApart(container, elements,
+                reading.declarations().answers()) ? written : Optional.empty();
     }
 
     /** The list {@code call} counts, where it is {@code List.length} of a list written out; empty
@@ -1709,7 +1709,8 @@ public final class AffineForms {
                     // Read off the construction that gave the value, whose other parts are worked
                     // out all the same: untold where one of them can end a run.
                     if (!ValueStanding.theConstructionAndItsRestEndNone(fa, at, reading,
-                            following, reading::makingEndsNoRunOver)) {
+                            following, reading::makingEndsNoRunOver,
+                            reading.declarations().answers())) {
                         reading.unobserved(e, at);
                     }
                     yield commonForm(eliminated, e, at, following, stopped);
@@ -1748,7 +1749,8 @@ public final class AffineForms {
                 // not taken — is read nowhere else. Where the body composed nothing the walk
                 // stopped in it, and what it stopped at is whoever reads that one's to answer for.
                 if (body != null && (bound == null || following.timesRead(bound) == readBefore)
-                        && !WhatARunMayEndFor.endsNoneBeneath(li.value())) {
+                        && !ARowsRun.getsPastBeneath(li.value(),
+                                reading.declarations().answers())) {
                     reading.bound(li, at);
                 }
                 yield body;

@@ -5,6 +5,7 @@ import net.unit8.notation199x.pattern.CodePoints;
 import souther.compiler.abort.AbortKind;
 import souther.compiler.abort.GetsPast;
 import souther.compiler.check.ARecursion;
+import souther.compiler.check.ARowsRun;
 import souther.compiler.check.AddsWhatItDoesNotHold;
 import souther.compiler.check.InvariantChecker;
 import souther.compiler.check.Scope;
@@ -14,6 +15,7 @@ import souther.compiler.check.ScopeStep;
 import souther.compiler.check.ValueStanding;
 import souther.compiler.check.WalkElements;
 import souther.compiler.check.AnOperationApplied;
+import souther.compiler.check.BehaviorAnswers;
 import souther.compiler.check.BooleanMeaning;
 import souther.compiler.check.CalledBody;
 import souther.compiler.check.Carrier;
@@ -2280,7 +2282,7 @@ final class Pullback {
         if (endsNoRunWhereItsOwnerSays(e, reads) || comesToWhereItAnswers(e, reads)) {
             return new GetsPast.Always();
         }
-        return WorkedOutToReachIt.completionOfARowsRun(e);
+        return ARowsRun.completionOf(e, read.rules().declarations().answers());
     }
 
     /**
@@ -2375,7 +2377,7 @@ final class Pullback {
      * A total of what an element meets is a count, which comes to no more than a list holds: it
      * is an {@code Int} on every run. And an operation that ends a run only past what a
      * {@code String} or a collection holds, on every run of a row
-     * ({@link WorkedOutToReachIt#completionOfARowsRun}). A whole-number quotient that stops only
+     * ({@link ARowsRun}). A whole-number quotient that stops only
      * on the least {@code Int} divided by minus one ({@link GetsPast.WhereTheQuotientFits}), where
      * what it divides never comes to the least or what it divides by never to minus one
      * ({@link #theQuotientFits}). A
@@ -2388,7 +2390,8 @@ final class Pullback {
      * whatever {@code m - k} is, and {@code m - k} may still pass one.
      */
     private boolean comesToWhereItAnswers(Core e, InputReads reads) {
-        if (WorkedOutToReachIt.completionOfARowsRun(e) instanceof GetsPast.Always) {
+        if (ARowsRun.completionOf(e, read.rules().declarations().answers())
+                instanceof GetsPast.Always) {
             return true;
         }
         if (Core.withoutStanding(e) instanceof Core.PreservedCall call) {
@@ -2491,7 +2494,8 @@ final class Pullback {
     private RoundedToAWholeNumber.Written writtenRounding(Core e, InputReads reads) {
         return RoundedToAWholeNumber.written(e,
                 policy -> WrittenOutElements.reading(read.rules().symbols(),
-                        read.rules().newtypes()).standing(policy, reads).value());
+                        read.rules().newtypes()).standing(policy, reads).value(),
+                read.rules().declarations().answers());
     }
 
     /**
@@ -3311,8 +3315,8 @@ final class Pullback {
         /** The comparisons over a total read once for every way of keeping its elements
          *  ({@link Derivation.WaysWrittenWhenAsked}), each by its very step, with what a run taking
          *  a way works out making the total that way comes to ({@link Pullback#keptOnceFor}). */
-        private final Tallied.Table<Derivation, Function<LinearForm<Quantity>,
-                UndividedByARelation.Working>> onTheWays = said.table(IdentityHashMap::new);
+        private final Tallied.Table<Derivation, TotalOnItsWays> onTheWays =
+                said.table(IdentityHashMap::new);
 
         void readByTheFormOf(Core call, Core dividend) {
             readByTheFormOf.put(call, dividend);
@@ -3441,7 +3445,7 @@ final class Pullback {
         void readOnTheWays(Derivation.WaysWrittenWhenAsked ways, Core total,
                            Function<LinearForm<Quantity>, UndividedByARelation.Working>
                                    totalOfAWay) {
-            onTheWays.put(ways, totalOfAWay);
+            onTheWays.put(ways, new TotalOnItsWays(total, totalOfAWay));
             saysOnItsWays(total, true);
         }
 
@@ -3462,21 +3466,20 @@ final class Pullback {
          */
         List<StopEvidence.OnAnArm> onTheWays(Derivation.WaysWrittenWhenAsked ways,
                                              Proposition reached) {
+            TotalOnItsWays read = onTheWays.get(ways);
             if (!Conclusion.everyWayIsWrittenOut(ways.kept())) {
                 return List.of(new StopEvidence.OnAnArm(reached,
-                        StopEvidence.ofWhatIsToldOf(A_TOTAL_UNTOLD)));
+                        StopEvidence.ofWhatIsToldOf(read.untold())));
             }
-            Function<LinearForm<Quantity>, UndividedByARelation.Working> totalOfAWay =
-                    onTheWays.get(ways);
             List<StopEvidence.OnAnArm> out = new ArrayList<>();
             ways.forEachWay(() -> reached, (taken, there) -> {
                 UndividedByARelation.Working worked = switch (LinearForm.sum(there)) {
                     case ExactAnswer.Held<LinearForm<Quantity>>(var total) ->
-                            totalOfAWay.apply(total);
+                            read.ofAWay().apply(total);
                     case ExactAnswer.Unheld<LinearForm<Quantity>> _ -> null;
                 };
                 StopEvidence stops = StopEvidence.ofWhatIsToldOf(
-                        worked == null ? A_TOTAL_UNTOLD : worked);
+                        worked == null ? read.untold() : worked);
                 if (!stops.tellsNoOperation()) {
                     out.add(StopEvidence.OnAnArm.takenWhere(taken, stops));
                 }
@@ -11663,11 +11666,23 @@ final class Pullback {
         return written;
     }
 
-    /** What a run works out making a total whose stop no reading tells: no operation told, and a
-     *  stop that may be left, which the report says as not every one told. */
-    private static final UndividedByARelation.Working A_TOTAL_UNTOLD =
-            new UndividedByARelation.Working(List.of(), WhatARelationLeavesUndivided.Told.EVERY,
-                    true, List.of(), true);
+    /**
+     * A total read once for every way of keeping its elements: the call that makes it, and what a
+     * run taking a way works out making the total that way comes to.
+     */
+    private record TotalOnItsWays(Core total,
+                                  Function<LinearForm<Quantity>, UndividedByARelation.Working>
+                                          ofAWay) {
+
+        /** What a run works out making the total where no reading tells its stop: no operation
+         *  told, and a stop that may be left at the call, which the report says as not every one
+         *  told and names there. */
+        UndividedByARelation.Working untold() {
+            return new UndividedByARelation.Working(List.of(),
+                    WhatARelationLeavesUndivided.Told.EVERY, true, List.of(), true,
+                    NotAccountedFor.aStopAt(total));
+        }
+    }
 
     /**
      * What the elements of {@code total} come to as forms, in the order they are written, or null
@@ -14589,8 +14604,9 @@ final class Pullback {
         boolean keptThen = keeps(step.then(), carried);
         boolean keptElse = keeps(step.els(), carried);
         Core selected = keptThen ? step.els() : step.then();
-        if (keptThen == keptElse || !WhatARunMayEndFor.of(step.cond()).endsNone()
-                || !WhatARunMayEndFor.of(selected).endsNone()
+        BehaviorAnswers answers = read.rules().declarations().answers();
+        if (keptThen == keptElse || !ARowsRun.getsPastBeneath(step.cond(), answers)
+                || !ARowsRun.getsPastBeneath(selected, answers)
                 || WhatABodyReads.binding(step.cond(), carried)
                 || WhatABodyReads.binding(selected, carried)) {
             return null;
@@ -16588,7 +16604,8 @@ final class Pullback {
             // A step that may end a run does so on every run that hands it such an element,
             // whatever the comparison of its answers comes to, and what ends the run is told by
             // the reading of the step's own application, which this one does not make.
-            if (!WhatARunMayEndFor.endsNoneBeneath(step.step().body())) {
+            if (!ARowsRun.getsPastBeneath(step.step().body(),
+                    read.rules().declarations().answers())) {
                 return null;
             }
             steps.add(step);

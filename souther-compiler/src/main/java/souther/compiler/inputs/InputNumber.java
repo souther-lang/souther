@@ -1,5 +1,6 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.ARowsRun;
 import souther.compiler.check.AnOperationApplied;
 import souther.compiler.check.BoundOperationFacts;
 import souther.compiler.check.DateShifts;
@@ -15,7 +16,6 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.WalkElements;
-import souther.compiler.check.WhatARunMayEndFor;
 import souther.compiler.core.Core;
 import souther.compiler.numeric.DateTranslation;
 import souther.compiler.numeric.ExactAnswer;
@@ -250,7 +250,8 @@ public final class InputNumber {
         // to tell where it works out nothing that may end a run, or where it answers a test of
         // the element: a comparison it makes is read as a comparison, on each element.
         return (closure.body().type() == Type.BOOL
-                || WhatARunMayEndFor.endsNoneBeneath(closure.body())) ? List.of() : null;
+                || ARowsRun.getsPastBeneath(closure.body(), source.declarations().answers()))
+                ? List.of() : null;
     }
 
     /**

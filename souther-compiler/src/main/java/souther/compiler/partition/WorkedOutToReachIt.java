@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.abort.AbortKind;
 import souther.compiler.abort.GetsPast;
+import souther.compiler.check.ARowsRun;
 import souther.compiler.check.AnOperationApplied;
 import souther.compiler.check.BehaviorAnswers;
 import souther.compiler.check.BoundOperationFacts;
@@ -43,13 +44,11 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
-import souther.compiler.semantics.ResultBound;
 import souther.compiler.semantics.ResultRange;
 import souther.compiler.semantics.WhereAnOperatorAnswers;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
-import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -590,13 +589,10 @@ final class WorkedOutToReachIt {
      * where the discharge check proved every clause of it under what holds where it is made
      * ({@link BehaviorAnswers#shownToHold}), and where its clauses fold to true over what it is
      * handed ({@link #aConstructionEndsNoRun}).
-     * A premise the model states ends none ({@link #statesThatNoRowsRunReachesIt}).
+     * Anything else is gotten past where a run of a row gets past it ({@link ARowsRun}).
      */
     private boolean itselfEndsNoRun(Denotation value) {
         Core written = Core.withoutStanding(value.value());
-        if (statesThatNoRowsRunReachesIt(written)) {
-            return true;
-        }
         if (written instanceof Core.Construct made) {
             return value.at().builtByAnAttempt(made)
                     || read.rules().declarations().answers()
@@ -606,21 +602,10 @@ final class WorkedOutToReachIt {
         if (stopsOnlyOnAnOperandThatIsNotNought(value)) {
             return true;
         }
-        // Whether a run stops in a behavior called is asked of the behavior over its own inputs,
-        // whatever this call hands it and however the caller comes by it: no body of one is read
-        // here.
-        if (AnOperationApplied.of(written) instanceof AnOperationApplied applied
-                && applied.operation() instanceof ValueName.Behavior behavior) {
-            return read.rules().declarations().answers().rowsRunsGetPast(behavior);
-        }
-        if (!closuresApart) {
-            return WhatARunMayEndFor.itself(written).endsNone()
-                    || endsARowsRunOnlyPastTheRepresentation(written);
-        }
-        // The sites a library call works out are the ones it may end a run at, and it ends none
-        // where the library shows it answers whatever it is handed.
-        return WhatARunMayEndFor.itselfApartFromTheClosuresWrittenAtIt(written).endsNone()
-                || completionOfARowsRun(written) instanceof GetsPast.Always;
+        BehaviorAnswers answers = read.rules().declarations().answers();
+        return closuresApart
+                ? ARowsRun.completionOf(written, answers) instanceof GetsPast.Always
+                : ARowsRun.getsPastWhole(written, answers);
     }
 
     /**
@@ -636,53 +621,6 @@ final class WorkedOutToReachIt {
         }
         FormRange numbers = numbersOf(new Denotation(operand, value.at()));
         return numbers != null && !numbers.holds(ExactRatio.ZERO);
-    }
-
-    /**
-     * Where {@code e} itself answers on a run of a row, apart from the closures written at it: as
-     * its owner says ({@link WhatARunMayEndFor#completionApartFromTheClosuresWrittenAtIt}), but
-     * everywhere where it ends a run only past what the representation holds
-     * ({@link GetsPast#endsOnlyPastTheRepresentation}).
-     *
-     * <p>A class is drawn over the values a model tells apart, and where a {@code String} or a
-     * collection stops is none of those: the longest string ends no class of a length
-     * ({@link ResultBound.Limit}), and a run stopped only because an answer is past it does not
-     * part the values either. So the runs a relation is read over are taken to get past such an
-     * operation, and that a run stops there is said once, of the operation
-     * ({@link StopPastTheRepresentation}). What the owner says stands for every reader that is
-     * not drawing classes: a proof that a body ends no run asks the owner.
-     */
-    static GetsPast completionOfARowsRun(Core e) {
-        if (statesThatNoRowsRunReachesIt(e)) {
-            return new GetsPast.Always();
-        }
-        GetsPast owned = WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(e);
-        return owned.endsOnlyPastTheRepresentation() ? new GetsPast.Always() : owned;
-    }
-
-    /**
-     * Whether {@code e} is an {@code unreachable}, which states the premise that no run reaches it
-     * (spec §unreachable): a run of a row is taken to get past it, and one that reaches it is the
-     * model's fault there, told of when the row is run. Taken by every reader of what a row's run
-     * gets past, so the body it is written in, a caller of that body and a helper read where it is
-     * called take it alike. What the owner says stands for every reader that asks whether a run
-     * stops: one that reaches it aborts. A construction whose invariant is not shown to hold on
-     * every run that makes it is no premise anything writes, and is not taken so.
-     */
-    private static boolean statesThatNoRowsRunReachesIt(Core e) {
-        return Core.withoutStanding(e) instanceof Core.Unreachable;
-    }
-
-    /**
-     * Whether {@code e}, read whole, ends a run only past what the representation holds: where
-     * what it ends a run for whole is what it ends one for apart from the closures written at it,
-     * as the owner says both, where it answers apart from them is where it answers.
-     */
-    private static boolean endsARowsRunOnlyPastTheRepresentation(Core e) {
-        return WhatARunMayEndFor.itself(e)
-                .equals(WhatARunMayEndFor.itselfApartFromTheClosuresWrittenAtIt(e))
-                && WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(e)
-                        .endsOnlyPastTheRepresentation();
     }
 
     /**
@@ -745,7 +683,13 @@ final class WorkedOutToReachIt {
 
     /** Whether working out {@code value}, and what each name read in it was given, ends no run. */
     boolean endsNoRun(Denotation value) {
-        return endsNoRun(value, new Question(onTheWay));
+        return whereARunMayEnd(value).isEmpty();
+    }
+
+    /** Where working out {@code value}, and what each name read in it was given, may end a run:
+     *  the expression whose own working may end one; none where it ends none. */
+    Optional<Denotation> whereARunMayEnd(Denotation value) {
+        return Optional.ofNullable(whereItMayEnd(value, new Question(onTheWay)).at());
     }
 
     /** Where working out {@code closure} where {@code call} applies it may end a run, asked with

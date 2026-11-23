@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.abort.GetsPast;
 import souther.compiler.core.ConstructionProjection;
 import souther.compiler.core.Core;
 import souther.compiler.core.Evaluated;
@@ -428,7 +429,7 @@ public final class ValueStanding {
      */
     static <E, N extends Names<E, N>> boolean theConstructionAndItsRestEndNone(
             Core.FieldAccess fa, E at, N names, BindingWalk<?> following,
-            BiPredicate<Core.Construct, Core> makingEndsNone) {
+            BiPredicate<Core.Construct, Core> makingEndsNone, BehaviorAnswers answers) {
         Set<Core> read = Collections.newSetFromMap(new IdentityHashMap<>());
         for (Standing<E, N> target : of(fa.target(), at, names, following)) {
             if (!(Core.withoutStanding(target.value()) instanceof Core.Construct nd)) {
@@ -452,8 +453,11 @@ public final class ValueStanding {
             }
         }
         return endsNoneWhenWorkedOut(new Standing<>(fa.target(), at, names), read,
-                makingEndsNone, following);
+                new Asked(makingEndsNone, answers), following);
     }
+
+    /** What a construction met on the way is asked of, and what the behaviors called answer. */
+    private record Asked(BiPredicate<Core.Construct, Core> making, BehaviorAnswers answers) {}
 
     /**
      * What reading {@code value}, where {@code from} stands, works out of its own: the expression
@@ -488,16 +492,15 @@ public final class ValueStanding {
      * them. A name the environment says nothing of is one this cannot judge. A call or a choice
      * the environment enters is what {@link Evaluated} says it works out and then the part it
      * enters; a {@code let} is its value and its body; a construction ends none where
-     * {@code makingEndsNone} says so of it over the one value it wraps, and its parts are worked
-     * out all the same.
+     * {@code asked} says so of it over the one value it wraps, and its parts are worked out all
+     * the same; anything else ends none where a run of a row gets past it ({@link ARowsRun}).
      *
      * <p>Where the environment does not say which part of a node is entered, every part of it is
      * asked. That may refuse a run that never works one of them out, and never accepts one that
      * does: the answer is no more than the nodes written under {@code written} allow.
      */
     private static <E, N extends Names<E, N>> boolean endsNoneWhenWorkedOut(
-            Standing<E, N> written, Set<Core> apart,
-            BiPredicate<Core.Construct, Core> makingEndsNone, BindingWalk<?> following) {
+            Standing<E, N> written, Set<Core> apart, Asked asked, BindingWalk<?> following) {
         Core e = Core.withoutStanding(written.value());
         if (apart.contains(e)) {
             return true;
@@ -509,9 +512,9 @@ public final class ValueStanding {
             }
             boolean ends = switch (led) {
                 case Named.One<E, N>(Standing<E, N> one) ->
-                        endsNoneWhenWorkedOut(one, apart, makingEndsNone, following);
+                        endsNoneWhenWorkedOut(one, apart, asked, following);
                 case Named.OneOf<E, N>(List<Standing<E, N>> members) -> members.stream()
-                        .allMatch(one -> endsNoneWhenWorkedOut(one, apart, makingEndsNone,
+                        .allMatch(one -> endsNoneWhenWorkedOut(one, apart, asked,
                                 following));
             };
             following.leave(r.binding());
@@ -521,28 +524,28 @@ public final class ValueStanding {
         if (taken != null) {
             for (Evaluated.Step step : Evaluated.inOrder(e)) {
                 if (!endsNoneWhenWorkedOut(new Standing<>(step.expression(), written.at(),
-                        written.names()), apart, makingEndsNone, following)) {
+                        written.names()), apart, asked, following)) {
                     return false;
                 }
             }
-            return endsNoneWhenWorkedOut(taken, apart, makingEndsNone, following);
+            return endsNoneWhenWorkedOut(taken, apart, asked, following);
         }
         if (e instanceof Core.LetIn let) {
             return endsNoneWhenWorkedOut(new Standing<>(let.value(), written.at(),
-                    written.names()), apart, makingEndsNone, following)
+                    written.names()), apart, asked, following)
                     && endsNoneWhenWorkedOut(new Standing<>(let.body(),
                     written.names().inside(let, written.at()), written.names()), apart,
-                    makingEndsNone, following);
+                    asked, following);
         }
         boolean itself = e instanceof Core.Construct nd
-                ? makingEndsNone.test(nd, wrappedBy(nd, written, following))
-                : WhatARunMayEndFor.itselfApartFromTheClosuresWrittenAtIt(e).endsNone();
+                ? asked.making().test(nd, wrappedBy(nd, written, following))
+                : ARowsRun.completionOf(e, asked.answers()) instanceof GetsPast.Always;
         if (!itself) {
             return false;
         }
         boolean[] under = {true};
         Core.forEachChild(e, child -> under[0] = under[0] && endsNoneWhenWorkedOut(
-                new Standing<>(child, written.at(), written.names()), apart, makingEndsNone,
+                new Standing<>(child, written.at(), written.names()), apart, asked,
                 following));
         return under[0];
     }
