@@ -613,10 +613,11 @@ public sealed interface ReportMessage extends Message {
     /** Why: the input's types declare invariants or cases, and no input meeting them is built. */
     record NoInputMeetingTheTypesIsBuilt() implements ReportMessage, Prose {}
 
-    /** Why: no input tried takes the operation past its type. */
-    record NoInputTriedTakesItPastItsType() implements ReportMessage, Prose {}
+    /** Why: no input tried stops a run there: takes the operation past its type, or brings the
+     *  divisor to nought. */
+    record NoInputTriedStopsARunThere() implements ReportMessage, Prose {}
 
-    /** Why: the inputs tried ran out before one took the operation past its type. */
+    /** Why: the inputs tried ran out before one stopped a run there. */
     record TheInputsTriedRanOut() implements ReportMessage, Prose {}
 
     /** Where a run that gets to a rule stops, said of a rule where no run is shown to get

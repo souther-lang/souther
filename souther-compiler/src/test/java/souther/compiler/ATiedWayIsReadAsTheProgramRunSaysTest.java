@@ -306,7 +306,7 @@ class ATiedWayIsReadAsTheProgramRunSaysTest {
                 let b (e, p) = Out { value =
                     if Rational.toInt(UP, e.value / p) >= 2 then 1 else 2 }
                 """);
-        assertTrue(stops.contains("· may stop a run: comparison"), stops);
+        assertTrue(stops.contains("gets here and stops in division by p"), stops);
         assertFalse(stops.contains("stop not resolved"), stops);
         String keptAway = reportOf("""
                 module demo
@@ -329,7 +329,7 @@ class ATiedWayIsReadAsTheProgramRunSaysTest {
     @Test
     void aStopIsShownAtTheFirstOfTwoDivisionsOneInTheOtherAndNotAtTheSecond() {
         String said = reportOf(quotientOfAQuotient("p == 0"));
-        assertTrue(said.contains("· may stop a run: comparison"), said);
+        assertTrue(said.contains("gets here and stops in division by p"), said);
         assertTrue(said.contains("whether a run stops in division by q is not determined"), said);
         assertFalse(said.contains("whether a run stops in division by p"), said);
     }
@@ -351,7 +351,7 @@ class ATiedWayIsReadAsTheProgramRunSaysTest {
                     if q >= 9223372036854775807 then
                         (if Rational.toInt(DOWN, (e / p) / (q + 1)) >= 2 then 1 else 2) else 3 }
                 """);
-        assertTrue(said.contains("· may stop a run: comparison"), said);
+        assertTrue(said.contains("gets here and stops in division by p"), said);
     }
 
     /** {@code (e / p) / q} compared, on the way where {@code way} holds. */
@@ -418,7 +418,7 @@ class ATiedWayIsReadAsTheProgramRunSaysTest {
         assertEquals(-1, ranTo(loader, behavior, 1, 0));
         assertTrue(ranTo(loader, behavior, 2, 1) > 0);
         String said = reportOf(model);
-        assertTrue(said.contains("· may stop a run: comparison"), said);
+        assertTrue(said.contains("gets here and stops in division by i.p"), said);
     }
 
     /**

@@ -247,21 +247,23 @@ sealed interface ClosureApplications {
          * {@code everyOf}, where it is one application standing for every element of that
          * position, on every element this one is — and handed {@code values}, which are made
          * wherever {@code held} holds: where the container holds them. Of one value written out
-         * where {@code ofOne}, and otherwise standing for every element a container holds.
+         * where {@code apart} holds what it is made under apart from where the applications before
+         * it answer ({@link Application#held}), and otherwise standing for every element a
+         * container holds.
          *
          * <p>Which call made an application is carried here and handed on only by these, so
          * nothing a reading reads it in passing ({@code WhatExplainsACountIsReadOnlyWhereItIsTold}).
          */
         Application inside(InputReads names, Proposition where, ElementsMetOn on,
                            Optional<MadeBy> by, Optional<TermPath> everyOf,
-                           List<Denotation> values, Proposition held, boolean ofOne) {
+                           List<Denotation> values, Proposition held,
+                           Optional<Proposition> apart) {
             List<MadeBy> deeper = new ArrayList<>(madeBy);
             by.ifPresent(deeper::add);
             List<Handed> handedDeeper = new ArrayList<>(handed);
             values.forEach(value -> handedDeeper.add(new Handed(value, held)));
             return new Application(names, where, carriedIntoTheFirst, on, deeper,
-                    madeOnEvery.inside(everyOf), handedDeeper,
-                    ofOne ? Optional.of(held) : Optional.empty());
+                    madeOnEvery.inside(everyOf), handedDeeper, apart);
         }
 
         /** {@code stated}, said to be the statement of this application of each call it is
@@ -469,6 +471,11 @@ sealed interface ClosureApplications {
                     // whatever the applications before it answered.
                     List<Proposition> held = WhereAnApplicationIsMade.reached(null, keptBy,
                             HowAClosureIsApplied.TO_EVERY_ELEMENT, around.reached());
+                    // An operation that stops at an answer makes an application only where the
+                    // ones before it did not answer so: that is what it is made under apart from
+                    // where they answer at all.
+                    boolean stopsShort = saysWhereEachIsMade
+                            && how != HowAClosureIsApplied.TO_EVERY_ELEMENT;
                     for (int at = 0; at < each.size(); at++) {
                         int ordinal = at;
                         InputReads names = each.get(at).reads();
@@ -483,7 +490,8 @@ sealed interface ClosureApplications {
                         }
                         out.add(around.inside(names, reached.get(at), around.metOn(),
                                 madeBy.map(call -> new MadeBy(asWritten(call, symbols), ordinal)),
-                                Optional.empty(), values, held.get(at), true));
+                                Optional.empty(), values, held.get(at), Optional.of(stopsShort
+                                        ? reached.get(at) : held.get(at))));
                     }
                 }
                 case InputReads.Applications.NoneHanded _ -> {
@@ -501,7 +509,7 @@ sealed interface ClosureApplications {
                             saysWhereEachIsMade ? metOn(block, containers, around, entered, read)
                                     : around.metOn(), Optional.empty(),
                             everyElementOf(block, containers, around, read), List.of(),
-                            around.reached(), false));
+                            around.reached(), Optional.empty()));
                 }
                 case InputReads.Applications.Unsaid _ -> {
                     return new NotSaid(around.metOn().notSaidAnywhere(new ReadingGap.ReachNotRead(
@@ -694,6 +702,17 @@ sealed interface ClosureApplications {
      *  no container of the input it stops short in, and no way to a call of a helper it is in. */
     static boolean madeWhereverTheContainerHoldsIt(Application one) {
         return one.metOn().levels().isEmpty()
+                && one.metOn().made() instanceof Proposition.Always(boolean made) && made;
+    }
+
+    /**
+     * Whether {@code one}, standing for every element a container holds, is made on the first
+     * element of a container holding one whatever the row: nothing but where an operation stops
+     * short in a container is asked ({@link ElementsMetOn.Level.StopsAt}), which is of the
+     * elements before it, and there are none before the first.
+     */
+    static boolean madeOnTheFirstElementWhateverTheRow(Application one) {
+        return one.metOn().levels().stream().allMatch(ElementsMetOn.Level.StopsAt.class::isInstance)
                 && one.metOn().made() instanceof Proposition.Always(boolean made) && made;
     }
 

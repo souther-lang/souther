@@ -398,7 +398,7 @@ final class StopsOfABody {
                 }
                 out.add(new Reached(met, reach, one.reads(),
                         ClosureApplications.madeWhateverTheRow(one)
-                                || (ClosureApplications.madeWhereverTheContainerHoldsIt(one)
+                                || (ClosureApplications.madeOnTheFirstElementWhateverTheRow(one)
                                         && madeOnTheElementAs(one.reached()) != null),
                         before, one.reached(), true));
                 continue;
@@ -427,9 +427,9 @@ final class StopsOfABody {
                     before.add(new Part(closure.body(), earlier.reads()));
                 }
             }
-            // A body that is a truth may be one an operation stops at the first answer of, and
-            // what the applications before answered then decides whether this one is made.
-            boolean onTheWay = before == null || Type.BOOL.equals(closure.body().type())
+            // Where an operation stops at an answer, what the applications before answered decides
+            // whether this one is made, which is what it is held under then.
+            boolean onTheWay = before == null
                     ? ClosureApplications.madeWhateverTheRow(one)
                     : ClosureApplications.madeWhereverTheOnesBeforeItAreGotPast(one);
             out.add(new Reached(met, reach, reads, onTheWay, before, one.reached(), false));
@@ -1911,29 +1911,44 @@ final class StopsOfABody {
     }
 
     /**
-     * What every way shows, put together operation by operation as {@link #ofAnOperation} says:
-     * a stop shown by one way, whatever the others come to; otherwise the first not resolved;
-     * otherwise none, where the ways are every way, and not resolved where they are not.
+     * What every way shows, put together site by site as {@link #ofAnOperation} says: of each
+     * kind of site the step has — its own operation past its ends, its divisor at nought, and
+     * what is said of the step as a whole — a stop shown by one way, whatever the others come
+     * to, and otherwise the first not resolved; and where no way shows or leaves any, none, where
+     * the ways are every way, and not resolved where they are not. A stop shown of one site
+     * leaves what is not resolved of another said beside it.
      */
     private static List<StopAssessment.Judgement> together(
             List<List<StopAssessment.Judgement>> byWay, boolean every) {
-        List<StopAssessment.Judgement> all = new ArrayList<>();
-        byWay.forEach(all::addAll);
-        for (StopAssessment.Judgement each : all) {
-            if (each instanceof StopAssessment.Judgement.Stops) {
-                return List.of(each);
+        Map<Object, List<StopAssessment.Judgement>> bySite = new LinkedHashMap<>();
+        for (List<StopAssessment.Judgement> way : byWay) {
+            for (StopAssessment.Judgement each : way) {
+                StopAssessment.Site site = switch (each) {
+                    case StopAssessment.Judgement.Stops(var shown) -> shown.site();
+                    case StopAssessment.Judgement.Unresolved(var at, var _, var _) -> at;
+                    case StopAssessment.Judgement.Safe(var at, var _) -> at;
+                };
+                bySite.computeIfAbsent(site == null ? StopsOfABody.class : site.getClass(),
+                        _ -> new ArrayList<>()).add(each);
             }
         }
-        for (StopAssessment.Judgement each : all) {
-            if (each instanceof StopAssessment.Judgement.Unresolved) {
-                return List.of(each);
-            }
+        List<StopAssessment.Judgement> out = new ArrayList<>();
+        for (List<StopAssessment.Judgement> judged : bySite.values()) {
+            judged.stream().filter(StopAssessment.Judgement.Stops.class::isInstance).findFirst()
+                    .or(() -> judged.stream()
+                            .filter(StopAssessment.Judgement.Unresolved.class::isInstance)
+                            .findFirst())
+                    .ifPresent(out::add);
+        }
+        if (!out.isEmpty()) {
+            return out;
         }
         if (!every) {
             return List.of(new StopAssessment.Judgement.Unresolved(null,
                     WhyAStopIsNotShown.REACH_NOT_SHOWN));
         }
-        return all.isEmpty() ? List.of(new StopAssessment.Judgement.Safe(null,
-                StopAssessment.WhyNone.NOT_WORKED_OUT)) : List.of(all.getFirst());
+        return bySite.isEmpty() ? List.of(new StopAssessment.Judgement.Safe(null,
+                StopAssessment.WhyNone.NOT_WORKED_OUT))
+                : List.of(bySite.values().iterator().next().getFirst());
     }
 }

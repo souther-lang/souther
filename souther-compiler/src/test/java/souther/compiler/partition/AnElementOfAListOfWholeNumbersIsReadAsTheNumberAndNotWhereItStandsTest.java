@@ -31,10 +31,10 @@ class AnElementOfAListOfWholeNumbersIsReadAsTheNumberAndNotWhereItStandsTest {
     }
 
     /** The same comparison over an element of a list of the input is a line on the form, a
-     *  relation of the element to another value, and a rule a run that gets there stops in where
-     *  the sum is past its type. The sum is over an element, which no existence of a run stopping
-     *  is shown over, so the stop is said as not resolved, with the rows every run getting there
-     *  stops at. */
+     *  relation of the element to another value, and each of its sums a step a run that gets
+     *  there stops at where the sum is past its type. What a walk stopping at an answer is made
+     *  under is not read as relations, so each stop is said as not resolved, with the rows every
+     *  run getting there stops at. */
     @Test
     void theSameComparisonOverAnElementOfTheInputIsReadAsItWas() {
         List<String> report = report("a: Int, ns: List<Nat>",
@@ -42,13 +42,14 @@ class AnElementOfAListOfWholeNumbersIsReadAsTheNumberAndNotWhereItStandsTest {
         assertEquals(List.of(
                 "· no line: comparison@4:41 — it relates the value here to another value rather"
                         + " than dividing the values here, about `ns[*]`",
-                "· stop not resolved: comparison@4:41; whether a run stops in a + ns[*] is not"
-                        + " determined: " + ON_EACH_ELEMENT + "; whether a run stops in"
-                        + " a + ns[*] + 3 is not determined: " + ON_EACH_ELEMENT
-                        + "; a run that gets there stops in"
-                        + " a + ns[*] where a + ns[*] is at least 9223372036854775808, in"
-                        + " a + ns[*] + 3 where a + ns[*] is 9223372036854775805 to"
-                        + " 9223372036854775807, and it is not shown that any such run exists"),
+                "· stop not resolved: 4:33; whether a run stops in a + ns[*] is not determined: "
+                        + A_CONDITION_NOT_READ + "; a run that gets there stops in a + ns[*] where"
+                        + " a + ns[*] is at least 9223372036854775808, and it is not shown that"
+                        + " any such run exists",
+                "· stop not resolved: 4:37; whether a run stops in a + ns[*] + 3 is not"
+                        + " determined: " + A_CONDITION_NOT_READ + "; a run that gets there stops"
+                        + " in a + ns[*] + 3 where a + ns[*] is at least 9223372036854775805, and"
+                        + " it is not shown that any such run exists"),
                 report.stream().filter(line -> line.startsWith("· no line")
                         || line.startsWith("· may stop")
                         || line.startsWith("· stop not resolved")).toList());
@@ -58,15 +59,16 @@ class AnElementOfAListOfWholeNumbersIsReadAsTheNumberAndNotWhereItStandsTest {
 
     /**
      * A sum over where an element stands, past the type at some places and at none for every
-     * place of a row, may stop some runs and no form of the input says which: it is a rule whose
+     * place of a row, may stop some runs and no form of the input says which: it is a step whose
      * stop is not resolved, with no rows where every run does.
      */
     @Test
-    void aSumPastItsTypeAtSomePlacesIsARuleWhoseStopIsNotResolved() {
+    void aSumPastItsTypeAtSomePlacesIsAStepWhoseStopIsNotResolved() {
         List<String> report = report("a: Nat, xs: List<Int>",
                 "List.any(b -> b, List.mapIndexed((i, _) -> a.value + i >= 10, xs))");
-        assertEquals(List.of("· stop not resolved: comparison@4:72; whether a run stops in a + i"
-                        + " is not determined: " + ON_EACH_ELEMENT),
+        assertEquals(List.of("· stop not resolved: 4:68; whether a run stops in a + i is not"
+                        + " determined: it is over a value the body works out, such as a total or"
+                        + " a product, and not over numbers of the input"),
                 report.stream().filter(line -> line.startsWith("· may stop")
                         || line.startsWith("· stop not resolved")).toList());
     }
@@ -88,18 +90,18 @@ class AnElementOfAListOfWholeNumbersIsReadAsTheNumberAndNotWhereItStandsTest {
         List<String> report = AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
                 .map(String::strip).toList();
-        assertEquals(List.of("· may stop a run: comparison@3:36 — some run that reaches it stops"
-                        + " in an operation it is read through; every run stops in a + 10 where a"
-                        + " is at least 9223372036854775798"),
+        assertEquals(List.of("· may stop a run: 3:32 — a run with a = 9223372036854775798 gets"
+                        + " here and stops in a + 10; every run that gets here stops in a + 10"
+                        + " where a is at least 9223372036854775798"),
                 report.stream().filter(line -> line.startsWith("· may stop")
                         || line.startsWith("· stop not resolved")).toList());
         assertEquals(List.of("0", "-10"), lines(compilation));
     }
 
-    /** Why a stop worked out on an application is not resolved where the applications before it
-     *  work out what is not read, as the report says it. */
-    private static final String ON_EACH_ELEMENT = "something evaluated before the comparison may"
-            + " end the run first";
+    /** Why a stop worked out on an application is not resolved where what the application is
+     *  made under is not read, as the report says it. */
+    private static final String A_CONDITION_NOT_READ = "a condition on the way is not a comparison"
+            + " of whole numbers of the input, so no input is checked against it";
 
     /** The values of the lines drawn in {@code m}, in the order they are measured. */
     private static List<String> lines(Compilation compilation) {

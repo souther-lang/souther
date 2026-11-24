@@ -7563,7 +7563,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 case A_CONDITION_NOT_READ -> new ReportMessage.AConditionOnTheWayIsNotRead();
                 case NOT_OVER_THE_INPUT -> new ReportMessage.ItIsOverAValueTheBodyWorksOut();
                 case NO_VALUE_SHOWN -> new ReportMessage.NoInputMeetingTheTypesIsBuilt();
-                case NO_VALUE_FOUND -> new ReportMessage.NoInputTriedTakesItPastItsType();
+                case NO_VALUE_FOUND -> new ReportMessage.NoInputTriedStopsARunThere();
                 case NO_VALUE_FOUND_WITHIN_WHAT_IS_TRIED -> new ReportMessage.TheInputsTriedRanOut();
             };
             out.append(page.say(each.operation()
