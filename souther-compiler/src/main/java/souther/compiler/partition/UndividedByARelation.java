@@ -3054,6 +3054,52 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
+     * The rows at which every run that works {@code it} out stops in it, having worked out
+     * {@code before} first: where {@code it} is past an end of its type and each of
+     * {@code before} within its own, said within {@code regions}. A name it is over that a
+     * container hands it ({@link IntOperand.OfABinding}) is handed a value only where the
+     * container holds one, from the least it hands to the greatest: rows where it holds none are
+     * none a run works {@code it} out at. Nothing where one of them has an end that is no form of
+     * the input's numbers, or no such row is in any region.
+     */
+    static List<EveryRunStops> everyRunStopsAt(IntOperation it, List<IntOperation> before,
+                                               InputReading read, List<SearchRegion> regions) {
+        List<Bounded> besides = new ArrayList<>();
+        for (IntOperation one : before) {
+            if (!one.sameOperationAs(it) && !withinItsEnds(one, besides)) {
+                return List.of();
+            }
+        }
+        LinearForm<NumericTerm> atItsLeast = it.atItsEnd(false);
+        LinearForm<NumericTerm> atItsGreatest = it.atItsEnd(true);
+        if (atItsLeast == null || atItsGreatest == null) {
+            return List.of();
+        }
+        List<Bounded> handed = new ArrayList<>();
+        for (IntOperand operand : it.form().coefs().keySet()) {
+            if (operand instanceof IntOperand.OfABinding
+                    && operand.atItsEnd(true) instanceof LinearForm<NumericTerm> most
+                    && operand.atItsEnd(false) instanceof LinearForm<NumericTerm> least
+                    && most.minus(least) instanceof ExactAnswer.Held<LinearForm<NumericTerm>>(
+                            var spread)) {
+                handed.add(new Bounded(spread, BigInteger.ZERO, null));
+            }
+        }
+        Set<EveryRunStops> out = new LinkedHashSet<>();
+        for (Bounded past : List.of(
+                new Bounded(atItsLeast, it.greatest().add(BigInteger.ONE), null),
+                new Bounded(atItsGreatest, null, it.least().subtract(BigInteger.ONE)))) {
+            List<Bounded> rows = new ArrayList<>(besides);
+            rows.add(past);
+            List<EveryRunStops.Within> where = rowsWhere(rows, read, regions, handed);
+            if (where != null && !where.isEmpty()) {
+                out.add(new EveryRunStops(written(it.form()), where));
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /**
      * The bounds on the input that keep every run getting to the comparison from stopping in what
      * it works out, wherever it works it out ({@code worked}): for each place and side, the
      * furthest out a bound on the values of that place can be with every operation that may stop
@@ -3363,6 +3409,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private static List<EveryRunStops.Within> rowsWhere(List<Bounded> bounds, InputReading read,
                                                         List<SearchRegion> regions) {
+        return rowsWhere(bounds, read, regions, List.of());
+    }
+
+    /** The same, of rows a region holds only where they meet {@code besides} as well, which are
+     *  not said among the rows: what every run that gets there meets in any case. */
+    private static List<EveryRunStops.Within> rowsWhere(List<Bounded> bounds, InputReading read,
+                                                        List<SearchRegion> regions,
+                                                        List<Bounded> besides) {
         Map<Map<NumericTerm, ExactRatio>, BigInteger[]> met = new LinkedHashMap<>();
         Set<NumericTerm.FromOnePosition> numbers = new LinkedHashSet<>();
         for (Bounded each : bounds) {
@@ -3429,6 +3483,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         // And every number of them within its type, which every row is, for the regions: a
         // region need not say where a type stops.
+        for (Bounded each : besides) {
+            if (placedOnRows(each.form())) {
+                asked.add(each);
+                each.form().coefs().keySet().forEach(term ->
+                        numbers.add((NumericTerm.FromOnePosition) term));
+            }
+        }
         for (NumericTerm.FromOnePosition number : numbers) {
             LinearForm<NumericTerm> alone = LinearForm.atom(number);
             asked.add(new Bounded(alone, typeEndOf(alone, true, read),

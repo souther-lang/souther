@@ -34,7 +34,7 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
     /** The note of {@code q + 1}. The number is a field of a record that writes a clause on
      *  another field, so a value of the record holding the greatest {@code Int} there, with the
      *  other field at nought, is written down, and the stop is shown. */
-    private static final String THE_STOP = "every run stops in k.q + 1 where k.q is"
+    private static final String THE_STOP = "every run that gets here stops in k.q + 1 where k.q is"
             + " at least 9223372036854775807";
 
     private static final Map<String, String> CONDITIONS = new LinkedHashMap<>();

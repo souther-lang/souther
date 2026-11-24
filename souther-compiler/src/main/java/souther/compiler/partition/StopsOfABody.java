@@ -467,16 +467,21 @@ final class StopsOfABody {
     }
 
     /**
-     * The rows at which every run getting to {@code step} by some way stops there: where its own
-     * operation is past its type and everything worked out before it on that way is within its
-     * own ({@link UndividedByARelation#everyRunStopsIn}). Asked of a way only where what comes
-     * first on it is read.
+     * The rows at which every run that gets to {@code step} by some way stops there: where its
+     * own operation, over numbers of the input, is past its type and everything worked out before
+     * it on that way is within its own ({@link UndividedByARelation#everyRunStopsAt}), within
+     * what the way leaves. Said of the runs that get to the step and of no other, so whether every
+     * run taking the way gets there is not asked: a run that does not stops nowhere here. Asked of
+     * a way only where what comes first on it is read.
      */
     private List<EveryRunStops> everyRunStops(Core step) {
+        if (endsNoRunWhereItsClosureIsApplied(step)) {
+            return List.of();
+        }
         Set<EveryRunStops> out = new LinkedHashSet<>();
         for (Reached each : waysTo(step).each()) {
             WhatAWayLeavesOfAValue left = WhatAWayLeavesOfAValue.along(read, each.reach().way());
-            if (left == null || !each.onTheWay() || !wayRead(each)
+            if (left == null
                     || !(Reachability.of(new WayToTheBorder(each.reach().way()),
                             read.quantities().region()) instanceof Reachability.Reaching reaching)) {
                 continue;
@@ -486,14 +491,11 @@ final class StopsOfABody {
             if (gotPast == null || sites == null) {
                 continue;
             }
-            Set<String> own = new HashSet<>();
-            sites.forEach(site -> own.add(site.written()));
-            StopEvidence evidence = AffineReading.stopsOfEvaluating(Core.withoutStanding(step),
-                    each.reads(), read, readsWith);
-            for (EveryRunStops stops : evidence.everyRunStopsIn(read, List.of(reaching.region()),
-                    gotPast.operations(), EvaluationPlaces.none())) {
-                if (own.contains(stops.operation())) {
-                    out.add(stops);
+            for (StopAssessment.Site site : sites) {
+                if (site instanceof StopAssessment.Site.PastItsEnds(var operation)
+                        && !left.keepsWithinItsEnds(operation)) {
+                    out.addAll(UndividedByARelation.everyRunStopsAt(operation,
+                            gotPast.operations(), read, List.of(reaching.region())));
                 }
             }
         }
@@ -577,6 +579,26 @@ final class StopsOfABody {
     private List<StopAssessment.Site> sitesOf(Core step, Reached reached) {
         Core node = Core.withoutStanding(step);
         List<StopAssessment.Site> out = new ArrayList<>();
+        // Where the reading of what a run works out tells this node's own operation over numbers
+        // the reading answers for, that is it: an element of a list of whole numbers is read
+        // there as the number it is, between the ends of the list. One over a part it held aside
+        // is over no such number, and is read here from its operands.
+        List<StopAssessment.Site> told = new ArrayList<>();
+        for (UndividedByARelation.IntOperation each
+                : evaluated(node, reached.reads()).operations().operations()) {
+            if (each.origin().node() == node && each.form().coefs().keySet().stream()
+                    .allMatch(operand -> switch (operand) {
+                        case UndividedByARelation.IntOperand.OfTheInput(var term) ->
+                                read.quantities().answersFor(term);
+                        case UndividedByARelation.IntOperand.OfABinding _ -> true;
+                        default -> false;
+                    })) {
+                told.add(new StopAssessment.Site.PastItsEnds(each));
+            }
+        }
+        if (!told.isEmpty()) {
+            return told;
+        }
         // An operation of two Ints is its operator over what its operands come to.
         UndividedByARelation.IntOperation own = ownOperation(node, reached.reads());
         if (own == null) {
@@ -1381,8 +1403,11 @@ final class StopsOfABody {
         return switch (site) {
             case StopAssessment.Site.PastItsEnds(var operation) -> {
                 LinearForm<NumericTerm> form = operation.overTheInput();
-                FormRange range = form == null ? null
-                        : FormRange.of(form, read, boundsUnder(form, holding, true));
+                if (form == null) {
+                    yield handedNothingUnder(operation, holding)
+                            || withinAtItsEndsUnder(operation, holding);
+                }
+                FormRange range = FormRange.of(form, read, boundsUnder(form, holding, true));
                 yield range != null && range.liesWithin(operation.least(), operation.greatest());
             }
             case StopAssessment.Site.ByNought(var divisor) -> {
@@ -1391,6 +1416,42 @@ final class StopsOfABody {
                 yield range != null && !range.holds(ExactRatio.ZERO);
             }
         };
+    }
+
+    /** Whether some name {@code operation} is over that a container hands it
+     *  ({@link UndividedByARelation.IntOperand.OfABinding}) is handed nothing on any row meeting
+     *  {@code holding}: the greatest it is handed is below the least. No run works it out there. */
+    private boolean handedNothingUnder(UndividedByARelation.IntOperation operation,
+                                       List<TakenConstraint.Affine> holding) {
+        for (UndividedByARelation.IntOperand operand : operation.form().coefs().keySet()) {
+            if (operand instanceof UndividedByARelation.IntOperand.OfABinding
+                    && operand.atItsEnd(true) instanceof LinearForm<NumericTerm> most
+                    && operand.atItsEnd(false) instanceof LinearForm<NumericTerm> least
+                    && most.minus(least) instanceof ExactAnswer.Held<LinearForm<NumericTerm>>(
+                            var spread)) {
+                FormRange range = FormRange.of(spread, read, boundsUnder(spread, holding, true));
+                if (range != null && range.greatest().signum() < 0) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /** Whether {@code operation} lies within its ends at its least and at its greatest over the
+     *  values each name it is over is handed ({@link UndividedByARelation.IntOperation#atItsEnd}),
+     *  on every row meeting {@code holding}. */
+    private boolean withinAtItsEndsUnder(UndividedByARelation.IntOperation operation,
+                                         List<TakenConstraint.Affine> holding) {
+        for (boolean greatest : List.of(false, true)) {
+            LinearForm<NumericTerm> end = operation.atItsEnd(greatest);
+            FormRange range = end == null ? null
+                    : FormRange.of(end, read, boundsUnder(end, holding, true));
+            if (range == null || !range.liesWithin(operation.least(), operation.greatest())) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** Each value worked out {@code operation} is over, with the ways a row makes it a number,

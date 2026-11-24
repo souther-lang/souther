@@ -188,24 +188,23 @@ class AnOperationPastItsTypeStopsEveryRunThatGetsToItsComparisonTest {
     }
 
     /**
-     * The sum is worked out on the arm taken where {@code y} is above nought and on no other, so a
-     * run that takes the other arm at the greatest {@code x} gets past: no run stops there.
+     * The sum is worked out on the arm taken where {@code y} is above nought and on no other: the
+     * rows every run stops at are said of the runs that take that arm, and a run that takes the
+     * other at the greatest {@code x} gets past. Where no run takes the arm nothing is said of
+     * it.
      */
     @Test
-    void anOperationOfOneArmStopsNoRunThatTakesAnotherArm() {
-        assertEquals(List.of(),
+    void anOperationOfOneArmStopsOnlyTheRunsThatTakeIt() {
+        assertEquals(List.of("x + 1 where x " + GREATEST + ".."),
                 everyRunStops("Int", "x", "", "(if y > 0 then x + 1 else x) == z"));
         assertEquals(1, stopsSaid("Int", "x", "", "(if y > 0 then x + 1 else x) == z").size());
         assertEquals(List.of(), stopsSaid("Int", "x", "guard y <= 0 else No { n = 0 }",
                 "(if y > 0 then x + 1 else x) == z"));
         String byCases = "(match x with | A -> y + 1 | B -> y) == z";
-        assertEquals(List.of(), everyRunStops("Kind", "x", "", byCases));
+        assertEquals(List.of("y + 1 where y " + GREATEST + ".."),
+                everyRunStops("Kind", "x", "", byCases));
         assertEquals(1, stopsSaid("Kind", "x", "", byCases).size());
         assertEquals(List.of(), stopsSaid("Kind", "x", "guard x == B else No { n = 0 }", byCases));
-        assertTrue(everyRunStops("Int", "x", "",
-                        "(if y > 0 then x + 1 else x) + (z + 1) == 0").stream()
-                .noneMatch(stop -> stop.startsWith("x + 1 ")),
-                "the arm taken where y is above nought is not the only way to the comparison");
     }
 
     /**
@@ -277,14 +276,17 @@ class AnOperationPastItsTypeStopsEveryRunThatGetsToItsComparisonTest {
      * Each element of a list written out is a number of its own, and the sum over the last is
      * past the greatest where {@code x} is nine below it, and not ten: the run stops in it there,
      * after the sum over the first got past. Read element by element up to a figure, a list of
-     * every whole number between two numbers written down is the same.
+     * every whole number between two numbers written down is the same, each application a step
+     * of its own: the run that gets to the last got past the one before it, at {@code x} nine
+     * below the greatest and no more.
      */
     @Test
     void aSumOverTheLastElementOfAListWrittenOutStopsEveryRunPastIt() {
         assertEquals(List.of("x + 10 where x " + plus(GREATEST, -9) + ".."),
                 everyRunStops("Int", "x", "", "List.all(n -> n + x >= 0, [0, 10])"));
-        assertEquals(List.of("x + 10 where x " + plus(GREATEST, -9) + ".." + plus(GREATEST, -9)),
-                everyRunStops("Int", "x", "", "List.all(n -> n + x >= 0, List.rangeInclusive(0, 10))"));
+        assertTrue(everyRunStops("Int", "x", "",
+                        "List.all(n -> n + x >= 0, List.rangeInclusive(0, 10))")
+                .contains("x + 10 where x " + plus(GREATEST, -9) + ".." + plus(GREATEST, -9)));
     }
 
     /**
@@ -368,12 +370,14 @@ class AnOperationPastItsTypeStopsEveryRunThatGetsToItsComparisonTest {
     }
 
     /** A remainder worked out on one arm only is worked out by no run taking the other: the sum
-     *  under it stops no row of every run. */
+     *  under it stops the runs that take the arm, where it is past the type, and said of them. */
     @Test
-    void theSumARemainderOnOneArmIsOfStopsNoRunThatTakesTheOther() {
+    void theSumARemainderOnOneArmIsOfStopsOnlyTheRunsThatTakeIt() {
         for (String dividend : List.of("x + z", "x + 1")) {
             String comparison = "(if y > 0 then Int.floorMod(" + dividend + ", 7) else 1) >= 1";
-            assertEquals(List.of(), everyRunStops("Int", "x", "", comparison), dividend);
+            assertFalse(everyRunStops("Int", "x", "", comparison).isEmpty(), dividend);
+            assertTrue(everyRunStops("Int", "x", "", comparison).stream()
+                    .allMatch(stop -> stop.startsWith(dividend + " where ")), dividend);
             assertFalse(stopsSaid("Int", "x", "", comparison).isEmpty(), dividend);
             assertEquals(List.of(), stopsSaid("Int", "x", "guard y <= 0 else No { n = 0 }",
                     comparison), dividend);
@@ -407,11 +411,12 @@ class AnOperationPastItsTypeStopsEveryRunThatGetsToItsComparisonTest {
     }
 
     /** The sum the remainder is of is worked out in the order it is written: {@code x + n} is
-     *  past the type before one is added to it, as it is without the remainder. */
+     *  past the type before one is added to it, as it is without the remainder. Each sum is a
+     *  step a run may stop at. */
     @Test
     void aSumUnderTheSumARemainderOverAWholeNumberInTurnIsOfStopsARunFirst() {
         String over = "List.isEmpty(List.filter(n -> %s, List.rangeInclusive(0, y)))";
-        assertEquals(1, stopsSaid("Int", "x", "",
+        assertEquals(2, stopsSaid("Int", "x", "",
                 over.formatted("Int.floorMod((x + n) + 1, 7) == 0")).size());
         assertEquals(everyRunStops("Int", "x", "", over.formatted("(x + n) + 1 >= 1")),
                 everyRunStops("Int", "x", "",
@@ -420,7 +425,8 @@ class AnOperationPastItsTypeStopsEveryRunThatGetsToItsComparisonTest {
 
     /** No element on any row the ways leave, or none written, and the remainder is worked out
      *  on no run; over numbers that keep short of the ends, it stops none, and over numbers that
-     *  do not, it may stop one. */
+     *  do not, it may stop one — at each sum it works out, {@code x + z} and the element added to
+     *  that. */
     @Test
     void theSumARemainderOverAWholeNumberInTurnIsOfStopsNoRunThatDoesNotWorkItOutPastItsType() {
         assertEquals(List.of(), stopsSaid("Int", "x", "guard y < 0 else No { n = 0 }",
@@ -428,7 +434,7 @@ class AnOperationPastItsTypeStopsEveryRunThatGetsToItsComparisonTest {
                         + " List.rangeInclusive(0, y)))"));
         String between = "List.isEmpty(List.filter(n -> Int.floorMod(x + z + n, 7) == 0,"
                 + " List.rangeInclusive(1, %s)))";
-        assertEquals(1, stopsSaid("Int", "x", "", between.formatted("1")).size());
+        assertEquals(2, stopsSaid("Int", "x", "", between.formatted("1")).size());
         assertEquals(List.of(), stopsSaid("Int", "x", "", between.formatted("0")));
         String upTo = "List.isEmpty(List.filter(n -> Int.floorMod(n + %s, 7) == 0,"
                 + " List.rangeInclusive(0, List.length(x))))";

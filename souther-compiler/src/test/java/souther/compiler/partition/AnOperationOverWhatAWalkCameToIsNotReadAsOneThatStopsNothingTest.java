@@ -82,7 +82,7 @@ class AnOperationOverWhatAWalkCameToIsNotReadAsOneThatStopsNothingTest {
     @Test
     void aStopThatIsToldIsToldAsItWas() {
         String report = reportOf("q + 1 <= 10");
-        assertTrue(report.contains("every run stops in q + 1"), report);
+        assertTrue(report.contains("every run that gets here stops in q + 1"), report);
         assertFalse(report.contains(NOT_ALL_TOLD), report);
         assertTrue(report.contains("measurement: complete"), report);
     }

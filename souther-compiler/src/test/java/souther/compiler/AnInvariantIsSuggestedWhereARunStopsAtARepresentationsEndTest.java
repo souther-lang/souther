@@ -385,7 +385,7 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
                 """);
 
         // Every run stops: one that keeps the last sum within Int holds p.x at -2M or less.
-        assertTrue(report.contains("every run stops in"), report);
+        assertTrue(report.contains("every run that gets here stops in"), report);
         assertEquals(List.of(), suggested(report), report);
     }
 

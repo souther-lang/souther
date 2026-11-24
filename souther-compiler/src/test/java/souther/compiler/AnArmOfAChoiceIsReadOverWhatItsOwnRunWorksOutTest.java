@@ -62,7 +62,8 @@ class AnArmOfAChoiceIsReadOverWhatItsOwnRunWorksOutTest {
      */
     @Test
     void anArmOfAChoiceNestedInAForkIsNotToldByWhatTheForkDecided() {
-        String stopped = "every run stops in d + 1 where d is at least 9223372036854775807";
+        String stopped = "every run that gets here stops in d + 1 where d is at least"
+                + " 9223372036854775807";
 
         String byACondition = comparison("h: Int, d: Int, s: Int",
                 "(h, d, s) -> (if d >= h then (if d + 1 > h then d else h) else d) >= s");
