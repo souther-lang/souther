@@ -9,7 +9,9 @@ import souther.compiler.check.ClausesInOrder;
 import souther.compiler.check.BoundOperationFacts;
 import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.DefaultBoundOperationFacts;
+import souther.compiler.check.Shape;
 import souther.compiler.check.StopOrigin;
+import souther.compiler.check.TypeView;
 import souther.compiler.check.ValueTemplates;
 import souther.compiler.check.WhatARunMayEndFor;
 import souther.compiler.core.Core;
@@ -2009,7 +2011,8 @@ final class StopsOfABody {
         }
         for (Core each : handed) {
             Core value = Core.withoutStanding(each);
-            if (!(value.type() instanceof Type.FnOf)) {
+            if (!(TypeView.shapeOf(value.type(), read.rules().inners(), read.rules().symbols(),
+                    read.rules().kinds(), read.rules().sums()) instanceof Shape.Function)) {
                 continue;
             }
             Denotation named = value instanceof Core.Read && reads != null
