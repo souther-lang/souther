@@ -97,25 +97,6 @@ final class WhereARunMayStop {
                 .add(new Met(way, reads, applying, new Pullback.Once<>(ways), tree));
     }
 
-    /** That the walk met {@code e}, any node, on {@code way}, with the names as {@code reads} has
-     *  them: what a reader asking how a run gets to a value an operation is over reads, as the
-     *  answer of an arm is met under what the arm proves. */
-    void reached(Core e, List<OnTheWay> way, InputReads reads) {
-        values.computeIfAbsent(Core.withoutStanding(e), _ -> new ArrayList<>(1))
-                .add(new Reached(way, reads));
-    }
-
-    /** Every way and names the walk met {@code e} on; none where it never did. */
-    List<Reached> reachedAt(Core e) {
-        List<Reached> found = values.get(Core.withoutStanding(e));
-        return found == null ? List.of() : Collections.unmodifiableList(found);
-    }
-
-    /** One way the walk met a node on, and the names there. */
-    record Reached(List<OnTheWay> way, InputReads reads) {}
-
-    private final Map<Core, List<Reached>> values = new IdentityHashMap<>();
-
     /** That the walk has gone through everything under {@code e}: where it is a step met, it is
      *  put in order after what it is worked out of. */
     void walkedPast(Core e) {

@@ -1796,7 +1796,6 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         if (in.metOnly().isEmpty() && in.context().equals(CallContext.OF_THE_BODY)) {
             in.constructions().met(e, assumed, reads, applying,
                     () -> waysToASite(e, assumed, applying, in), in.within());
-            in.constructions().reached(e, assumed, reads);
             if (in.root() != null && handsAFunctionValueByAName(e, reads, in)) {
                 in.constructions().handing(Core.withoutStanding(e), assumed);
             }
