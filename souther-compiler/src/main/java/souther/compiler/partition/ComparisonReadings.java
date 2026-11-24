@@ -1790,15 +1790,19 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         // The way this node is reached on, for whoever asks whether a part of a fork's condition is
         // evaluated at all.
         in.ways().reached(e, assumed);
-        // And, of a construction of the behavior's own body or of a value's template, for whoever
-        // asks whether a run on the way to a rule gets to it, and which; and of a call handed a
-        // function value by a name, where a run goes into the body of the function value.
-        if (in.metOnly().isEmpty() && in.context().equals(CallContext.OF_THE_BODY)) {
+        // And, of a step of the behavior's own body or of a value's template, for whoever asks
+        // whether a run stops there; and of a call handed a function value by a name, where a run
+        // goes into the body of the function value. A step of a helper that calls itself, read
+        // where this body calls it, is one a run of this body gets to through that call, by the
+        // way into it.
+        if (in.metOnly().isEmpty() && (in.context().equals(CallContext.OF_THE_BODY)
+                || in.calledAt().isPresent())) {
             in.constructions().met(e, assumed, reads, applying,
                     () -> waysToASite(e, assumed, applying, in), in.within());
-            if (in.root() != null && handsAFunctionValueByAName(e, reads, in)) {
-                in.constructions().handing(Core.withoutStanding(e), assumed);
-            }
+        }
+        if (in.metOnly().isEmpty() && in.context().equals(CallContext.OF_THE_BODY)
+                && in.root() != null && handsAFunctionValueByAName(e, reads, in)) {
+            in.constructions().handing(Core.withoutStanding(e), assumed);
         }
         // The one place the readings part: what is done at a construct. Where no line is drawn, it
         // is handed on and no line of it is drawn; everything else in this walk,

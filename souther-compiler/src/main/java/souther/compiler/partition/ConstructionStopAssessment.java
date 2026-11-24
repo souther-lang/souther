@@ -190,9 +190,12 @@ final class ConstructionStopAssessment {
                                     Predicate<Proposition> toTheComparison, InputReading read,
                                     ValueTemplates definitions) {
         // What asks nothing, or nothing the way to the comparison does not hold, is safe whatever
-        // the tree says, and the tree is walked only for what is left.
-        Optional<WhatAConstructionAsks> unheld =
-                ask.toldOf(is -> toTheComparison.test(is.read()));
+        // the tree says, and the tree is walked only for what is left. What the ways hold is of
+        // the ways read: where some way is not, it holds nothing of that one, and every part of
+        // what is asked is left.
+        Optional<WhatAConstructionAsks> unheld = one.everyWay()
+                ? ask.toldOf(is -> toTheComparison.test(is.read()))
+                : ask.toldOf(_ -> false);
         if (unheld.isEmpty()) {
             return new Judgement.Safe(one.made());
         }

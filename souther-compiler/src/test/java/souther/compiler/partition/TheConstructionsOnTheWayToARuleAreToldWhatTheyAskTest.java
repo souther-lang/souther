@@ -15,7 +15,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeMap;
 import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -169,14 +168,16 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
     }
 
     /** A condition the declarations hold of every value says nothing: a gross at nought or above
-     *  and a rate from nought to one leave the fee and the gross at nought or above. */
+     *  and a rate from nought to one leave the fee and the gross at nought or above. Each of the
+     *  three constructions is a step, the record that asks nothing among them, and each is
+     *  judged to stop no run. */
     @Test
     void whatTheDeclarationsHoldIsAskedOfNoRun() {
         Compilation compilation = compiled(plan("gross: Gross, rate: Rate, limit: Decimal",
                 "gross.value", "rate.value", "Decimal.min(fee, gross.value)"));
         assertEquals(List.of(), asksOf(compilation));
         assertTrue(!human(compilation).contains("a run gets past"), () -> human(compilation));
-        assertEveryOneSafe(compilation, "plan", 2);
+        assertEveryOneSafe(compilation, "plan", 3);
     }
 
     /** That {@code behavior} has {@code howMany} constructions on the way to its rules and every
@@ -329,7 +330,7 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
                         .map(one -> one.path("asked")).toList());
         Compilation settled = compiled(madeOf("Decimal.max(1.0m, x)"));
         assertEquals(List.of(), asksOf(settled));
-        assertEveryOneSafe(settled, "f", 1);
+        assertEveryOneSafe(settled, "f", 2);
         assertEquals(List.of(is("x", "at_least", "0")),
                 asksOf(compiled(madeOf("Decimal.min(1.0m, x)"))).stream()
                         .map(one -> one.path("asked")).toList());
@@ -438,9 +439,9 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
     }
 
     /**
-     * A construction some admissible run on the way does not meet is a stop shown: said of the
-     * rule as one a run may stop on the way to, with what it asks, and not as one whose stop is
-     * not resolved.
+     * A construction some admissible run that gets to it does not meet is a stop shown: said at
+     * the construction as a step a run may stop at, with what it asks, and not as one whose stop
+     * is not resolved.
      */
     @Test
     void aConstructionSomeAdmissibleRunDoesNotMeetIsAStopShown() {
@@ -450,9 +451,9 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
                 toldIn(report, "step_may_stop_a_run").stream()
                         .map(one -> one.path("asked")).toList());
         assertEquals(List.of(), toldIn(report, "step_stop_not_shown"));
-        assertTrue(Pattern.compile("may stop a run: [^\\n]* some admissible run stops at a "
-                        + "construction on the way to this rule[^\\n]*; a run gets past Held at "
-                        + "[0-9]+:[0-9]+ only where x is at least 0")
+        assertTrue(Pattern.compile("may stop a run: [0-9]+:[0-9]+ — some admissible run gets"
+                        + " here and stops, because it does not meet the following conditions;"
+                        + " a run gets past Held at [0-9]+:[0-9]+ only where x is at least 0")
                 .matcher(human(compilation)).find(), () -> human(compilation));
     }
 
@@ -488,8 +489,8 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
     }
 
     /**
-     * A construction on an arm whose condition holds what it asks stops no run that takes the arm:
-     * it is among the constructions on the way to the rule after it, and judged to stop none.
+     * A construction on an arm whose condition holds what it asks stops no run that takes the arm,
+     * and is judged to stop none, as is the other arm's and the record built of either.
      */
     @Test
     void aConstructionOnAnArmThatHoldsWhatItAsksIsJudgedSafe() {
@@ -508,7 +509,7 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
                     Out { refund = net, within = Decimal.compare(gross, limit) <= 0 }
                 }
                 """);
-        assertEveryOneSafe(compilation, "plan", 2);
+        assertEveryOneSafe(compilation, "plan", 3);
     }
 
     /**
@@ -545,53 +546,27 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
                 .matcher(human(compilation)).find(), () -> human(compilation));
     }
 
-    /**
-     * A condition inside a closure, before a rule the closure holds, is on the way to the rule as
-     * much as one outside it is: a construction before the closure is applied that only a value
-     * failing the condition is refused by stops no run on the way to the rule, and is not said
-     * under it. Under the condition's own rule, which every application reaches, it is a stop.
-     */
-    @Test
-    void aConditionInsideAClosureIsOnTheWayToTheRuleItHolds() {
-        String rules = "    Plan { a = m, within = List.all(x -> if x > 5 then x <= 3 else true, "
-                + "[q]) }";
-        Compilation compilation = compiled("""
-                module demo
 
-                data Count = Int
-                    invariant value >= 0
-                data Plan = { a: Count, within: Bool }
-
-                behavior f : (q: Int) -> Plan
-                    constructs Plan, Count
-                let f (q) = {
-                    let m = Count(q)
-                RULES
-                }
-                """.replace("RULES", rules));
-        JsonNode report = document(compilation);
-        Map<String, List<String>> stopsByRule = stopsByRule(report);
-        assertEquals(List.of(), stopsAt(stopsByRule, 11, rules.indexOf(" <= 3") + 2),
-                stopsByRule::toString);
-        assertEquals(List.of("Count"), stopsAt(stopsByRule, 11, rules.indexOf(" > 5") + 2),
-                stopsByRule::toString);
-        Map<String, List<String>> notShown = notShownByRule(report);
-        assertEquals(List.of("Count: a_condition_not_read"),
-                stopsAt(notShown, 11, rules.indexOf(" <= 3") + 2), notShown::toString);
+    /** Each construction as the report says it: what is made, the line, and why its stop is not
+     *  resolved, nothing where it is shown. */
+    private static List<String> constructionsSaid(Compilation compilation) {
+        return asksOf(compilation).stream()
+                .map(one -> madeIn(one) + " at " + one.path("at").path("line").asInt() + ": "
+                        + one.path("reason").asString())
+                .distinct().toList();
     }
 
     /**
-     * Whether a call applies a function value at all is a condition on the way to a rule the
-     * function holds: a call over a container that may hold nothing, or that holds nothing, may
-     * make no application, and a construction before it is not shown to stop a run on the way to
-     * the rule from a value that says nothing of whether the call applies it. Over a container
-     * written with one element, the call applies it whatever the row is.
+     * A construction the body works out before a call that applies a function value is a step
+     * every run takes, whether or not the call applies the function after it, and whatever it
+     * applies it over: a run with {@code q} below nought stops there, and that is shown.
      */
     @Test
-    void whetherACallAppliesTheFunctionIsOnTheWayToTheRuleInIt() {
+    void aConstructionBeforeACallThatAppliesAFunctionIsAStepEveryRunTakes() {
         for (String applied : List.of("List.all(x -> x <= 3, xs)", "List.all(f, xs)",
-                "List.all(f, if q > 7 then [q] else [])")) {
-            String rules = "    Plan { a = m, within = " + applied + " }";
+                "List.all(f, if q > 7 then [q] else [])",
+                "List.all(x -> if x > 5 then x <= 3 else true, [q])", "List.all(f, [q])",
+                "List.any(f, [q, q])")) {
             Compilation compilation = compiled("""
                     module demo
 
@@ -604,53 +579,13 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
                     let b (q, xs) = {
                         let m = Count(q)
                         let f = x -> x <= 3
-                    RULES
-                    }
-                    """.replace("RULES", rules));
-            JsonNode report = document(compilation);
-            boolean inline = applied.contains("x -> x <= 3");
-            int line = inline ? 12 : 11;
-            int column = (inline ? rules : "    let f = x -> x <= 3").indexOf(" <= 3") + 2;
-            Map<String, List<String>> stopsByRule = stopsByRule(report);
-            assertEquals(List.of(), stopsAt(stopsByRule, line, column),
-                    () -> applied + " " + stopsByRule);
-            Map<String, List<String>> notShown = notShownByRule(report);
-            assertEquals(List.of("Count: a_condition_not_read"),
-                    stopsAt(notShown, line, column), () -> applied + " " + notShown);
-        }
-    }
-
-    /**
-     * Over a container written with one element the call applies the function whatever the row
-     * is, so a construction before it on the way to the rule it holds stops a run where the value
-     * does not meet what it asks; the same of a call that applies it to the first element before
-     * it may stop.
-     */
-    @Test
-    void aCallOverOneElementWrittenOutAppliesTheFunctionWhateverTheRow() {
-        for (String applied : List.of("List.all(f, [q])", "List.any(f, [q, q])")) {
-            String rule = "    let f = x -> x <= 3";
-            Compilation compilation = compiled("""
-                    module demo
-
-                    data Count = Int
-                        invariant value >= 0
-                    data Plan = { a: Count, within: Bool }
-
-                    behavior b : (q: Int) -> Plan
-                        constructs Plan, Count
-                    let b (q) = {
-                        let m = Count(q)
-                    RULE
                         Plan { a = m, within = APPLIED }
                     }
-                    """.replace("RULE", rule).replace("APPLIED", applied));
-            Map<String, List<String>> stopsByRule = stopsByRule(document(compilation));
-            assertEquals(List.of("Count"),
-                    stopsAt(stopsByRule, 11, rule.indexOf(" <= 3") + 2),
-                    () -> applied + " " + stopsByRule);
+                    """.replace("APPLIED", applied));
+            assertEquals(List.of("Count at 10: "), constructionsSaid(compilation), applied);
         }
     }
+
 
     /**
      * A function value bound by a name and applied once runs its body once, by the call applying
@@ -680,39 +615,11 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
         assertEquals(Set.of("Stops"), ConstructionsJudged.of(compilation, "b").get(12));
     }
 
-    /** What each rule of {@code report} says of each construction whose stop on the way to it is
-     *  not resolved, with why, by what a reader is shown of the rule. */
-    private static Map<String, List<String>> notShownByRule(JsonNode report) {
-        Map<String, List<String>> out = new TreeMap<>();
-        collectNotShown(report, out);
-        return out;
-    }
-
-    private static void collectNotShown(JsonNode node, Map<String, List<String>> out) {
-        if (node.isObject() && node.path("kind").asString().equals("step_stop_not_shown")) {
-            List<String> made = out.computeIfAbsent(node.path("subject").toString(),
-                    _ -> new ArrayList<>());
-            node.path("asks").forEach(one -> made.add(madeIn(one)
-                    + ": " + one.path("reason").asString()));
-        }
-        node.forEach(child -> collectNotShown(child, out));
-    }
-
-    /** What {@code stopsByRule} tells of the rule whose operator is written at {@code line} and
-     *  {@code column}. */
-    private static List<String> stopsAt(Map<String, List<String>> stopsByRule, int line,
-                                        int column) {
-        return stopsByRule.entrySet().stream()
-                .filter(rule -> rule.getKey().endsWith(":" + line + ":" + column + "\""))
-                .flatMap(rule -> rule.getValue().stream()).toList();
-    }
-
     /**
-     * A construction the body works out before a call of a helper is on the way to a rule in the
-     * helper's body read at that call, and is asked as one before any rule is. What the helper's
-     * arm asks of a run going into it is said of each step and not carried on the way, so a stop
-     * there is not resolved for a condition on the way not read, rather than for want of a way to
-     * it. A construction in the helper's body is run by every step, and no run is shown to get to
+     * A construction the body works out before a call of a helper is a step every run takes: a
+     * run with {@code c} below nought stops there, and that is shown. A construction in the
+     * body of the helper, which calls itself, is a step a run gets to through the call, made on
+     * each element only where no element before it ended the walk, and no run is shown to get to
      * it.
      */
     @Test
@@ -738,7 +645,7 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
                         Decimal.compare(h.value, c) <= 0 && every(List.drop(1, xs), c)
                     }
                 """);
-        assertEquals(List.of("Held at 10: a_condition_not_read", "Held at 17: reach_not_shown"),
+        assertEquals(List.of("Held at 10: ", "Held at 17: reach_not_shown"),
                 asksOf(compilation).stream()
                         .map(one -> madeIn(one) + " at "
                                 + one.path("at").path("line").asInt() + ": "
@@ -747,11 +654,11 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
     }
 
     /**
-     * A value's template is gone into once, where the value is built, so a construction in it
-     * before a rule it holds is on the way to the rule by the build: one whose condition is not
-     * read is not resolved for that, and not for want of a way to it. A construction the body
-     * writes before the build is worked out after it, since the value is built first, and is on
-     * the way to no rule of the template.
+     * A value's template is gone into once, where the value is built, so a construction in it is
+     * got to by the build: one whose condition is not read is not resolved for that, and not for
+     * want of a way to it. A construction the body writes before the build is worked out after
+     * it, since the value is built first: a run that gets to it got past what the template works
+     * out, which is not shown to stop no run.
      */
     @Test
     void aConstructionInATemplateIsOnTheWayToARuleItHoldsByTheBuild() {
@@ -776,7 +683,8 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
                     Plan { a = m, within = t }
                 }
                 """);
-        assertEquals(List.of("Span at 9: asks_not_read"), asksOf(compilation).stream()
+        assertEquals(List.of("Count at 16: something_before_it_may_stop",
+                        "Span at 9: asks_not_read"), asksOf(compilation).stream()
                 .map(one -> madeIn(one) + " at "
                         + one.path("at").path("line").asInt() + ": "
                         + one.path("reason").asString())
@@ -785,8 +693,8 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
 
     /**
      * A value built in the template of another is gone into by way of the other's builds: a
-     * construction in it before a rule it holds is on the way to the rule by those, as one in a
-     * template the body builds is.
+     * construction in it is got to by those, as one in a template the body builds is, and the
+     * body's own construction after them is past it in the same way.
      */
     @Test
     void aConstructionInATemplateBuiltByAnotherIsOnTheWayToARuleItHolds() {
@@ -815,7 +723,8 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
                     Plan { a = m, within = t }
                 }
                 """);
-        assertEquals(List.of("Span at 9: asks_not_read"), asksOf(compilation).stream()
+        assertEquals(List.of("Count at 20: something_before_it_may_stop",
+                        "Span at 9: asks_not_read"), asksOf(compilation).stream()
                 .map(one -> madeIn(one) + " at "
                         + one.path("at").path("line").asInt() + ": "
                         + one.path("reason").asString())
@@ -876,24 +785,6 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
         assertEquals(Set.of("Safe"), ConstructionsJudged.of(
                 compiled(model.replace("holdsAll(p, [q])", "false")), "f").get(10));
         assertEquals(Set.of("Unresolved"), ConstructionsJudged.of(compiled(model), "f").get(10));
-    }
-
-    /** The constructions each rule of {@code report} is told a run stops at, by what a reader is
-     *  shown of the rule. */
-    private static Map<String, List<String>> stopsByRule(JsonNode report) {
-        Map<String, List<String>> out = new TreeMap<>();
-        collectStops(report, out);
-        return out;
-    }
-
-    private static void collectStops(JsonNode node, Map<String, List<String>> out) {
-        if (node.isObject() && node.path("kind").asString().equals("step_may_stop_a_run")) {
-            List<String> made = out.computeIfAbsent(node.path("subject").toString(),
-                    _ -> new ArrayList<>());
-            node.path("constructions").forEach(one ->
-                    made.add(madeIn(one)));
-        }
-        node.forEach(child -> collectStops(child, out));
     }
 
     /** What an {@code Int} construction asks is asked as a decimal number too. */
