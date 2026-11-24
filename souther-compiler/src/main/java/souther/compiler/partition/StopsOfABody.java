@@ -111,7 +111,15 @@ final class StopsOfABody {
         this.read = read;
         this.definitions = definitions;
         this.readsWith = Pullback.whatEveryReadingReadsWith(read);
+        this.owner = WorkedOutToReachIt.of(read);
     }
+
+    /**
+     * What a run works out to reach a value, one for the body: every step asks it of what the
+     * steps before it work out, and what it has worked out of a name is worked out once however
+     * many steps after it ask.
+     */
+    private final WorkedOutToReachIt owner;
 
     /** What a step is read with: what every reading of the input reads with, and nothing a rule
      *  answers for, since no rule is read here
@@ -348,12 +356,12 @@ final class StopsOfABody {
             return false;
         }
         WhatARunWorksOutBeforeACount.FirstApplication first =
-                WhatARunWorksOutBeforeACount.workedOutAtTheFirstApplication(met.get().tree(), step);
+                WhatARunWorksOutBeforeACount.workedOutAtTheFirstApplication(met.get().standsIn(), step);
         if (first == null || first.entered().size() != 1) {
             return false;
         }
         WhatARunWorksOutBeforeACount.Applying applying = first.entered().getFirst();
-        return WorkedOutToReachIt.of(read).whereARunMayEndWhereApplied(
+        return owner.whereARunMayEndWhereApplied(
                 new Denotation(applying.call(), met.get().reads()), applying.closure()).isEmpty();
     }
 
@@ -373,7 +381,7 @@ final class StopsOfABody {
                                             WaysToASite.Reach reach,
                                             List<ClosureApplications.Application> made) {
         WhatARunWorksOutBeforeACount.FirstApplication first =
-                WhatARunWorksOutBeforeACount.workedOutAtTheFirstApplication(met.tree(), step);
+                WhatARunWorksOutBeforeACount.workedOutAtTheFirstApplication(met.standsIn(), step);
         Core.Block closure = (first == null || first.entered().size() != 1) ? null
                 : first.entered().getFirst().closure();
         // One application standing for every element a container holds is no one application
@@ -803,7 +811,8 @@ final class StopsOfABody {
      * it is no such operation, or an operand is neither.
      */
     private UndividedByARelation.IntOperation ownOperation(Core node, InputReads at) {
-        if (!(node instanceof Core.Binary binary) || binary.type() != Type.INT) {
+        if (!(Core.withoutStanding(node) instanceof Core.Binary binary)
+                || binary.type() != Type.INT) {
             return null;
         }
         LinearForm<UndividedByARelation.IntOperand> left = operand(binary.left(), at);
@@ -841,7 +850,8 @@ final class StopsOfABody {
      * relations is not made, and is said as left. Null where it is no such total.
      */
     private UndividedByARelation.IntOperation ownTotal(Core node, InputReads at) {
-        if (!(node instanceof Core.PreservedCall call) || call.type() != Type.INT
+        if (!(Core.withoutStanding(node) instanceof Core.PreservedCall call)
+                || call.type() != Type.INT
                 || !(WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(call)
                         instanceof GetsPast.WhereTheTotalFits(int list))
                 || list >= call.args().size()) {
@@ -942,14 +952,29 @@ final class StopsOfABody {
             // An element kept whatever the row is dropped on no way.
             List<List<TakenConstraint.Affine>> dropped = List.of();
             if (!each.keptWhere().isEmpty()) {
-                List<Proposition> asked = new ArrayList<>();
-                each.keptWhere().forEach(one -> asked.add(conditions.kept(one, read)));
-                Proposition keeping = Proposition.all(asked);
-                kept = relationsOf(keeping);
-                if (kept == null) {
-                    return null;
+                // Kept where every condition it is kept by holds, and dropped where any one of
+                // them does not.
+                List<TakenConstraint.Affine> keptHere = new ArrayList<>();
+                List<List<TakenConstraint.Affine>> droppedHere = new ArrayList<>();
+                for (ReadMeaning.Occurrence.Kept one : each.keptWhere()) {
+                    Proposition asked = conditions.kept(one, read);
+                    if (asked instanceof Proposition.Always(boolean holds) && holds) {
+                        continue;
+                    }
+                    List<TakenConstraint.Affine> relations = relationsOf(asked);
+                    List<List<TakenConstraint.Affine>> denied = alternativesOf(asked.denied());
+                    if (relations == null) {
+                        return null;
+                    }
+                    keptHere.addAll(relations);
+                    if (denied == null) {
+                        droppedHere = null;
+                    } else if (droppedHere != null) {
+                        droppedHere.addAll(denied);
+                    }
                 }
-                dropped = alternativesOf(keeping.denied());
+                kept = List.copyOf(keptHere);
+                dropped = droppedHere;
             }
             FormRange one = FormRange.of(form, read, boundsUnder(form, kept, true));
             if (one == null) {
@@ -1202,7 +1227,6 @@ final class StopsOfABody {
         if (ofItsArguments != null) {
             return ofItsArguments;
         }
-        WorkedOutToReachIt owner = WorkedOutToReachIt.of(read);
         Denotation value = new Denotation(operand, at);
         Attainments ways = attainmentsOf(value, Collections.newSetFromMap(new IdentityHashMap<>()));
         WhereAValueComesFrom origin = owner.originOf(value);
@@ -1241,7 +1265,7 @@ final class StopsOfABody {
      */
     private LinearForm<UndividedByARelation.IntOperand> aFormOfItsArguments(Core node,
                                                                            InputReads at) {
-        if (!(node instanceof Core.PreservedCall call)) {
+        if (!(Core.withoutStanding(node) instanceof Core.PreservedCall call)) {
             return null;
         }
         LinearForm<DeclaredArgument> declared = DefaultBoundOperationFacts.get()
@@ -1349,7 +1373,7 @@ final class StopsOfABody {
             }
             Choice choice = Choice.of(node);
             if (choice == null) {
-                return WorkedOutToReachIt.of(read).attainmentsOf(value);
+                return owner.attainmentsOf(value);
             }
             // Each arm, on the rows that enter it: what entering it states, read with the names
             // the choice is read with, beside each way its answer comes to a number. An arm
@@ -1396,7 +1420,7 @@ final class StopsOfABody {
                                                                               InputReads at) {
         return evaluatedAt.computeIfAbsent(new Denotation(node, at), value ->
                 AffineReading.stopsOfEvaluatingBesideWhatIsHeldAside(value.value(), value.at(),
-                        read, readsWith));
+                        read, readsWith, owner));
     }
 
     private final Map<Denotation, AffineReading.WhatIsWorkedOutBesideWhatIsHeldAside> evaluatedAt =
@@ -1676,9 +1700,13 @@ final class StopsOfABody {
                 FormRange range = FormRange.of(form, read, boundsUnder(form, holding, true));
                 yield range != null && range.liesWithin(operation.least(), operation.greatest());
             }
+            // A divisor over whole numbers alone, as one of an Int is, is no nearer nought than
+            // the next whole number in from a strict relation to it.
             case StopAssessment.Site.ByNought(var divisor) -> {
                 FormRange range = divisor == null ? null
-                        : FormRange.of(divisor, read, boundsUnder(divisor, holding, false));
+                        : FormRange.of(divisor, read, boundsUnder(divisor, holding,
+                                divisor.coefs().keySet().stream()
+                                        .allMatch(read.quantities().region()::isAnInt)));
                 yield range != null && !range.holds(ExactRatio.ZERO);
             }
         };
@@ -1893,7 +1921,7 @@ final class StopsOfABody {
         if (left.endsNoRunAt(new Denotation(step, names))) {
             return true;
         }
-        if (step instanceof Core.Construct) {
+        if (Core.withoutStanding(step) instanceof Core.Construct) {
             return false;
         }
         List<StopAssessment.Site> sites = sitesOf(step,

@@ -273,8 +273,10 @@ final class StopAssessment {
     }
 
     /** How many ways a way of several alternatives is read as ({@link #asWaysOfRelations})
-     *  before the rest are left. */
-    static final int MOST_WAYS_OF_ALTERNATIVES = 8;
+     *  before the rest are left: a value is looked for along each, so as many as a search for an
+     *  assignment on the way tries of one position. */
+    static final int MOST_WAYS_OF_ALTERNATIVES =
+            CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT.maximum();
 
     /**
      * {@code way} as each way of relations of numbers of the input a value on it may meet, a

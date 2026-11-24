@@ -149,18 +149,20 @@ final class WorkedOutToReachIt {
          *  began the walk. */
         private final Map<Core, List<ArmsTaken>> bound;
 
-        Question(ArmsTaken arms) {
-            this(false, arms);
+        /** A question folding the names it meets into {@code folds}, which the owner asking it
+         *  keeps for every question it asks: what a name folds to is not a question's own. */
+        Question(ArmsTaken arms, FoldedValue.Kept folds) {
+            this(false, arms, folds);
         }
 
-        Question(boolean byTheNumbers, ArmsTaken arms) {
-            this(byTheNumbers, null, null, arms);
+        Question(boolean byTheNumbers, ArmsTaken arms, FoldedValue.Kept folds) {
+            this(byTheNumbers, null, null, arms, folds);
         }
 
         Question(boolean byTheNumbers, Predicate<Denotation> tellsWhereItStops,
-                 Predicate<Denotation> ownStopsSaid, ArmsTaken arms) {
+                 Predicate<Denotation> ownStopsSaid, ArmsTaken arms, FoldedValue.Kept folds) {
             this(byTheNumbers, Set.of(), tellsWhereItStops, ownStopsSaid, arms,
-                    new IdentityHashMap<>(), new FoldedValue.Kept(), new IdentityHashMap<>());
+                    new IdentityHashMap<>(), folds, new IdentityHashMap<>());
         }
 
         private Question(boolean byTheNumbers, Set<Core> heldWhereApplied,
@@ -186,7 +188,7 @@ final class WorkedOutToReachIt {
             both.addAll(heldWhereApplied);
             both.addAll(held);
             return new Question(byTheNumbers, both, tellsWhereItStops, ownStopsSaid, arms,
-                    new IdentityHashMap<>(), new FoldedValue.Kept(), bound);
+                    new IdentityHashMap<>(), folds, bound);
         }
 
         /** The same question of what only some runs work out, an arm or the body of a closure:
@@ -195,7 +197,7 @@ final class WorkedOutToReachIt {
         Question notOnEveryRun() {
             return (tellsWhereItStops == null && ownStopsSaid == null) ? this
                     : new Question(byTheNumbers, heldWhereApplied, null, null, arms,
-                            new IdentityHashMap<>(), new FoldedValue.Kept(), bound);
+                            new IdentityHashMap<>(), folds, bound);
         }
 
         /** The same question of arm {@code part} of {@code fork}, read where it is ({@code at}):
@@ -494,14 +496,13 @@ final class WorkedOutToReachIt {
     private WorkedOutToReachIt(InputReading read, Predicate<Denotation> beyond,
                                boolean closuresApart) {
         this(read, beyond, closuresApart, _ -> false, _ -> false, ArmsTaken.NONE,
-                new IdentityHashMap<>());
+                new AskedOfTheValues());
     }
 
     private WorkedOutToReachIt(InputReading read, Predicate<Denotation> beyond,
                                boolean closuresApart, Predicate<Denotation> toldElsewhere,
                                Predicate<Denotation> ownStopsSaidOnTheirWays,
-                               ArmsTaken onTheWay,
-                               Map<Core, Map<ReadAt, Optional<WhereAValueComesFrom>>> numbersAsked) {
+                               ArmsTaken onTheWay, AskedOfTheValues numbersAsked) {
         this.read = Objects.requireNonNull(read);
         this.beyond = Objects.requireNonNull(beyond);
         this.closuresApart = closuresApart;
@@ -713,13 +714,14 @@ final class WorkedOutToReachIt {
     /** Where working out {@code value}, and what each name read in it was given, may end a run:
      *  the expression whose own working may end one; none where it ends none. */
     Optional<Denotation> whereARunMayEnd(Denotation value) {
-        return Optional.ofNullable(whereItMayEnd(value, new Question(onTheWay)).at());
+        return Optional.ofNullable(whereItMayEnd(value,
+                new Question(onTheWay, numbersAsked.folds())).at());
     }
 
     /** Where working out {@code closure} where {@code call} applies it may end a run, asked with
      *  what the call hands it ({@link #closuresHeldOverTheirElements}); none where it ends none. */
     Optional<Denotation> whereARunMayEndWhereApplied(Denotation call, Core.Block closure) {
-        Question question = new Question(true, onTheWay);
+        Question question = new Question(true, onTheWay, numbersAsked.folds());
         return Optional.ofNullable(whereItMayEnd(new Denotation(closure, call.at()),
                 question.applying(closuresHeldOverTheirElements(call, question))).at());
     }
@@ -1146,7 +1148,8 @@ final class WorkedOutToReachIt {
             return null;
         }
         Denotation listed = new Denotation(call.args().get(list), value.at());
-        Worth each = whatEachElementIsWorth(listed, new Question(onTheWay));
+        Worth each = whatEachElementIsWorth(listed,
+                new Question(onTheWay, numbersAsked.folds()));
         if (each != null) {
             FormRange one = each.added().answerHeldWithin(each.rangeOf(), AN_INT.least(),
                     AN_INT.greatest());
@@ -1187,7 +1190,7 @@ final class WorkedOutToReachIt {
      * their own: asked {@link Question#byTheNumbers}.
      */
     boolean ownWorkingEndsNoRun(Denotation value) {
-        return ownWorkingEndsNoRun(value, new Question(true, onTheWay));
+        return ownWorkingEndsNoRun(value, new Question(true, onTheWay, numbersAsked.folds()));
     }
 
     /**
@@ -1217,7 +1220,8 @@ final class WorkedOutToReachIt {
      * expression the answer rests on: the first of them the walk met, and not every one there is.
      */
     Optional<Denotation> whereARunMayEndWhereItWasPassedOver(Denotation value) {
-        return Optional.ofNullable(whereItMayEnd(value, new Question(true, onTheWay)).at());
+        return Optional.ofNullable(whereItMayEnd(value,
+                new Question(true, onTheWay, numbersAsked.folds())).at());
     }
 
     /**
@@ -1239,7 +1243,8 @@ final class WorkedOutToReachIt {
     Optional<Denotation> whereAStopIsLeftUntoldWhereItWasPassedOver(Denotation value,
                                                                     Predicate<Denotation> tells) {
         return Optional.ofNullable(whereItMayEnd(value,
-                new Question(true, tells, ownStopsSaidOnTheirWays, onTheWay)).at());
+                new Question(true, tells, ownStopsSaidOnTheirWays, onTheWay,
+                        numbersAsked.folds())).at());
     }
 
     /**
@@ -1250,7 +1255,8 @@ final class WorkedOutToReachIt {
      */
     Optional<Denotation> whereAStopIsLeftUnsaidWhereItWasPassedOver(Denotation value) {
         return Optional.ofNullable(whereItMayEnd(value,
-                new Question(true, null, ownStopsSaidOnTheirWays, onTheWay)).at());
+                new Question(true, null, ownStopsSaidOnTheirWays, onTheWay,
+                        numbersAsked.folds())).at());
     }
 
     /**
@@ -1468,9 +1474,8 @@ final class WorkedOutToReachIt {
         if (inTheBodyOfALet(value) instanceof Denotation body) {
             return attainmentsOf(body, arms);
         }
-        Symbols symbols = read.rules().symbols();
         DeclarationNewtypes newtypes = read.rules().newtypes();
-        if (value.at().folded(written, symbols, newtypes).orElse(null) instanceof Long number) {
+        if (folded(written, value.at()).orElse(null) instanceof Long number) {
             return Attainments.of(List.of(Attainment.always(
                     LinearForm.constant(ExactRatio.of(number)))));
         }
@@ -1713,8 +1718,30 @@ final class WorkedOutToReachIt {
      *  expression is the node written, and where it was read is told apart by what each name in
      *  it stands for and by the arms the runs it is asked of entered. None where the numbers are
      *  not known or are still being asked. The numbers and where they come from are one answer,
-     *  asked once. */
-    private final Map<Core, Map<ReadAt, Optional<WhereAValueComesFrom>>> numbersAsked;
+     *  asked once. Beside them, what each name an expression asked about folds to, which every
+     *  expression of the chain asks of the names under it. */
+    private final AskedOfTheValues numbersAsked;
+
+    /**
+     * What this, and every owner made from it, has worked out of the values it was asked about:
+     * where each expression's numbers come from ({@link #originOf}), and what each name folds to
+     * where it was read ({@link FoldedValue.Kept}).
+     */
+    private record AskedOfTheValues(
+            Map<Core, Map<ReadAt, Optional<WhereAValueComesFrom>>> origins,
+            FoldedValue.Kept folds) {
+
+        AskedOfTheValues() {
+            this(new IdentityHashMap<>(), new FoldedValue.Kept());
+        }
+    }
+
+    /** What {@code e} folds to read in {@code at}, with what each name came to kept from one
+     *  fold to the next. */
+    private Optional<Object> folded(Core e, InputReads at) {
+        return at.folded(e, read.rules().symbols(), read.rules().newtypes(),
+                numbersAsked.folds());
+    }
 
     private FormRange numbersOf(Denotation value, ArmsTaken arms) {
         WhereAValueComesFrom origin = originOf(value, arms);
@@ -1727,7 +1754,7 @@ final class WorkedOutToReachIt {
     private WhereAValueComesFrom originOf(Denotation value, ArmsTaken arms) {
         Core written = Core.withoutStanding(value.value());
         Map<ReadAt, Optional<WhereAValueComesFrom>> where =
-                numbersAsked.computeIfAbsent(written, _ -> new HashMap<>());
+                numbersAsked.origins().computeIfAbsent(written, _ -> new HashMap<>());
         ReadAt at = new ReadAt(value.at(), arms);
         Optional<WhereAValueComesFrom> known = where.get(at);
         if (known != null) {
@@ -1746,7 +1773,7 @@ final class WorkedOutToReachIt {
         }
         Symbols symbols = read.rules().symbols();
         DeclarationNewtypes newtypes = read.rules().newtypes();
-        if (value.at().folded(written, symbols, newtypes).orElse(null) instanceof Long number) {
+        if (folded(written, value.at()).orElse(null) instanceof Long number) {
             return new WhereAValueComesFrom.Fixed(new FormRange(ExactRatio.of(number),
                     ExactRatio.of(number)));
         }
@@ -1777,7 +1804,7 @@ final class WorkedOutToReachIt {
                 NumericDomain.Bounds runs = ResultRange.of(
                         DefaultBoundOperationFacts.get().everyBoundOnTheResult(applied.operation()),
                         argument -> applied.argument(argument) instanceof Core handed
-                                && value.at().folded(handed, symbols, newtypes).orElse(null)
+                                && folded(handed, value.at()).orElse(null)
                                         instanceof Long number
                                 ? Optional.of(BigDecimal.valueOf(number)) : Optional.empty());
                 yield derived(runs.min() != null && runs.max() != null
@@ -2061,7 +2088,8 @@ final class WorkedOutToReachIt {
      * ({@link NumbersOnTheWayToATotal}).
      */
     boolean endsOnlyWhereItsAnswerHasNoPlace(Denotation value) {
-        return endsOnlyWhereItsAnswerHasNoPlace(value, new Question(onTheWay));
+        return endsOnlyWhereItsAnswerHasNoPlace(value,
+                new Question(onTheWay, numbersAsked.folds()));
     }
 
     private boolean endsOnlyWhereItsAnswerHasNoPlace(Denotation value, Question question) {

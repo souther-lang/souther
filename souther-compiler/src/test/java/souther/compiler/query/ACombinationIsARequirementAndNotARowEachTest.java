@@ -80,13 +80,13 @@ class ACombinationIsARequirementAndNotARowEachTest {
                 // the one kind here that is read off the source rather than measured.
                 "AnUnansweredRow",
                 "ARowAtAnArmAwaitsItsAnswer",
-                // A rule a run is shown to stop in, and a rule whether a run stops in is not
-                // resolved. Not a combination: each is one rule of the model, and what it says is
-                // of that rule beside whatever line it draws.
-                "ARuleWithoutALine", "ARuleThatMayStopARun", "ARuleWhoseStopIsNotShown",
-                "ARuleNothingClassified",
+                "ARuleWithoutALine", "ARuleNothingClassified",
                 "AQuestionNothingAnswered", "ARuleWithoutALine", "ARuleNothingClassified",
                 "APositionThisCouldNotRead", "APositionNoLineDivides",
+                // A step a run is shown to stop at, and a step whether a run stops at is not
+                // resolved. Not a combination: each is one place of the body a run evaluates,
+                // whatever the positions do together.
+                "AStepThatMayStopARun", "AStepWhoseStopIsNotShown",
                 "APositionReadWiderThanItsRules",
                 "APositionWhoseRulesWereNotReached"), every,
                 "a kind of gap this compiler finds that this law says nothing about");

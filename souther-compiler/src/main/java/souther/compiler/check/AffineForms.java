@@ -171,12 +171,14 @@ public final class AffineForms {
         }
 
         /**
-         * {@code read}, the walk reading the value {@code name} was given. A reader that tells of
-         * the operations composed ({@link #composed}) learns from it which of them a run works
-         * out to give the name its value, and so what an operation over the name is worked out
-         * after.
+         * {@code read}, the walk reading {@code value}, the value {@code name} was given, in
+         * {@code at}. A reader that tells of the operations composed ({@link #composed}) learns
+         * from it which of them a run works out to give the name its value, and so what an
+         * operation over the name is worked out after. A reader that has read that value in that
+         * environment already, as this reading would, may answer with what it came to then.
          */
-        default <T> T readingTheValueOf(BindingId name, Supplier<T> read) {
+        default Outcome<A, E> readingTheValueOf(BindingId name, Core value, E at,
+                                                Supplier<Outcome<A, E>> read) {
             return read.get();
         }
 
@@ -412,6 +414,16 @@ public final class AffineForms {
     }
 
     /**
+     * The same, with what each name came to folded held in {@code folds}, which the caller keeps
+     * for every walk of readings that fold the names alike: a reading that reads parts of what it
+     * reads apart, each by a walk of its own, folds each name once and not once for each walk.
+     */
+    public static <A, E> Outcome<A, E> outcome(Core raw, E at, Reading<A, E> reading,
+                                               FoldedValue.Kept folds) {
+        return of(raw, at, reading, new Walk<>(new BindingWalk.Answers<>(), folds));
+    }
+
+    /**
      * What the reading of a number read, told to whoever asks what the number was made of.
      *
      * <p>Told by the evaluations that decide the number — this walk and the fold ({@link
@@ -528,8 +540,9 @@ public final class AffineForms {
         }
 
         @Override
-        public <T> T readingTheValueOf(BindingId name, Supplier<T> read) {
-            return of.readingTheValueOf(name, read);
+        public Outcome<A, E> readingTheValueOf(BindingId name, Core value, E at,
+                                               Supplier<Outcome<A, E>> read) {
+            return of.readingTheValueOf(name, value, at, read);
         }
 
         @Override
@@ -1027,7 +1040,7 @@ public final class AffineForms {
                     ValueStanding.Standing<E, Reading<A, E>> one) ->
                     ValueStanding.answered(one.names(), ValueStanding.NameQuestion.FORM,
                             one.value(), one.at(),
-                            () -> reading.readingTheValueOf(r.binding(),
+                            () -> reading.readingTheValueOf(r.binding(), one.value(), one.at(),
                                     () -> following.readingOf(r.binding(), one.value(),
                                     readAs(r, at, one.at(), reading), () -> {
                                         countANameRead();

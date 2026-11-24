@@ -5,7 +5,6 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.ACompiledModel;
 import souther.compiler.DocumentShape;
 import souther.compiler.check.Carrier;
-import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.numeric.Count;
 import souther.compiler.query.Adequacy;
@@ -963,7 +962,7 @@ class ATotalLookedUpUnderAKeyAskedForIsReadAsTheElementsOfThatKeyTest {
 
     private static String json(Compilation compilation) {
         return AdequacyReport.of(compilation)
-                .json(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+                .json(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static String report(Compilation compilation) {

@@ -125,7 +125,8 @@ class ABodyCalledInsideAnExpandedOperationIsReadWhereItsCallsStandTest {
     }
 
     /** What the report says about {@code after}. A place in it names its line, which is about the
-     *  declarations written above it and not about what is measured. */
+     *  declarations written above it and not about what is measured: where a row reached, and
+     *  the step a stop is said of. */
     private static List<String> measured(String report) {
         List<String> out = new ArrayList<>();
         boolean inside = false;
@@ -136,7 +137,8 @@ class ABodyCalledInsideAnExpandedOperationIsReadWhereItsCallsStandTest {
                 break;
             }
             if (inside) {
-                out.add(line.replaceAll("reached at \\d+:", "reached at "));
+                out.add(line.replaceAll("reached at \\d+:", "reached at ")
+                        .replaceAll("(may stop a run|stop not resolved): \\d+:\\d+", "$1:"));
             }
         }
         return out;

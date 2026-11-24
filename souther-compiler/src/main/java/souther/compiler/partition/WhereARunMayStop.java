@@ -50,7 +50,7 @@ final class WhereARunMayStop {
      * that tree.
      */
     record Met(List<OnTheWay> way, InputReads reads, ClosureApplications applying,
-               Supplier<WaysToASite> ways, Core tree) {
+               Supplier<WaysToASite> ways, Core standsIn) {
 
         Met {
             way = List.copyOf(way);

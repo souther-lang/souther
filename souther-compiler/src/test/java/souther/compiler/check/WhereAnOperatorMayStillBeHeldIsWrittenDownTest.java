@@ -822,7 +822,14 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.partition.StopPastTheRepresentation.nameOf",
                     "names the join of two texts as it is written, the one operator that ends a"
                             + " run only past what a String holds; which operators do is asked of"
-                            + " the owner of where a run ends, and this only says the one found"));
+                            + " the owner of where a run ends, and this only says the one found"),
+            new Held("souther.compiler.partition.StopsOfABody.ownOperation",
+                    "reads a step's own sum, difference or product by a number written as its"
+                            + " operator over what each operand comes to, which is the operation"
+                            + " whose ends a run at the step may go past"),
+            new Held("souther.compiler.partition.StopsOfABody.keeping",
+                    "adds what each element of a list written out comes to, the sum being what"
+                            + " the total over the list works out"));
 
     @Test
     void everythingWithAnOperatorIsWrittenDownWithAReason() {

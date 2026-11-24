@@ -1280,11 +1280,15 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * ({@link WhatARunWorksOutBeforeACount#workedOutBeforeASite}) — where a run by the way runs
      * that tree once before it gets there. Otherwise an application or a step before this one may
      * have run any of it on another value, and what comes first is not read. The way is read whole
-     * only where what a run meets is on the way the walk carried.
+     * only where what a run meets is on the way the walk carried. Each way holds an element by
+     * the name the step reads it through ({@link ElementsOnTheWay}), as the way to a comparison
+     * does.
      */
     private static WaysToASite waysToASite(Core site, List<OnTheWay> assumed,
-                                           ClosureApplications applying, Body in) {
+                                           ClosureApplications applying, Body in,
+                                           InputReads reads) {
         WaysIn ways = waysIn(site, assumed, in);
+        ElementsNamed readsTheElements = reads.elementsNamedIn(site, in.newtypes());
         List<WaysToASite.Reach> each = new ArrayList<>();
         for (AWayIn way : ways.each()) {
             Inner inner = way.inner();
@@ -1311,7 +1315,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 return WhatARunWorksOutBeforeACount.workedOutBeforeASite(inner.root(), site)
                         .map(past::then);
             };
-            each.add(new WaysToASite.Reach(way.toTheComparison(), new Pullback.Once<>(before),
+            each.add(new WaysToASite.Reach(ElementsOnTheWay.keptToOneElementEach(
+                    way.toTheComparison(), readsTheElements), new Pullback.Once<>(before),
                     new Pullback.Once<>(read), () -> outside));
         }
         return new WaysToASite(each, ways.every());
@@ -1797,7 +1802,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         if (in.metOnly().isEmpty() && (in.context().equals(CallContext.OF_THE_BODY)
                 || in.calledAt().isPresent())) {
             in.constructions().met(e, assumed, reads, applying,
-                    () -> waysToASite(e, assumed, applying, in), in.within());
+                    () -> waysToASite(e, assumed, applying, in, reads), in.within());
         }
         if (in.metOnly().isEmpty() && in.context().equals(CallContext.OF_THE_BODY)
                 && in.root() != null && handsAFunctionValueByAName(e, reads, in)) {

@@ -7,7 +7,6 @@ import org.opentest4j.AssertionFailedError;
 import souther.compiler.ACompiledModel;
 import souther.compiler.DocumentShape;
 import souther.compiler.NotRead;
-import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -1365,7 +1364,7 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
 
     private static String json(Compilation compilation) {
         return AdequacyReport.of(compilation)
-                .json(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+                .json(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static String report(Compilation compilation) {

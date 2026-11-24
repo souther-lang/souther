@@ -276,9 +276,10 @@ class WhetherARunGetsThroughATotalIsAskedOfHowItIsWorkedOutTest {
     void aTotalOfWhatAClosureMakesOfEachElementStopsWhereAnApplicationDoes() {
         String report = report("n: Int, m: Int, k: Int", UNUSED,
                 "List.sum(List.map(x -> 2 * x, [n, m])) >= k");
-        assertTrue(whereEveryRunStops(report).startsWith(EVERY_RUN_STOPS + " in 2 * n where"),
-                report);
-        assertTrue(whereEveryRunStops(report).contains("in 2 * m where"), report);
+        // Said of the step the closure is, whichever step the section lists first.
+        assertTrue(whereEveryRunStops(report).lines().anyMatch(line ->
+                line.startsWith(EVERY_RUN_STOPS + " in 2 * n where")
+                        && line.contains("in 2 * m where")), report);
     }
 
     /**

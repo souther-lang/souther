@@ -318,6 +318,23 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "asks which names an expression reads and what each stands for, which no name read"
                         + " off a value adds to: the base of a projection is the one child there is"
                         + " to go down to");
+        row(out, c + "partition/StopsOfABody", "collectSteps",
+                "(" + core + "Ljava/util/Set;)V", Reading.STRUCTURE,
+                "asks which steps the walk met stand under a node, each the node it is: a"
+                        + " projection's base is the one child there is to go down to");
+        row(out, c + "partition/StopsOfABody", "stepsUnder",
+                "(" + core + ")Ljava/util/Set;", Reading.STRUCTURE,
+                "the same, of the nodes strictly under one");
+        row(out, c + "partition/StopsOfABody", "collectUnder",
+                "(" + core + core + "[Z)V", Reading.STRUCTURE,
+                "asks whether one node stands under another, which is the tree's shape: a"
+                        + " projection's base is the one child there is to go down to");
+        row(out, c + "partition/StopsOfABody", "past",
+                "(" + core + reads + "L" + c + "partition/WhatAWayLeavesOfAValue;"
+                        + "Ljava/util/List;Ljava/util/List;Ljava/util/Set;)Z", Reading.STRUCTURE,
+                "goes down what a run works out first to ask each step met there what it asks"
+                        + " of a value getting past it: a projection is no step, and its base is"
+                        + " the one child there is to go down to");
         row(out, c + "partition/ComparisonReadings", "runsWholeWhenever",
                 "(" + core + ")Z", Reading.STRUCTURE,
                 "asks whether every part of an expression runs whenever it does, which is what is"

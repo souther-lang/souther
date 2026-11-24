@@ -5018,10 +5018,19 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         return asked.measure() != null ? asked.measure() : asked.at();
     }
 
+    /** Where the step a stop finding is said of is written. */
+    private static SourcePos whereTheStepIs(Adequacy.Finding finding) {
+        return switch (finding.about()) {
+            case About.AStepThatMayStopARun(var it) -> it.at();
+            case About.AStepWhoseStopIsNotShown(var it) -> it.at();
+            default -> throw new IllegalArgumentException("no step: " + finding.about());
+        };
+    }
+
     /**
      * Where a run of the behavior stops short of an answer: how many steps some run is shown to
      * stop at, and at how many whether one does is not resolved, and under that each of them, in
-     * the order the findings were read. Nothing where neither is said of any step.
+     * the order they are written. Nothing where neither is said of any step.
      *
      * <p>Each step is named where it is written, and said whatever comes after it: a run stopped
      * there gets to no rule after it. The region that keeps the step's runs going is the step's,
@@ -5029,9 +5038,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      */
     void stops(StringBuilder out, BehaviorReport behavior, SourceId declaredIn, Page page) {
         SourceRendering rendering = page.rendering();
+        // In the order the steps are written. The walk meets a closure's body where the closure
+        // is written and a run gets to it where the closure is applied, so the order the walk met
+        // them in is no order of the run's, and two ways of writing one call would list the same
+        // steps apart.
         List<Adequacy.Finding> said = behavior.findings().stream()
                 .filter(f -> f.about() instanceof About.AStepThatMayStopARun
                         || f.about() instanceof About.AStepWhoseStopIsNotShown)
+                .sorted(Comparator.comparing(AdequacyReport::whereTheStepIs,
+                        SourcePos.IN_A_STEADY_ORDER))
                 .toList();
         if (said.isEmpty()) {
             return;
