@@ -202,17 +202,16 @@ class ATotalOfWhatAFilterKeepsIsHeldToTheListItKeepsFromTest {
     /**
      * A helper that builds an amount of two, each at most the most an amount holds, may be
      * refused the build: their sum passes it. What the field of the amount built comes to is read
-     * all the same, and the total over the months with it, but the build is no operation that
-     * ends no run: a run evaluating the comparison may stop there, and the model is not measured
-     * complete. The control works the same sum out as a whole number and builds nothing, and is.
+     * all the same, and the total over the months with it, but the build is a step a run may stop
+     * at, said there, and the model is not measured complete. The control works the same sum out
+     * as a whole number and builds nothing, and is.
      */
     @Test
     void aBuildThatMayBeRefusedKeepsTheModelFromBeingComplete() {
         Compilation built = compiledWithTheHelper("Yen = p.base + p.extra", ".value");
         StopsTheReportSays.Said ofTheBuild = StopsTheReportSays.of(built);
         assertFalse(complete(humanOf(built), "k5"), ofTheBuild::toString);
-        assertTrue(ofTheBuild.stops().stream().anyMatch(stop -> stop.operations().contains(
-                new StopsTheReportSays.Operation(null, "no_operation_told"))),
+        assertTrue(ofTheBuild.stops().stream().anyMatch(stop -> stop.subject().equals("k5.Yen")),
                 ofTheBuild::toString);
         assertTrue(unreadForAStop(ofTheBuild), ofTheBuild::toString);
 

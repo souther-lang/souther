@@ -1,11 +1,7 @@
 package souther.compiler.partition;
 
-import souther.compiler.inputs.EveryRunStops;
-import souther.compiler.inputs.InputReading;
-import souther.compiler.inputs.SearchRegion;
 import souther.compiler.meaning.Proposition;
 
-import java.util.List;
 import java.util.Objects;
 import java.util.function.Supplier;
 
@@ -109,16 +105,5 @@ record StopEvidence(UndividedByARelation.Working operations, boolean everyStopSa
      *  left untold. */
     boolean tellsNoOperation() {
         return !operations.aStopUntold() && UndividedByARelation.tellsNoOperation(operations);
-    }
-
-    /**
-     * Where every run getting here stops in what it works out, over {@code regions}, where it may
-     * also work out {@code alsoWorkedOut} first ({@link UndividedByARelation#everyRunStopsIn}).
-     */
-    List<EveryRunStops> everyRunStopsIn(InputReading read, List<SearchRegion> regions,
-                                        List<UndividedByARelation.IntOperation> alsoWorkedOut,
-                                        EvaluationPlaces places) {
-        return UndividedByARelation.everyRunStopsIn(operations, read, regions, alsoWorkedOut,
-                places);
     }
 }

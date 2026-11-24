@@ -182,6 +182,11 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.partition.ACountHandedOn#<clinit>()V",
                     "how far a count handed on is looked for, which the composer says as that"
                             + " figure where none was found below it"),
+            // The ways a value is looked for along to show a run stops at a step: past the
+            // figure the ways left are untried, and the step is said not resolved.
+            Map.entry("souther.compiler.partition.StopsOfABody#<clinit>()V",
+                    "how many ways of the values a step and what comes before it are over a value"
+                            + " is looked for by; past it the step is said not resolved"),
             // The numbers of a container as a whole a count is composed against: each figure is
             // handed over as the remainder of the numbers it is tried at, which the composing
             // says in what it comes back with.
@@ -688,7 +693,9 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "how many levels a side is asked at"),
             Map.entry("souther.compiler.partition.StopAssessment#<clinit>()V",
                     "how many values of the input are put to the proof of a stop, which, spent,"
-                            + " leaves it unresolved and says so as why"),
+                            + " leaves it unresolved and says so as why, and how many ways a way"
+                            + " of several alternatives to a step is read as, past which the"
+                            + " step is said not resolved"),
             Map.entry("souther.compiler.partition.Attainments#<clinit>()V",
                     "how many ways a value a run works out is made a number, which a stop is"
                             + " looked for by no more than: the ways beyond it are not made, and"

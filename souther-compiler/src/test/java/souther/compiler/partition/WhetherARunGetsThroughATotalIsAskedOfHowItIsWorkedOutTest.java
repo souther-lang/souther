@@ -55,10 +55,12 @@ class WhetherARunGetsThroughATotalIsAskedOfHowItIsWorkedOutTest {
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
+    private static final String EVERY_RUN_STOPS = "every run that gets here stops";
+
     /** Where every run is shown to stop, as the report says it; empty where it says nothing. */
     private static String whereEveryRunStops(String report) {
-        return report.lines().filter(line -> line.contains("every run stops"))
-                .map(line -> line.substring(line.indexOf("every run stops")))
+        return report.lines().filter(line -> line.contains(EVERY_RUN_STOPS))
+                .map(line -> line.substring(line.indexOf(EVERY_RUN_STOPS)))
                 .collect(Collectors.joining("\n"));
     }
 
@@ -85,8 +87,10 @@ class WhetherARunGetsThroughATotalIsAskedOfHowItIsWorkedOutTest {
         String sum = report(inputs, UNUSED, "List.sum([n, 1, -1]) >= k");
         String fold = report(inputs, UNUSED, "List.fold((acc, x) -> acc + x, 0, [n, 1, -1]) >= k");
         assertEquals("", whereEveryRunStops(sum), sum);
-        assertEquals("every run stops in n + 1 where n is at least " + MAX,
-                whereEveryRunStops(fold), fold);
+        // The fold's step is got to on three applications, each proved in its own names: a stop
+        // is shown there, and what every run getting to the step stops at is said of none.
+        assertEquals("", whereEveryRunStops(fold), fold);
+        assertTrue(fold.contains("· may stop a run: "), fold);
     }
 
     /**
@@ -109,7 +113,8 @@ class WhetherARunGetsThroughATotalIsAskedOfHowItIsWorkedOutTest {
      *  from below, as the report says it of {@code doubled}. */
     private static String whereDoublingStops(String doubled) {
         long least = Long.MAX_VALUE / 2 + 1;
-        return "every run stops in 2 * " + doubled + " where " + doubled + " is at least " + least
+        return EVERY_RUN_STOPS + " in 2 * " + doubled + " where " + doubled + " is at least "
+                + least
                 + ", in 2 * " + doubled + " where " + doubled + " is at most " + (-least - 1);
     }
 
@@ -273,9 +278,14 @@ class WhetherARunGetsThroughATotalIsAskedOfHowItIsWorkedOutTest {
     void aTotalOfWhatAClosureMakesOfEachElementStopsWhereAnApplicationDoes() {
         String report = report("n: Int, m: Int, k: Int", UNUSED,
                 "List.sum(List.map(x -> 2 * x, [n, m])) >= k");
-        assertTrue(whereEveryRunStops(report).startsWith("every run stops in 2 * n where"),
-                report);
-        assertTrue(whereEveryRunStops(report).contains("in 2 * m where"), report);
+        // The closure's step is got to on two applications, each proved in its own names: a stop
+        // is shown there, and what every run getting to it stops at is said of none. The sum
+        // over what they answer comes after the applications, which may stop the run first, so
+        // whether a run stops in it is not resolved.
+        assertTrue(report.contains("· may stop a run: "), report);
+        assertEquals("", whereEveryRunStops(report), report);
+        assertTrue(report.contains("whether a run stops in 2 * m + 2 * n is not determined:"
+                + " something evaluated before it may end the run first"), report);
     }
 
     /**
@@ -650,7 +660,7 @@ class WhetherARunGetsThroughATotalIsAskedOfHowItIsWorkedOutTest {
                 "gross >= List.fold((acc, n) -> acc + n, 0, ns)");
         assertEquals(Set.of(), notShown(ofInts), ofInts);
         assertEquals(Set.of("List.sum(ns)", "gross"), related(ofInts), ofInts);
-        assertFalse(ofInts.contains("every run stops"), ofInts);
+        assertFalse(ofInts.contains(EVERY_RUN_STOPS), ofInts);
     }
 
     /**

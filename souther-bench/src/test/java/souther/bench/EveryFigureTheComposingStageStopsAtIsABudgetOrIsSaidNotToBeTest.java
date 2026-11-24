@@ -185,6 +185,12 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
             Map.entry("souther.compiler.partition.KeptOccurrences.MOST_WAYS",
                     "how many ways a statement of cases is met in for it to be read as one; past"
                             + " it the statement claims nothing of the elements it keeps"),
+            // The same kind of figure, of the ways the elements of a list written out are kept
+            // for a total over it: past it the total is read by no way and the step over it is
+            // said not resolved, which claims nothing of whether a run stops there.
+            Map.entry("souther.compiler.partition.StopsOfABody.MOST_WAYS_OF_KEEPING",
+                    "how many ways of keeping the elements of a list written out a total is read"
+                            + " by; past it the step over the total is said not resolved"),
 
             // Which rows a walk's rewrite is searched from first. Every row is grown from, the
             // rest after the first ones are asked, so nothing is left untried by reaching it.

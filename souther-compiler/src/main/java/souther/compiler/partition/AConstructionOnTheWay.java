@@ -8,9 +8,8 @@ import java.util.Optional;
 import java.util.function.Supplier;
 
 /**
- * A construction a run on the way to a comparison may work out before it
- * ({@link WhatARunWorksOutBeforeACount#constructionsARunMayMeetBefore}), with what it asks as far
- * as that is read and each way a run on the way to the comparison gets to it on.
+ * A construction a run may work out, a step the walk met ({@link WhereARunMayStop}), with what it
+ * asks as far as that is read and each way a run gets to it on.
  *
  * <p>Gathered whatever is read of it, so that what is not read is a reason a stop there is not
  * resolved and never a construction left out.
@@ -19,7 +18,7 @@ import java.util.function.Supplier;
  * @param asked    what it asks of a run that works it out
  * @param reaches  each way a run on the way to the comparison gets to it, one for each way into
  *                 the body the comparison stands in that it is met before, where the walk met it
- *                 on one way ({@link WhereConstructionsAreMet}): none where no run is shown to get
+ *                 on one way ({@link WhereARunMayStop}): none where no run is shown to get
  *                 to it
  * @param everyWay whether {@code reaches} holds every way a run on the way to the comparison
  *                 gets to it: false where a way into the body the comparison stands in is not
@@ -44,7 +43,7 @@ record AConstructionOnTheWay(Core.Construct made, Asked asked, List<Reach> reach
      * @param before          what a run on it works out before the construction, where a run
      *                        taking both ways works it out before the comparison unless something
      *                        before it ends the run
-     *                        ({@link WhatARunWorksOutBeforeACount#workedOutBeforeAConstruction});
+     *                        ({@link WhatARunWorksOutBeforeACount#workedOutBeforeASite});
      *                        empty where that is not shown. Worked out the first time it is
      *                        asked: a construction the way to the comparison already holds what
      *                        it asks of is never asked it, and the walk goes down the tree from

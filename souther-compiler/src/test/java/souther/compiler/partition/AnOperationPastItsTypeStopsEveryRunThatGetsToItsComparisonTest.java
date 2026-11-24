@@ -25,13 +25,12 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Where an operation a comparison works out comes to past its type, and every operation a run may
- * work out before it gets past, every run that gets to the comparison there stops in it. That is
- * said beside the rule, as the operation and the rows, and leaves nothing open: no measure waits
- * on it, and no question stands for it.
+ * Where an operation a comparison works out comes to past its type, every run that gets to it
+ * there stops in it. That is said beside the rule, as the operation and the rows, and leaves
+ * nothing open: no measure waits on it, and no question stands for it.
  *
- * <p>The rows are said over as many numbers as the operation is over, and an operation worked
- * out of another's value comes after it on every run.
+ * <p>The rows are said over as many numbers as the operation is over, and of the runs that get to
+ * it: what a run works out before it is not among them, as a run stopping there never gets here.
  *
  * <p>An operation over a name read off a container is over the values the container hands it:
  * every run stops where the operation is past its type at every one of those values, and a run
@@ -152,77 +151,51 @@ class AnOperationPastItsTypeStopsEveryRunThatGetsToItsComparisonTest {
     }
 
     /**
-     * {@code x + 2} is worked out of {@code x + 1}, so a run stops in it only where
-     * {@code x + 1} got past: at the greatest {@code x}, the run stopped in {@code x + 1} and
-     * never worked {@code x + 2} out.
+     * The rows of an operation are where it is past its type, of the runs that get to it: what
+     * a run works out before it — the operation it is worked out of, one beside it worked out
+     * first, or a product no row is read of — is not among them, as a run that stops there never
+     * gets here.
      */
     @Test
-    void anOperationWorkedOutOfAnotherStopsOnlyWhereThatOneGotPast() {
+    void theRowsOfAnOperationAreOfTheRunsThatGetToItAndNotOfWhatComesBefore() {
         assertEquals(List.of("x + 1 where x " + GREATEST + "..",
-                        "x + 2 where x " + plus(GREATEST, -1) + ".." + plus(GREATEST, -1)),
+                        "x + 2 where x " + plus(GREATEST, -1) + ".."),
                 everyRunStops("Int", "x", "", "(x + 1) + 1 == y"));
-    }
-
-    /** {@code z + 1} is worked out first and may stop the run at the greatest {@code z}, so the
-     *  sum is said to stop it only where {@code z + 1} got past. */
-    @Test
-    void anOperationOverAnotherNumberWorkedOutFirstIsGotPastBeforeTheSumStops() {
-        assertEquals(List.of("z + 1 where z " + GREATEST + "..",
-                        "x + z + 1 where x + z " + GREATEST + ".. and z .."
-                                + plus(GREATEST, -1)),
-                everyRunStops("Int", "x", "guard z >= 0 else No { n = 0 }", "(z + 1) + x == y"));
-    }
-
-    /** Neither of {@code x + 1} and {@code z + 1} is worked out of the other, but the left of a
-     *  sum is worked out first: {@code x + 1} stops a run wherever {@code x} is past, and
-     *  {@code z + 1} only where {@code x + 1} gets past. */
-    @Test
-    void anOperationWorkedOutAfterAnotherIsAskedNothingOfWhereTheFirstStops() {
         assertEquals(List.of("x + 1 where x " + GREATEST + "..",
-                        "z + 1 where x .." + plus(GREATEST, -1) + " and z " + GREATEST + "..",
-                        "x + z + 2 where x .." + plus(GREATEST, -1) + " and x + z "
-                                + plus(GREATEST, -1) + ".. and z .." + plus(GREATEST, -1),
-                        "x + z + 2 where x .." + plus(GREATEST, -1) + " and x + z .."
-                                + plus(LEAST, -3) + " and z .." + plus(GREATEST, -1)),
+                        "z + 1 where z " + GREATEST + "..",
+                        "x + z + 2 where x + z " + plus(GREATEST, -1) + "..",
+                        "x + z + 2 where x + z .." + plus(LEAST, -3)),
                 everyRunStops("Int", "x", "", "(x + 1) + (z + 1) == y"));
+        assertEquals(List.of("y + 1 where y " + GREATEST + ".."),
+                everyRunStops("Int", "x", "", "x * z + (y + 1) == 0"));
     }
 
     /**
-     * The sum is worked out on the arm taken where {@code y} is above nought and on no other, so a
-     * run that takes the other arm at the greatest {@code x} gets past: no run stops there.
+     * The sum is worked out on the arm taken where {@code y} is above nought and on no other: the
+     * rows every run stops at are said of the runs that take that arm, and a run that takes the
+     * other at the greatest {@code x} gets past. Where no run takes the arm nothing is said of
+     * it.
      */
     @Test
-    void anOperationOfOneArmStopsNoRunThatTakesAnotherArm() {
-        assertEquals(List.of(),
+    void anOperationOfOneArmStopsOnlyTheRunsThatTakeIt() {
+        assertEquals(List.of("x + 1 where x " + GREATEST + ".."),
                 everyRunStops("Int", "x", "", "(if y > 0 then x + 1 else x) == z"));
         assertEquals(1, stopsSaid("Int", "x", "", "(if y > 0 then x + 1 else x) == z").size());
         assertEquals(List.of(), stopsSaid("Int", "x", "guard y <= 0 else No { n = 0 }",
                 "(if y > 0 then x + 1 else x) == z"));
         String byCases = "(match x with | A -> y + 1 | B -> y) == z";
-        assertEquals(List.of(), everyRunStops("Kind", "x", "", byCases));
+        assertEquals(List.of("y + 1 where y " + GREATEST + ".."),
+                everyRunStops("Kind", "x", "", byCases));
         assertEquals(1, stopsSaid("Kind", "x", "", byCases).size());
         assertEquals(List.of(), stopsSaid("Kind", "x", "guard x == B else No { n = 0 }", byCases));
-        assertTrue(everyRunStops("Int", "x", "",
-                        "(if y > 0 then x + 1 else x) + (z + 1) == 0").stream()
-                .noneMatch(stop -> stop.startsWith("x + 1 ")),
-                "the arm taken where y is above nought is not the only way to the comparison");
-    }
-
-    /**
-     * The product is worked out too, and a run may stop in it before it works the sum out: the
-     * sum is not told to be where every run stops.
-     */
-    @Test
-    void anOperationBesideAnExpressionAnotherAnalysisAnswersForIsNotWhereEveryRunStops() {
-        assertEquals(List.of(), everyRunStops("Int", "x", "", "x * z + (y + 1) == 0"));
     }
 
     /**
      * What a run stops at is the same whether an operator is written as the operator or as the
      * library's call that stands for it: the walk reads the call as the operator, and what is told
      * of it, and in what order, is the operator's. A product is the case that was told apart: it is
-     * a number of its own, told as the multiplication it is, and a run stops in it before it works
-     * out the sum beside it, however the multiplication was written.
+     * a number of its own, told as the multiplication it is, however the multiplication was
+     * written.
      */
     @Test
     void anOperatorWrittenAsTheLibrarysCallIsToldAsTheOperatorIs() {
@@ -242,7 +215,6 @@ class AnOperationPastItsTypeStopsEveryRunThatGetsToItsComparisonTest {
             assertEquals(stopsSaid("Int", "x", "", pair[0]).size(),
                     stopsSaid("Int", "x", "", pair[1]).size(), pair[0] + " | " + pair[1]);
         }
-        assertEquals(List.of(), everyRunStops("Int", "x", "", "Int.multiply(x, z) + (y + 1) == 0"));
         assertEquals(List.of("x + 1 where x " + GREATEST + ".."),
                 everyRunStops("Int", "x", "", "Int.multiply(x + 1, z) >= y"));
     }
@@ -274,17 +246,22 @@ class AnOperationPastItsTypeStopsEveryRunThatGetsToItsComparisonTest {
     }
 
     /**
-     * Each element of a list written out is a number of its own, and the sum over the last is
-     * past the greatest where {@code x} is nine below it, and not ten: the run stops in it there,
-     * after the sum over the first got past. Read element by element up to a figure, a list of
-     * every whole number between two numbers written down is the same.
+     * Each element of a list written out is a number of its own, and a run stops in the sum
+     * over one of them on its application. What every run stops at is said of a step every run
+     * gets to by one way, and a step in a closure applied to two elements is got to by two: the
+     * rows of one application are proved in its names, so none is said of every run getting
+     * to the step. That a run stops there is shown all the same.
      */
     @Test
     void aSumOverTheLastElementOfAListWrittenOutStopsEveryRunPastIt() {
-        assertEquals(List.of("x + 10 where x " + plus(GREATEST, -9) + ".."),
+        // Shown on each application, and said of every run getting to the step on none: the
+        // rows of one application are proved in its names, and a run gets to the step by
+        // another as well.
+        assertEquals(List.of(),
                 everyRunStops("Int", "x", "", "List.all(n -> n + x >= 0, [0, 10])"));
-        assertEquals(List.of("x + 10 where x " + plus(GREATEST, -9) + ".." + plus(GREATEST, -9)),
-                everyRunStops("Int", "x", "", "List.all(n -> n + x >= 0, List.rangeInclusive(0, 10))"));
+        assertEquals(List.of(), everyRunStops("Int", "x", "",
+                "List.all(n -> n + x >= 0, List.rangeInclusive(0, 10))"));
+        assertFalse(stopsSaid("Int", "x", "", "List.all(n -> n + x >= 0, [0, 10])").isEmpty());
     }
 
     /**
@@ -296,8 +273,9 @@ class AnOperationPastItsTypeStopsEveryRunThatGetsToItsComparisonTest {
     void aSumOnAnApplicationMadeOnlyPastAnAnswerStopsOnlyTheRunsThatMakeIt() {
         assertEquals(List.of(), everyRunStops("Int", "x", "", "List.any(n -> n + x >= 0, [0, 10])"));
         assertEquals(List.of(), stopsSaid("Int", "x", "", "List.any(n -> n + x >= 0, [0, 10])"));
-        assertEquals(List.of("x + 10 where x " + plus(GREATEST, -9) + ".."),
+        assertEquals(List.of(),
                 everyRunStops("Int", "x", "", "List.any(n -> n + x < 0, [0, 10])"));
+        assertFalse(stopsSaid("Int", "x", "", "List.any(n -> n + x < 0, [0, 10])").isEmpty());
     }
 
     /** A closure applied to a list holding nothing works nothing out on any run. */
@@ -368,12 +346,14 @@ class AnOperationPastItsTypeStopsEveryRunThatGetsToItsComparisonTest {
     }
 
     /** A remainder worked out on one arm only is worked out by no run taking the other: the sum
-     *  under it stops no row of every run. */
+     *  under it stops the runs that take the arm, where it is past the type, and said of them. */
     @Test
-    void theSumARemainderOnOneArmIsOfStopsNoRunThatTakesTheOther() {
+    void theSumARemainderOnOneArmIsOfStopsOnlyTheRunsThatTakeIt() {
         for (String dividend : List.of("x + z", "x + 1")) {
             String comparison = "(if y > 0 then Int.floorMod(" + dividend + ", 7) else 1) >= 1";
-            assertEquals(List.of(), everyRunStops("Int", "x", "", comparison), dividend);
+            assertFalse(everyRunStops("Int", "x", "", comparison).isEmpty(), dividend);
+            assertTrue(everyRunStops("Int", "x", "", comparison).stream()
+                    .allMatch(stop -> stop.startsWith(dividend + " where ")), dividend);
             assertFalse(stopsSaid("Int", "x", "", comparison).isEmpty(), dividend);
             assertEquals(List.of(), stopsSaid("Int", "x", "guard y <= 0 else No { n = 0 }",
                     comparison), dividend);
@@ -407,11 +387,12 @@ class AnOperationPastItsTypeStopsEveryRunThatGetsToItsComparisonTest {
     }
 
     /** The sum the remainder is of is worked out in the order it is written: {@code x + n} is
-     *  past the type before one is added to it, as it is without the remainder. */
+     *  past the type before one is added to it, as it is without the remainder. Each sum is a
+     *  step a run may stop at. */
     @Test
     void aSumUnderTheSumARemainderOverAWholeNumberInTurnIsOfStopsARunFirst() {
         String over = "List.isEmpty(List.filter(n -> %s, List.rangeInclusive(0, y)))";
-        assertEquals(1, stopsSaid("Int", "x", "",
+        assertEquals(2, stopsSaid("Int", "x", "",
                 over.formatted("Int.floorMod((x + n) + 1, 7) == 0")).size());
         assertEquals(everyRunStops("Int", "x", "", over.formatted("(x + n) + 1 >= 1")),
                 everyRunStops("Int", "x", "",
@@ -420,7 +401,8 @@ class AnOperationPastItsTypeStopsEveryRunThatGetsToItsComparisonTest {
 
     /** No element on any row the ways leave, or none written, and the remainder is worked out
      *  on no run; over numbers that keep short of the ends, it stops none, and over numbers that
-     *  do not, it may stop one. */
+     *  do not, it may stop one — at each sum it works out, {@code x + z} and the element added to
+     *  that. */
     @Test
     void theSumARemainderOverAWholeNumberInTurnIsOfStopsNoRunThatDoesNotWorkItOutPastItsType() {
         assertEquals(List.of(), stopsSaid("Int", "x", "guard y < 0 else No { n = 0 }",
@@ -428,7 +410,7 @@ class AnOperationPastItsTypeStopsEveryRunThatGetsToItsComparisonTest {
                         + " List.rangeInclusive(0, y)))"));
         String between = "List.isEmpty(List.filter(n -> Int.floorMod(x + z + n, 7) == 0,"
                 + " List.rangeInclusive(1, %s)))";
-        assertEquals(1, stopsSaid("Int", "x", "", between.formatted("1")).size());
+        assertEquals(2, stopsSaid("Int", "x", "", between.formatted("1")).size());
         assertEquals(List.of(), stopsSaid("Int", "x", "", between.formatted("0")));
         String upTo = "List.isEmpty(List.filter(n -> Int.floorMod(n + %s, 7) == 0,"
                 + " List.rangeInclusive(0, List.length(x))))";
@@ -449,7 +431,7 @@ class AnOperationPastItsTypeStopsEveryRunThatGetsToItsComparisonTest {
         List<JsonNode> out = new ArrayList<>();
         for (JsonNode each : findings) {
             String kind = each.get("kind").asString();
-            if (kind.equals("rule_may_stop_a_run") || kind.equals("rule_stop_not_shown")) {
+            if (kind.equals("step_may_stop_a_run") || kind.equals("step_stop_not_shown")) {
                 out.add(each);
             }
         }

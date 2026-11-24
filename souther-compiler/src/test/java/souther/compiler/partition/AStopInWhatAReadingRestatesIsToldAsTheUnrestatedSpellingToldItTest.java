@@ -34,7 +34,7 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
     /** The note of {@code q + 1}. The number is a field of a record that writes a clause on
      *  another field, so a value of the record holding the greatest {@code Int} there, with the
      *  other field at nought, is written down, and the stop is shown. */
-    private static final String THE_STOP = "every run stops in k.q + 1 where k.q is"
+    private static final String THE_STOP = "every run that gets here stops in k.q + 1 where k.q is"
             + " at least 9223372036854775807";
 
     private static final Map<String, String> CONDITIONS = new LinkedHashMap<>();
@@ -113,11 +113,12 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
         assertEquals(1, TOLD.get("ruleSays").size(), TOLD.toString());
     }
 
-    /** The arms of a choice that is an argument are worked out before the operation picks one. */
+    /** The arms of a choice that is an argument are worked out before the operation picks one;
+     *  the operation picking, which stops no run, has nothing said of it. */
     @Test
     void anOperationInAnArmThatIsAnArgumentIsToldWhateverTheOperationPicks() {
-        assertToldOnceAndLeftOnly("maxOfAnArm", NO_OPERATION_TOLD);
-        assertToldOnceAndLeftOnly("absOfAnArm", NO_OPERATION_TOLD);
+        assertToldOnceAndLeftOnly("maxOfAnArm");
+        assertToldOnceAndLeftOnly("absOfAnArm");
     }
 
     /** A closure is applied to each element, and what a run works out on an arm it takes there
@@ -141,13 +142,13 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
         assertEquals(1, TOLD.get("matchArm").size(), TOLD.toString());
     }
 
-    /** The first step is worked out before the second, so a row is not said to stop in the
-     *  second where it stopped in the first, and the first is told. */
+    /** The first step is worked out before the second, and each is told where it is: the first
+     *  as the step alone is, and the second over what the first made. */
     @Test
     void anOperationInAStepComposedWithAnotherIsToldAsTheStepAloneIs() {
-        assertEquals(1, TOLD.get("composed").size(), TOLD.toString());
-        assertTrue(TOLD.get("composed").getFirst()
-                .contains("in 2 * ds[*] where ds[*] is at least"), TOLD.toString());
+        assertEquals(2, TOLD.get("composed").size(), TOLD.toString());
+        assertTrue(TOLD.get("composed").stream().anyMatch(line -> line.contains("may stop a run")
+                && line.contains("in 2 * ds[*] where ds[*] is at least")), TOLD.toString());
     }
 
     /**
@@ -171,13 +172,12 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
 
     /**
      * What decides a choice in a closure's answer is worked out on every run: a stop in it is
-     * told by the comparison of the length as well as by the condition's own comparison, which a
-     * program run cannot tell apart. An operation only an arm works out, which cannot stop here,
-     * is told of none.
+     * told once, at the step it is, whatever compares the length of the list. An operation only
+     * an arm works out, which cannot stop here, is told of none.
      */
     @Test
-    void aConditionIsToldByTheComparisonOfTheListAndByItsOwn() {
-        assertEquals(2, TOLD.get("lengthOfAConditionStep").size(), TOLD.toString());
+    void aConditionIsToldOnceWhereItIsWorkedOut() {
+        assertEquals(1, TOLD.get("lengthOfAConditionStep").size(), TOLD.toString());
         assertEquals(List.of(), TOLD.get("lengthOfAnArmStepNoStop"), TOLD.toString());
     }
 
@@ -205,10 +205,6 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
         assertEquals(List.of(), TOLD.get("maxOfAnArmUnreached"));
         assertEquals(List.of(), TOLD.get("matchArmNoStop"));
     }
-
-    /** Why a run is not said to stop at an operation that is none this compiler tells apart. */
-    private static final String NO_OPERATION_TOLD =
-            "it is none of the operations this compiler tells apart";
 
     /**
      * That the behavior {@code name} is told of one stop a run may come to, and of one place not

@@ -33,7 +33,7 @@ class AStopAtADivisionByNoughtIsShownByAnInputThatGetsThereTest {
                 """.formatted(expression), Adequacy.Asked.fullReport());
         List<AStopShown> out = new ArrayList<>();
         for (Adequacy.Finding each : AdequacyReport.of(compilation).findings()) {
-            if (each.about() instanceof About.ARuleThatMayStopARun(var finding)) {
+            if (each.about() instanceof About.AStepThatMayStopARun(var finding)) {
                 out.addAll(finding.shown());
             }
         }

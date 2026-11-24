@@ -34,7 +34,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.function.IntFunction;
 import java.util.function.Predicate;
 
 /**
@@ -54,12 +53,12 @@ import java.util.function.Predicate;
  *
  * <p>Getting to it is shown where a run that takes the way to the comparison and the way to the
  * construction works the construction out before the comparison unless something before it ends
- * the run ({@link WhatARunWorksOutBeforeACount#workedOutBeforeAConstruction}), every condition on
+ * the run ({@link WhatARunWorksOutBeforeACount#workedOutBeforeASite}), every condition on
  * those ways is a relation of numbers of the input or settled, and everything a run may work out
  * before it ends no run whatever the input ({@link WhatARunMayEndFor}) or is a construction whose
  * condition is read over numbers of the input, which the value is then asked to meet. The way to
  * a construction on an arm is the arm's condition with what stood above it, as the walk met it
- * ({@link WhereConstructionsAreMet}). What a construction asks is where making its type succeeds,
+ * ({@link WhereARunMayStop}). What a construction asks is where making its type succeeds,
  * and nothing narrower or wider ({@link DeclaredBounds#whereMakingSucceeds}), so a value meeting it
  * gets past the construction and one that does not stops there.
  *
@@ -67,7 +66,7 @@ import java.util.function.Predicate;
  * a run that does not take that way is a run to some other rule.
  *
  * <p>Asked of every construction a run on the way may work out before the comparison
- * ({@link ComparisonReadings.Reading#onTheWay}), whatever is read of it: one whose condition is not
+ * ({@link WhereARunMayStop}), whatever is read of it: one whose condition is not
  * read, or whose way is not, is unresolved for that reason, and never left out.
  */
 final class ConstructionStopAssessment {
@@ -141,45 +140,37 @@ final class ConstructionStopAssessment {
     }
 
     /**
-     * What is shown of each construction a run on the way to the comparison {@code each} reads may
-     * work out before it ({@link ComparisonReadings.Reading#onTheWay}), where every row taking the
-     * way to it is in one of {@code ways}: in the order they are worked out.
+     * What is shown of {@code one}, a construction a run may stop at, where every row taking a way
+     * to it is in one of {@code ways}: the same judgement as of one on the way to a comparison,
+     * the way to it standing for the way to the comparison. {@code asks} are what the
+     * constructions a run may work out before it ask, and {@code waysTo} the way to each.
      */
-    static List<Judgement> of(ComparisonReadings.Reading each, List<SearchRegion> ways,
-                              InputReading read) {
-        List<AConstructionOnTheWay> onTheWay = each.onTheWay();
-        List<ConstructionAsk> asks = new ArrayList<>();
-        // The way to each construction by each way into the body the comparison stands in.
-        Map<Integer, Map<Core, List<OnTheWay>>> waysTo = new HashMap<>();
-        for (AConstructionOnTheWay one : onTheWay) {
-            if (one.asked() instanceof AConstructionOnTheWay.Asked.Read(ConstructionAsk ask)) {
-                asks.add(ask);
-            }
-            for (AConstructionOnTheWay.Reach reach : one.reaches()) {
-                waysTo.computeIfAbsent(reach.entry(), _ -> new IdentityHashMap<>())
-                        .put(one.made(), reach.toIt());
-            }
-        }
-        // Whether the way holds a part is asked of each part once, however many times it is read.
-        Predicate<Proposition> toTheComparison = heldOnEvery(ways, read);
-        List<Judgement> out = new ArrayList<>();
-        for (AConstructionOnTheWay one : onTheWay) {
-            out.add(switch (one.asked()) {
-                case AConstructionOnTheWay.Asked.Nothing _ -> new Judgement.Safe(one.made());
-                // Not read for want of the names where it is worked out, where the walk did not
-                // meet it on one way: that no run is shown to get to it is what is missing.
-                case AConstructionOnTheWay.Asked.NotRead _ -> new Judgement.Unresolved(one.made(),
-                        new AConstructionStopNotShown(one.made().typeName().key(),
-                                one.made().pos(), Optional.empty(), !one.reaches().isEmpty()
-                                        ? WhyAConstructionStopIsNotShown.ASKS_NOT_READ
-                                        : WhyAConstructionStopIsNotShown.REACH_NOT_SHOWN),
-                        new WhatAConstructionAsks.OnEveryRule());
-                case AConstructionOnTheWay.Asked.Read(ConstructionAsk ask) ->
-                        judged(one, ask, asks, waysTo, toTheComparison, read,
-                                each.definitions());
-            });
-        }
-        return out;
+    static Judgement ofASite(AConstructionOnTheWay one, List<SearchRegion> ways,
+                             List<ConstructionAsk> asks, Map<Core, List<OnTheWay>> waysTo,
+                             InputReading read, ValueTemplates definitions) {
+        Map<Integer, Map<Core, List<OnTheWay>>> byEntry = new HashMap<>();
+        one.reaches().forEach(reach -> byEntry.put(reach.entry(), waysTo));
+        return judgedWhole(one, asks, byEntry, heldOnEvery(ways, read), read, definitions);
+    }
+
+    /** What is shown of {@code one}, as far as what it asks is read ({@link #judged}). */
+    private static Judgement judgedWhole(AConstructionOnTheWay one, List<ConstructionAsk> asks,
+                                         Map<Integer, Map<Core, List<OnTheWay>>> waysTo,
+                                         Predicate<Proposition> toTheComparison,
+                                         InputReading read, ValueTemplates definitions) {
+        return switch (one.asked()) {
+            case AConstructionOnTheWay.Asked.Nothing _ -> new Judgement.Safe(one.made());
+            // Not read for want of the names where it is worked out, where the walk did not
+            // meet it on one way: that no run is shown to get to it is what is missing.
+            case AConstructionOnTheWay.Asked.NotRead _ -> new Judgement.Unresolved(one.made(),
+                    new AConstructionStopNotShown(one.made().typeName().key(),
+                            one.made().pos(), Optional.empty(), !one.reaches().isEmpty()
+                                    ? WhyAConstructionStopIsNotShown.ASKS_NOT_READ
+                                    : WhyAConstructionStopIsNotShown.REACH_NOT_SHOWN),
+                    new WhatAConstructionAsks.OnEveryRule());
+            case AConstructionOnTheWay.Asked.Read(ConstructionAsk ask) ->
+                    judged(one, ask, asks, waysTo, toTheComparison, read, definitions);
+        };
     }
 
     /**
@@ -198,78 +189,22 @@ final class ConstructionStopAssessment {
                                     Predicate<Proposition> toTheComparison, InputReading read,
                                     ValueTemplates definitions) {
         // What asks nothing, or nothing the way to the comparison does not hold, is safe whatever
-        // the tree says, and the tree is walked only for what is left.
-        Optional<WhatAConstructionAsks> unheld =
-                ask.toldOf(is -> toTheComparison.test(is.read()));
+        // the tree says, and the tree is walked only for what is left. What the ways hold is of
+        // the ways read: where some way is not, it holds nothing of that one, and every part of
+        // what is asked is left.
+        Optional<WhatAConstructionAsks> unheld = one.everyWay()
+                ? ask.toldOf(is -> toTheComparison.test(is.read()))
+                : ask.toldOf(_ -> false);
         if (unheld.isEmpty()) {
             return new Judgement.Safe(one.made());
         }
-        List<Judgement> judged = new ArrayList<>();
-        Together shown = together(one.reaches().size(), at -> {
+        return WhatEveryWayShows.together(one.reaches().size(), at -> {
             AConstructionOnTheWay.Reach reach = one.reaches().get(at);
-            Judgement byIt = judgedOn(one, reach, ask, asks,
-                    waysTo.getOrDefault(reach.entry(), Map.of()), toTheComparison, read,
-                    definitions);
-            judged.add(byIt);
-            return switch (byIt) {
-                case Judgement.Safe _ -> ByAWay.SAFE;
-                case Judgement.Stops _ -> ByAWay.STOPS;
-                case Judgement.Unresolved _ -> ByAWay.NOT_RESOLVED;
-            };
-        }, one.everyWay());
-        return switch (shown) {
-            case Together.ByOne(int at) -> judged.get(at);
-            case Together.NoneStops _ -> new Judgement.Safe(one.made());
-            case Together.ByAWayNotRead _ ->
-                    unresolved(one, ask, unheld, WhyAConstructionStopIsNotShown.REACH_NOT_SHOWN);
-        };
-    }
-
-    /** What one way a run gets to a construction on shows of it. */
-    enum ByAWay { SAFE, STOPS, NOT_RESOLVED }
-
-    /** What is shown of a construction, put together from each way a run gets to it on
-     *  ({@link #together}). */
-    sealed interface Together {
-
-        /** What the {@code at}-th way shows. */
-        record ByOne(int at) implements Together {}
-
-        /** That no run on the way stops there: every way is read, and each shows it. */
-        record NoneStops() implements Together {}
-
-        /** Not resolved, since each way read shows no run stops there and some way is not
-         *  read. */
-        record ByAWayNotRead() implements Together {}
-    }
-
-    /**
-     * What is shown of a construction, from what each of {@code ways} ways a run gets to it on
-     * shows ({@code shownBy}, asked of each in turn, and of none past a stop): the first stop,
-     * whatever the others come to, since one run that stops is a run that stops; otherwise the
-     * first not resolved; otherwise, where they are every way there is ({@code everyWay}), that
-     * none stops; and otherwise not resolved, for want of the way not read. Safe asks of every run,
-     * and a stop of one.
-     */
-    static Together together(int ways, IntFunction<ByAWay> shownBy, boolean everyWay) {
-        int unresolved = -1;
-        for (int at = 0; at < ways; at++) {
-            switch (shownBy.apply(at)) {
-                case STOPS -> {
-                    return new Together.ByOne(at);
-                }
-                case NOT_RESOLVED -> {
-                    if (unresolved < 0) {
-                        unresolved = at;
-                    }
-                }
-                case SAFE -> { }
-            }
-        }
-        if (unresolved >= 0) {
-            return new Together.ByOne(unresolved);
-        }
-        return everyWay ? new Together.NoneStops() : new Together.ByAWayNotRead();
+            return judgedOn(one, reach, ask, asks, waysTo.getOrDefault(reach.entry(), Map.of()),
+                    toTheComparison, read, definitions);
+        }, WhatEveryWayShows::of, one.everyWay(),
+                () -> unresolved(one, ask, unheld, WhyAConstructionStopIsNotShown.REACH_NOT_SHOWN),
+                () -> new Judgement.Safe(one.made()));
     }
 
     /** What is shown of {@code one} by {@code reach}, one way a run on the way gets to it on

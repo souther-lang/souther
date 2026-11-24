@@ -848,11 +848,19 @@ final class Clauses {
                 ? EntryHeld.read(substituted(said.of(), given), core -> core, newtypes) : null;
     }
 
-    /** {@code e} with each binding {@code given} names replaced by the value it was given. */
+    /**
+     * {@code e} with each binding {@code given} names replaced by the value it was given, except
+     * where the name stands for that value narrowed. A name an arm gives the scrutinee narrowed to
+     * one of its cases is of that case, and the scrutinee is of another named type, the whole
+     * union: put in the name's place it would be an operand of another type than the one the
+     * clause was written over, so the name is left standing, as one whose value is not known here.
+     * A value whose type only says less of its elements, such as an empty list, is the value the
+     * name has.
+     */
     static Core substituted(Core e, Map<BindingId, Core> given) {
         if (e instanceof Core.Read r) {
             Core value = given.get(r.binding());
-            return value != null ? value : r;
+            return (value != null && !isNarrowedFrom(r.type(), value.type())) ? value : r;
         }
         return Core.mapAll(e, child -> substituted(child, given),
                 // A name slot holds a binding and nothing else, so a value put there would be
@@ -861,6 +869,14 @@ final class Clauses {
                 // value stands as belongs to the value, and not to this slot.
                 name -> Core.withoutStanding(substituted(name, given)) instanceof Core.Read r
                         ? r : name);
+    }
+
+    /** Whether a name of type {@code named} stands for a value of type {@code value} narrowed to
+     *  one of its cases: the value of a union, or of one named type where the name is of
+     *  another. */
+    private static boolean isNarrowedFrom(Type named, Type value) {
+        return !named.equals(value) && (value instanceof Type.Union
+                || (value instanceof Type.Ref && named instanceof Type.Ref));
     }
 
 }

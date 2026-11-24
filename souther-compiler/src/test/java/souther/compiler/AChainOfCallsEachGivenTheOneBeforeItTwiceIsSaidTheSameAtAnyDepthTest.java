@@ -7,6 +7,8 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.function.IntFunction;
 import java.util.function.IntUnaryOperator;
 import java.util.regex.Matcher;
@@ -20,7 +22,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * An equality over the answer of the last of a chain of calls, each handed the one before it
  * twice, is said the same at any depth. How much work the chain is read in is held by
  * {@code AChainOfLetsIsReadInWorkThatGrowsWithItsLengthTest}; what is asked here is what the
- * report says.
+ * report says. Each call is a step a run may stop at, said in the stops section, so a deeper
+ * chain says more steps there; what each of them is said to be does not change.
  */
 class AChainOfCallsEachGivenTheOneBeforeItTwiceIsSaidTheSameAtAnyDepthTest {
 
@@ -146,13 +149,39 @@ class AChainOfCallsEachGivenTheOneBeforeItTwiceIsSaidTheSameAtAnyDepthTest {
     private static void assertSaysAtAnyDepthWhatItSaysAtAShallowOne(
             IntFunction<String> reportAt, IntUnaryOperator lineOfTheComparison, int shallow,
             int... deep) {
-        String expected = withTheComparisonsPlaceTakenOut(reportAt.apply(shallow),
-                lineOfTheComparison.applyAsInt(shallow));
+        String expected = withEachStepSaidOnce(withTheComparisonsPlaceTakenOut(
+                reportAt.apply(shallow), lineOfTheComparison.applyAsInt(shallow)));
         for (int depth : deep) {
             String report = reportAt.apply(depth);
-            assertEquals(expected, withTheComparisonsPlaceTakenOut(report,
-                    lineOfTheComparison.applyAsInt(depth)), "depth " + depth);
+            assertEquals(expected, withEachStepSaidOnce(withTheComparisonsPlaceTakenOut(report,
+                    lineOfTheComparison.applyAsInt(depth))), "depth " + depth);
         }
+    }
+
+    /** A line of the stops section: its heading, with how many steps, or one step said. */
+    private static final Pattern STOPS_HEADING = Pattern.compile("^ +stops +.*$");
+    private static final Pattern A_STEP = Pattern.compile("^ +· (may stop a run|stop not"
+            + " resolved): .*$");
+
+    /**
+     * The report with each step of the stops section said once. A stop is said of the step a run
+     * stops at, and each call of a deeper chain is one more step: what does not depend on the
+     * depth is what is said of each, so the steps are compared by their words, with their places
+     * taken out and a run of steps said alike written once, and the heading without its counts.
+     */
+    private static String withEachStepSaidOnce(String report) {
+        List<String> out = new ArrayList<>();
+        for (String line : report.split("\n", -1)) {
+            String said = STOPS_HEADING.matcher(line).matches() ? line.replaceAll("\\d+", "N")
+                    : A_STEP.matcher(line).matches() ? PLACE.matcher(line).replaceAll("S:C")
+                    : line;
+            if (A_STEP.matcher(line).matches() && !out.isEmpty()
+                    && out.getLast().equals(said)) {
+                continue;
+            }
+            out.add(said);
+        }
+        return String.join("\n", out);
     }
 
     /** The source puts the module, the behavior and the first name on five lines, then a line for

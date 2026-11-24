@@ -160,8 +160,6 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
         NOT_TOLD.put("totalOfSquares", "the same: the answer x * x is a square, which "
                 + "ElementValue holds as no monomial of distinct places");
         FORMS.put("totalOfSquares", "List.sum(List.map(x -> x * x, ds)) >= 10");
-        NOT_TOLD.put("totalOfAStepByQ", "the comparison is not read, so there is no range for "
-                + "what it works out");
         FORMS.put("totalOfAStepByQ", "List.sum(List.map(x -> x + q, ds)) >= 10");
         NOT_TOLD.put("productOfTheElements", "the comparison is not read: a product of what a "
                 + "container holds is no term (FormRange.aTotal asks of a sum)");
@@ -183,9 +181,6 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
                 + "answer so far; an operation over the running value has no operand that is a "
                 + "place of the input");
         FORMS.put("foldOfAProduct", "List.fold((w, l) -> w * l, 1, ds) >= 10");
-        NOT_TOLD.put("lengthOfAStepOfAFilter", "the elements a filter keeps stand at no place "
-                + "(everyElementAt), and an operation told over the elements cannot carry the test "
-                + "that keeps them");
         FORMS.put("lengthOfAStepOfAFilter",
                 "List.length(List.map(x -> x + 1, List.filter(y -> y > 0, ds))) >= 2");
         // one closure applied to the elements of the list and to q: what is told of the one
@@ -225,8 +220,6 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
                 + "List.filter(y -> y > 0 && y < 100, ds))) >= 2");
         FORMS.put("lengthOfAStepOfAFilterKeepingNoEndTheOtherWayRound",
                 "List.length(List.map(x -> x + 1, List.filter(y -> 0 > y, ds))) >= 2");
-        NOT_TOLD.put("lengthOfAnArmStep", "what an arm works out is worked out only where the "
-                + "arm is taken, which an operation told over the elements cannot say");
         FORMS.put("lengthOfAnArmStep",
                 "List.length(List.map(x -> if x > 5 then x + 1 else 0, ds)) >= 2");
         // an operation over what a walk comes to: what that may be shows where no run stops, and
@@ -259,16 +252,13 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
         FORMS.put("walkPlusOneGuardedByQ", "q > 0 && " + walk + " + 1 <= 10");
         FORMS.put("walkOverAWrittenListPlusOneWithinTheType",
                 "List.fold((w, l) -> if l > w then l else w, 0, [1, 2]) + 1 >= 3");
-        NOT_TOLD.put("walkAgainstAnOption", "no operation is told: a walk compared with what an "
-                + "option holds is two values held aside, and the operation beside the walk is "
-                + "read by no owner (NO_OPERATION_TOLD): said as not read");
         FORMS.put("walkAgainstAnOption", walk + " <= Option.withDefault(0, List.max(ds)) + 1");
         FORMS.put("armOfAWalkPlusOne", "(if q > 3 then " + walk + " + 1 else 0) >= 2");
-        NOT_TOLD.put("remainderOfAWalkPlusOne", "no operation is told: the operation over the "
-                + "walk is a part of an expression held aside, read as a number only where it "
-                + "holds no choice (worksOutAsANumber), so it is passed over "
-                + "(NO_OPERATION_TOLD): said as not read");
         FORMS.put("remainderOfAWalkPlusOne", "Int.floorMod(" + walk + " + 1, 7) >= 3");
+        NOT_TOLD.put("armOfAWalkPlusOneInAClosure", "the walk is worked out inside the closure "
+                + "on one application standing for every element, so a value looked for at the "
+                + "element is a list of one, and the walk over that list is what the step is over: "
+                + "no way of the walk is read in terms of that one element: said as not resolved");
         FORMS.put("armOfAWalkPlusOneInAClosure",
                 "List.all(x -> (if x > 3 then " + walk + " + 1 else 0) >= 2, ds)");
         FORMS.put("remainderOfAWalk", "Int.floorMod(" + walk + ", 7) + 1 >= 3");
@@ -312,6 +302,10 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
         FORMS.put("totalOfTheSameChoice",
                 "List.sum(List.map(x -> if x > 0 then x else 0 - x, ds)) >= 3");
         // a part of what a walk carries in a tuple, counted and summed
+        UNTOLD_THOUGH_NONE_STOPS.put("countCarriedInATuple", "a step that answers a tuple is "
+                + "read by no reading of what a walk comes to over its elements "
+                + "(AddedOfEachElement reads a step answering a number), so the count one part "
+                + "carries is not shown to keep within the type");
         FORMS.put("countCarriedInATuple", "{ let (s, _) = List.fold((acc, x) -> { "
                 + "let (s, c) = acc \n if x > 0 then (s + 1, c) else acc }, (0, 0), ds) \n s }"
                 + " >= 3");
@@ -328,19 +322,13 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
         // row of the input holds at a place, every other operation and every condition on the way
         // read whole (StopAssessment). Each of these is a stop a run comes to and none of that is
         // shown of, so it is said as not resolved.
-        notShown("an operation on an arm of a choice", "takenFromAProductInAnArm",
-                "elementsOfAChosenListThatAgree");
-        notShown("an operation worked out on each application of a closure", "lengthOfAStep",
-                "lengthOfACancelledStep", "lengthOfAConditionStep", "lengthOfAFlatStep",
-                "lengthOfAShiftedStep", "lengthOfASortedStep", "lengthOfAStepAtAnIndex",
-                "lengthOfAStepInAWrittenList", "lengthOfATupleStep",
-                "lengthOfAnUnusedBinding", "lengthOfACancelledConstantStep", "emptyOfAStep",
-                "everyOfAStep", "everyOfAShiftedStep",
-                "totalOfAStep", "totalOfAStepOverAStep", "totalOfTakenSteps", "foldOfAStep",
-                "totalOfThePositionsTimesTheElements", "totalOfTheSameChoice");
+        notShown("an operation on an arm of a choice", "takenFromAProductInAnArm");
+        notShown("an operation over what an application is worked out over, which no value of the "
+                + "elements is put to", "totalOfAStepOverAStep",
+                "totalOfThePositionsTimesTheElements");
         notShown("a total of the elements, worked out exactly: no value of the elements is put "
-                + "to it", "totalOfTheElements", "foldOfTheElements", "foldAddingAChoice",
-                "sumOfAChoiceStep", "sumCarriedInATuple");
+                + "to it", "totalOfTheElements", "foldOfTheElements", "sumOfAChoiceStep",
+                "sumCarriedInATuple");
         notShown("a product of two numbers of the input, which is no form a value is put to",
                 "productOfTwoNumbers");
     }

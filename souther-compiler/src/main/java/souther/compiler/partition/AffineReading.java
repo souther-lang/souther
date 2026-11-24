@@ -9,6 +9,7 @@ import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.ElementAnswer;
+import souther.compiler.check.FoldedValue;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.TypeView;
 import souther.compiler.check.ValueStanding;
@@ -602,7 +603,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
 
     /** What a part read apart came to, the numbers it named and what it told, each its own until
      *  a reading takes it. */
-    private record PartReadApart(Attempt attempt, Set<NumericTerm> named, WhatWasTold told) {}
+    private record PartReadApart(Attempt attempt, Set<NumericTerm> named, WhatWasTold told,
+                                 AffineForms.Outcome<NumericTerm, InputReads> outcome) {}
 
     /**
      * The same, holding aside the value of {@code stoppedAt} where it is not null: the expression a
@@ -631,6 +633,15 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
     private static Arithmetic reading(
             InputReading ofTheInput, Set<NumericTerm> named, ElementsMet met, WhatWasTold told,
             StoppedValues stoppedAt, NamesKept namesKept, Predicate<Core> saidOnTheirWays) {
+        return reading(ofTheInput, named, met, told, stoppedAt, namesKept, saidOnTheirWays,
+                WorkedOutToReachIt.of(ofTheInput));
+    }
+
+    /** The same, asking {@code workedOut} what a run works out to reach a value. */
+    private static Arithmetic reading(
+            InputReading ofTheInput, Set<NumericTerm> named, ElementsMet met, WhatWasTold told,
+            StoppedValues stoppedAt, NamesKept namesKept, Predicate<Core> saidOnTheirWays,
+            WorkedOutToReachIt workedOut) {
         InputDomain inputs = ofTheInput.domain();
         RuleReadingSource ruleSource = ofTheInput.rules();
         ReadMeaning.WhereKept kept = KeptTruths.readIn(ofTheInput);
@@ -642,8 +653,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
 
             /** What a run works out to reach a value, asked once for each value this reading
              *  asks it of. */
-            private final WorkedOutToReachIt reached = WorkedOutToReachIt.of(ofTheInput)
-                    .besideTheStopsSaidOnTheirWays(saidOnTheirWays);
+            private final WorkedOutToReachIt reached =
+                    workedOut.besideTheStopsSaidOnTheirWays(saidOnTheirWays);
 
             /** The lists written out whose elements this reading has told as a run builds them,
              *  each once. */
@@ -682,12 +693,32 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                                 told::askedOfTheFigure);
             }
 
-            /** What a run works out to give a name its value is worked out before any operation
-             *  over the name: it is what that operation is worked out after. */
+            /**
+             * What a run works out to give a name its value is worked out before any operation
+             * over the name: it is what that operation is worked out after.
+             *
+             * <p>A value this reading, or one tried apart from it, has read apart already where
+             * it stands, as this one would — with what this one holds aside, and with a product
+             * a stop or a number of its own as here — is taken as that reading came to, with what
+             * it named and told: reading it again would be the same reading. A chain of names
+             * each made of the last, whose every value is a part read apart, is then read once
+             * however many of its parts are read.
+             */
             @Override
-            public <T> T readingTheValueOf(BindingId name, Supplier<T> read) {
+            public AffineForms.Outcome<NumericTerm, InputReads> readingTheValueOf(
+                    BindingId name, Core value, InputReads at,
+                    Supplier<AffineForms.Outcome<NumericTerm, InputReads>> read) {
                 int from = told.operations.size();
-                T answer = read.get();
+                PartReadApart kept = told.keptPart(new PartAsked(
+                        new ReadThere(Core.withoutStanding(value), at), stoppedAt,
+                        told.productsStop), met);
+                AffineForms.Outcome<NumericTerm, InputReads> answer;
+                if (kept != null && kept.outcome() != null) {
+                    take(kept);
+                    answer = kept.outcome();
+                } else {
+                    answer = read.get();
+                }
                 told.workedOutToGive(name, from);
                 return answer;
             }
@@ -934,10 +965,13 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                             WhatWasTold apart = told.apart();
                             apart.productsStop = productsStop;
                             Set<NumericTerm> namedApart = new LinkedHashSet<>();
-                            return new PartReadApart(Attempt.ofAPart(AffineForms.outcome(
-                                    part.value(), part.at(), reading(ofTheInput, namedApart, met,
-                                            apart, aside, null, saidOnTheirWays))),
-                                    namedApart, apart);
+                            AffineForms.Outcome<NumericTerm, InputReads> outcome =
+                                    AffineForms.outcome(part.value(), part.at(),
+                                            reading(ofTheInput, namedApart, met, apart, aside,
+                                                    null, saidOnTheirWays, workedOut),
+                                            told.folds());
+                            return new PartReadApart(Attempt.ofAPart(outcome), namedApart, apart,
+                                    outcome);
                         });
             }
 
@@ -2869,6 +2903,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             private record Kept(PartReadApart read, ElementsMet.Footprint left) {}
 
             private final Map<PartAsked, Kept> kept = new HashMap<>();
+            /** What each name came to folded, for every walk of these readings: they fold the
+             *  names alike, and a part read apart reads the names under it again. */
+            private final FoldedValue.Kept folds = new FoldedValue.Kept();
             /** The parts being read now, outermost first. */
             private final List<PartAsked> being = new ArrayList<>();
             /** The shallowest of {@link #being} a part was refused for being read already, since
@@ -2889,6 +2926,27 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         boolean toldAt(Core node) {
             Core here = Core.withoutStanding(node);
             return lastToldAt.containsKey(here) || keptAt.contains(here);
+        }
+
+        /** What each name came to folded, for every walk of this reading and of those tried apart
+         *  from it. */
+        FoldedValue.Kept folds() {
+            return parts.folds;
+        }
+
+        /**
+         * The part {@code asked} as it was read apart before, in this reading or one tried apart
+         * from it, where it was kept and the elements stand as they did when it was read, leaving
+         * them as it did; null where it was not. Read again it would be the same reading
+         * ({@link #partApart}).
+         */
+        private PartReadApart keptPart(PartAsked asked, ElementsMet met) {
+            PartsReadApart.Kept kept = parts.kept.get(asked);
+            if (kept != null && met.agrees(kept.left())) {
+                met.takes(kept.left());
+                return kept.read();
+            }
+            return null;
         }
 
         /**
@@ -2913,15 +2971,14 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             if (counting != null) {
                 counting[0]++;
             }
-            PartsReadApart.Kept kept = parts.kept.get(asked);
-            if (kept != null && met.agrees(kept.left())) {
-                met.takes(kept.left());
-                return kept.read();
+            PartReadApart taken = keptPart(asked, met);
+            if (taken != null) {
+                return taken;
             }
             int already = parts.being.indexOf(asked);
             if (already >= 0) {
                 parts.shallowestRefused = Math.min(parts.shallowestRefused, already);
-                return new PartReadApart(new Attempt.NotApplicable(), Set.of(), apart());
+                return new PartReadApart(new Attempt.NotApplicable(), Set.of(), apart(), null);
             }
             int depth = parts.being.size();
             int refusedOutside = parts.shallowestRefused;
@@ -3145,7 +3202,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          * The same, where {@code tells} tells the stops of what it can of what {@code skipped}
          * works out, as operations kept for where a run stops: a row is not shown to get past
          * them, and a stop is left untold only where something that may end a run is left that
-         * nothing tells ({@link WorkedOutToReachIt#endsNoRunUntoldWhereItWasPassedOver}).
+         * nothing tells ({@link WorkedOutToReachIt#whereAStopIsLeftUntoldWhereItWasPassedOver}).
          *
          * <p>Asked where no value on the way is taken as another ({@link InputReads#untaken}):
          * whether working {@code skipped} out may end a run is one question for every arm of the
@@ -3465,6 +3522,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
      *  those were read; null everywhere else. */
     static long[] PARTS;
 
+
     /** Where a test counts how many times what deciding a choice works out was asked for, and
      *  how many of those were worked out; null everywhere else. */
     static long[] DECIDED;
@@ -3572,11 +3630,47 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
     private static WhatWasTold toldForWhereARunStops(Core expression, InputReads at,
                                                      InputReading ofTheInput,
                                                      WhatTheAnalysisAnswersFor answersFor) {
+        return toldForWhereARunStops(expression, at, ofTheInput, answersFor,
+                new StoppedValues(null, null, false, ofTheInput, answersFor),
+                WorkedOutToReachIt.of(ofTheInput));
+    }
+
+    /**
+     * What a run works out evaluating {@code expression} ({@link #stopsOfEvaluating}), and what
+     * each number it holds aside there stands for: the expression, with its names, that the
+     * reading reads nothing of and holds as one number in an operation over it.
+     */
+    record WhatIsWorkedOutBesideWhatIsHeldAside(StopEvidence stops,
+                                                Map<NumericTerm, Denotation> heldAside) {}
+
+    /**
+     * The same as {@link #stopsOfEvaluating}, with what is held aside, asking {@code reached} what
+     * a run works out to reach a value: a reader of many expressions of one body hands the one
+     * it keeps for the body, so that what it has worked out of a name is not worked out again
+     * for each expression that reads the name.
+     */
+    static WhatIsWorkedOutBesideWhatIsHeldAside stopsOfEvaluatingBesideWhatIsHeldAside(
+            Core expression, InputReads at, InputReading ofTheInput,
+            WhatTheAnalysisAnswersFor answersFor, WorkedOutToReachIt reached) {
+        if (reached.endsNoRun(new Denotation(expression, at))) {
+            return new WhatIsWorkedOutBesideWhatIsHeldAside(
+                    StopEvidence.ofWhatIsToldOf(UndividedByARelation.Working.NO_STOPS), Map.of());
+        }
+        StoppedValues held = new StoppedValues(null, null, false, ofTheInput, answersFor);
+        StopEvidence stops = toldForWhereARunStops(expression, at, ofTheInput, answersFor, held,
+                reached).workedOut().stops();
+        return new WhatIsWorkedOutBesideWhatIsHeldAside(stops, held.whatEachStandsFor());
+    }
+
+    private static WhatWasTold toldForWhereARunStops(Core expression, InputReads at,
+                                                     InputReading ofTheInput,
+                                                     WhatTheAnalysisAnswersFor answersFor,
+                                                     StoppedValues held,
+                                                     WorkedOutToReachIt reached) {
         WhatWasTold told = new WhatWasTold();
         Arithmetic reading = reading(ofTheInput, new LinkedHashSet<>(), new ElementsMet(), told,
-                new StoppedValues(null, null, false, ofTheInput, answersFor), null,
-                answersFor.saidOnItsWays());
-        boolean read = AffineForms.outcome(expression, at, reading)
+                held, null, answersFor.saidOnItsWays(), reached);
+        boolean read = AffineForms.outcome(expression, at, reading, told.folds())
                 instanceof AffineForms.Outcome.Composed<NumericTerm, InputReads>;
         if (read) {
             told.askedOfTheComparison(null, ofTheInput);
@@ -3908,6 +4002,14 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             Map<NumericTerm, FormRange> out = new HashMap<>();
             byAtom.forEach((atom, held) -> out.put(atom, held.range));
             return out;
+        }
+
+        /** The expression each number held aside stands for, with its names. */
+        Map<NumericTerm, Denotation> whatEachStandsFor() {
+            Map<NumericTerm, Denotation> out = new LinkedHashMap<>();
+            byAtom.forEach((atom, held) -> out.put(atom, new Denotation(held.expression,
+                    held.at)));
+            return Collections.unmodifiableMap(out);
         }
 
         /** Whether the analysis that drew the lines answers for what working {@code held}, an

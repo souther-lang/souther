@@ -32,8 +32,8 @@ public final class StopsTheReportSays {
      */
     public record Operation(String written, String unresolvedBecause) {}
 
-    /** A finding that a run reaching the rule {@code subject} names may stop, and the operations
-     *  it is said of. */
+    /** A finding that a run may stop at the step {@code subject} names, and the operations it is
+     *  said of. */
     public record Stop(String subject, List<Operation> operations) {}
 
     /** A finding that what a rule states about {@code subject} is not read, and why. */
@@ -55,7 +55,7 @@ public final class StopsTheReportSays {
     private static void collect(JsonNode node, List<Stop> stops, List<Unread> unread) {
         if (node.isObject()) {
             switch (node.path("kind").asString()) {
-                case "rule_may_stop_a_run", "rule_stop_not_shown" -> {
+                case "step_may_stop_a_run", "step_stop_not_shown" -> {
                     List<Operation> operations = new ArrayList<>();
                     node.path("unresolved").forEach(each -> operations.add(new Operation(
                             each.has("operation") ? each.path("operation").asString() : null,

@@ -718,10 +718,11 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
                         + "inputs/InputReads;L" + c + "partition/ClosureApplications;L" + c
                         + "partition/LiveFlow;Ljava/util/List;Z"
                         + "Ljava/util/List;Ljava/util/List;L" + c
-                        + "partition/ConditionNumbering;)V", 2, GOES_ON_INTO_IT);
-        row(out, c + "partition/WhatARunWorksOutBeforeACount", "constructionsUnder",
-                "(" + core + core + core + "Ljava/util/Set;Ljava/util/List;)V", 2,
-                GOES_ON_INTO_IT);
+                        + "partition/ConditionNumbering;)V", 1, GOES_ON_INTO_IT);
+        row(out, c + "partition/WhereARunMayStop", "aStepARunMayStopAt", "(" + core + ")Z", 1,
+                "whether the node the walk stands at is a step a run may stop at: a node standing"
+                        + " as a wider type is refused first, and the step under it is met one"
+                        + " step down");
         row(out, c + "partition/LiveFlow", "walk", "(" + core + "Ljava/util/Set;)V", 1,
                 COUNTS_THROUGH_IT);
         row(out, c + "partition/PredicateReadings", "found",

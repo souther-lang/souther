@@ -42,6 +42,13 @@ public sealed interface ReportMessage extends Message {
 
     record Branch() implements ReportMessage, Prose {}
 
+    /** Where a run of the behavior stops short of an answer. */
+    record Stops() implements ReportMessage, Prose {}
+
+    /** How many steps some run is shown to stop at, and at how many whether one does is not
+     *  resolved. */
+    record StopCounts(int shown, int notShown) implements ReportMessage, Prose {}
+
     record Decision() implements ReportMessage, Prose {}
 
     record Replacement() implements ReportMessage, Prose {}
@@ -526,28 +533,27 @@ public sealed interface ReportMessage extends Message {
 
     record SentTo(String at) implements ReportMessage, Prose {}
 
-    /** A rule some run on its way is shown to stop in, where it stops said by {@code how}:
-     *  {@link StopsInAnOperation}, {@link StopsAtAConstruction} or
-     *  {@link StopsInAnOperationAndAtAConstruction}. */
-    record MayStopARun(String rule, Message how, Message every, String calls)
+    /** A step of a behavior some run is shown to stop at, written at {@code step}, how said by
+     *  {@code how}: {@link StopsInAnOperationAt} or {@link StopsAtThisConstruction}. */
+    record StepMayStopARun(String step, Message how, Message every)
             implements ReportMessage, Prose {}
 
-    /** Where: in an operation the rule is read through. */
-    record StopsInAnOperation() implements ReportMessage, Prose {}
+    /** How: a run of the input {@code values} gets there and stops in {@code operation}. */
+    record StopsInAnOperationAt(String operation, String values)
+            implements ReportMessage, Prose {}
 
-    /** Where: at a construction on the way to the rule, not meeting what each of {@code asks}
-     *  asks, each said by {@link ConstructionAsks} or {@link ConstructionNeverPassed}. */
-    record StopsAtAConstruction(Message asks) implements ReportMessage, Prose {}
+    /** How: any run that gets to the step stops in {@code operation}, whatever the input holds. */
+    record AnyRunStopsInAnOperation(String operation) implements ReportMessage, Prose {}
 
-    /** Where: both, in an operation and at a construction on the way. */
-    record StopsInAnOperationAndAtAConstruction(Message asks) implements ReportMessage, Prose {}
+    /** How: a run that gets to the construction does not meet what each of {@code asks} asks,
+     *  each said by {@link ConstructionAsks} or {@link ConstructionNeverPassed}. */
+    record StopsAtThisConstruction(Message asks) implements ReportMessage, Prose {}
 
-    /** A rule where whether a run stops on its way through it is not resolved: of the operations
-     *  it works out ({@code unresolved}, each said by {@link StopNotShownIn} or
-     *  {@link StopNotShownInWhatItWorksOut}), of what the constructions on the way ask
-     *  ({@code asks}), or both. */
-    record StopNotShown(String rule, Message unresolved, Message every, Message asks,
-                        String calls)
+    /** A step of a behavior, written at {@code step}, where whether a run stops is not resolved:
+     *  of the operations it works out ({@code unresolved}, each said by {@link StopNotShownIn} or
+     *  {@link StopNotShownInWhatItWorksOut}), or of what it asks, where it is a construction
+     *  ({@code asks}). */
+    record StepStopNotShown(String step, Message unresolved, Message every, Message asks)
             implements ReportMessage, Prose {}
 
     /** Whether a run stops in {@code operation} is not resolved, for {@code why}. */
@@ -566,10 +572,6 @@ public sealed interface ReportMessage extends Message {
      * followed by what its behavior is told of.
      */
     record NoOperationIsReadAt(Message at) implements ReportMessage, Prose {}
-
-    /** {@link AnotherPartIsNotRead}, and where the first stop left untold in that part is,
-     *  {@code at}, said as {@link NoOperationIsReadAt} says it. */
-    record AnotherPartIsNotReadAt(Message at) implements ReportMessage, Prose {}
 
     /** A place a run may stop at: the construction of {@code type} written at {@code at}, of which
      *  it is not shown that every run making it keeps its invariant. */
@@ -601,12 +603,6 @@ public sealed interface ReportMessage extends Message {
     record TheCalledBehaviorMayStopAt(String behavior, Message place)
             implements ReportMessage, Prose {}
 
-    /** Why: the comparison stops a run on rows it states, and no input reaching them is looked
-     *  for. */
-    record TheComparisonStopsOnRowsItStates() implements ReportMessage, Prose {}
-
-    /** Why: another part of the comparison may stop a run first and is not read. */
-    record AnotherPartIsNotRead() implements ReportMessage, Prose {}
 
     /** Why: something evaluated before the comparison may stop a run first. */
     record SomethingBeforeItMayStopARun() implements ReportMessage, Prose {}
@@ -620,21 +616,16 @@ public sealed interface ReportMessage extends Message {
     /** Why: the input's types declare invariants or cases, and no input meeting them is built. */
     record NoInputMeetingTheTypesIsBuilt() implements ReportMessage, Prose {}
 
-    /** Why: no input tried takes the operation past its type. */
-    record NoInputTriedTakesItPastItsType() implements ReportMessage, Prose {}
+    /** Why: no input tried stops a run there: takes the operation past its type, or brings the
+     *  divisor to nought. */
+    record NoInputTriedStopsARunThere() implements ReportMessage, Prose {}
 
-    /** Why: the inputs tried ran out before one took the operation past its type. */
+    /** Why: the inputs tried ran out before one stopped a run there. */
     record TheInputsTriedRanOut() implements ReportMessage, Prose {}
 
     /** Where a run that gets to a rule stops, said of a rule where no run is shown to get
      *  there. */
     record ARunGettingThereStops(String stops) implements ReportMessage, Prose {}
-
-    /** The constructions on the way to a rule of which neither that a run stops there nor that
-     *  none does is shown: {@code asks}, each said by {@link ConstructionAsksAndNotShown},
-     *  {@link ConstructionNeverPassedAndNotShown} or {@link ConstructionNotShown}. */
-    record AStopAtAConstructionOnTheWayIsNotDetermined(Message asks)
-            implements ReportMessage, Prose {}
 
     /** One such construction, what it asks of a run that works it out, and why neither is
      *  shown. */

@@ -11,24 +11,21 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
- * What {@link StopAssessment} judges of each place a run may stop in each comparison of one
- * behavior, asked of every place the comparison is worked out at with a row arriving, along the
- * way the comparison stands on.
+ * What {@link StopsOfABody} judges of each step of one behavior a run may stop at, each as the
+ * walk of the body met it: the steps, in the order the walk first met each.
  *
- * <p>For a test that says which site a stop is shown at and at which value of the input: the
+ * <p>For a test that says which step a stop is shown at and at which value of the input: the
  * report words it for a reader, and the judgement is what it is worded from.
  */
 final class SitesJudged {
 
     private SitesJudged() {}
 
-    /** The judgements of every comparison of {@code behavior} in {@code compilation}'s one
-     *  module, in the order the comparisons are read. */
-    static List<StopAssessment.Judgement> of(Compilation compilation, String behavior) {
+    /** What is shown of every step of {@code behavior} in {@code compilation}'s one module. */
+    static List<StopsOfABody.AtAStep> steps(Compilation compilation, String behavior) {
         String module = compilation.modules().getFirst();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
@@ -36,18 +33,17 @@ final class SitesJudged {
                 .get(behavior);
         AnalysisBody analysis = checked.analysisBodies().get(behavior);
         InputReading read = inputs.reading(rules);
-        List<StopAssessment.Judgement> out = new ArrayList<>();
-        for (ComparisonReadings.Reading each : ComparisonReadings.of(behavior, analysis, read,
+        return ComparisonReadings.of(behavior, analysis, read,
                 InputReads.ofParametersWhereCallsStand(inputs.parameterReads(),
                         inputs.declared(rules), ElementBindings.of(analysis, rules.newtypes()),
                         inputs.dependencies()),
-                ComparisonWitnesses.AtComparisons.NONE).comparisons()) {
-            List<StopAssessment.Place> places = new ArrayList<>();
-            for (ComparisonReadings.Reading.WorkedOutAt worked : each.whatARunWorksOut()) {
-                places.add(new StopAssessment.Place(worked, true, each.assumed()));
-            }
-            out.addAll(StopAssessment.of(each, places, false, read));
-        }
-        return out;
+                ComparisonWitnesses.AtComparisons.NONE).stops().judged();
+    }
+
+    /** What is shown of every operation of every step of {@code behavior}, in the order the
+     *  steps were met. */
+    static List<StopAssessment.Judgement> of(Compilation compilation, String behavior) {
+        return steps(compilation, behavior).stream()
+                .flatMap(each -> each.operations().stream()).toList();
     }
 }

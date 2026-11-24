@@ -78,7 +78,7 @@ class AnElementAWrittenIndexPicksIsTheValueAnArmNamesTest {
     }
 
     private static final String STOPS_NOT_ALL_TOLD = "evaluation_stops_not_fully_read";
-    private static final String MAY_STOP = "rule_may_stop_a_run";
+    private static final String MAY_STOP = "step_may_stop_a_run";
 
     /** The kind of each finding the report makes. */
     private static List<String> findingKinds(JsonNode report) {

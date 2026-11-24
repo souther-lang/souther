@@ -5,13 +5,11 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.ACompiledModel;
 import souther.compiler.inputs.AStopShown;
 import souther.compiler.inputs.BlockReason;
-import souther.compiler.inputs.AStopNotShown;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.inputs.RuleWhereARunMayStop;
-import souther.compiler.inputs.RuleWhereAStopIsNotShown;
+import souther.compiler.inputs.StepWhereARunMayStop;
+import souther.compiler.inputs.StepWhereAStopIsNotShown;
 import souther.compiler.inputs.RuleWithoutALine;
 import souther.compiler.inputs.WhatIsShownOfAStop;
-import souther.compiler.inputs.WhyAStopIsNotShown;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
@@ -37,14 +35,14 @@ class WhatIsShownOfAStopIsSaidOfTheRuleTest {
      *  same: no value of the elements is put to it. */
     @Test
     void aTotalOfTheElementsIsNotResolvedThoughTheRuleIsFiledNowhere() {
-        assertEquals(List.of(RuleWhereAStopIsNotShown.class),
+        assertEquals(List.of(StepWhereAStopIsNotShown.class),
                 kinds(compiled("ds: List<Int>", "if List.sum(ds) >= 10 then 1 else 2")));
     }
 
     /** The same, added up by a walk. */
     @Test
     void aWalkAddingUpTheElementsIsNotResolvedThoughTheRuleIsFiledNowhere() {
-        assertEquals(List.of(RuleWhereAStopIsNotShown.class), kinds(compiled("ds: List<Int>",
+        assertEquals(List.of(StepWhereAStopIsNotShown.class), kinds(compiled("ds: List<Int>",
                 "if List.fold((w, l) -> w + l, 0, ds) >= 10 then 1 else 2")));
     }
 
@@ -56,11 +54,11 @@ class WhatIsShownOfAStopIsSaidOfTheRuleTest {
         Compilation compilation = compiled("q: Int",
                 "if (if q > 5 then q + 1 else 3) >= q then 1 else 2");
         List<WhatIsShownOfAStop> shown = stopsShown(compilation);
-        assertEquals(List.of(RuleWhereARunMayStop.class), kinds(shown));
+        assertEquals(List.of(StepWhereARunMayStop.class), kinds(shown));
         assertEquals(List.of(new AStopShown("q + 1",
                         List.of(new AStopShown.NumberAt(TermPath.of("q"),
                                 BigInteger.valueOf(Long.MAX_VALUE))))),
-                ((RuleWhereARunMayStop) shown.getFirst()).shown());
+                ((StepWhereARunMayStop) shown.getFirst()).shown());
         assertFalse(holdsABorderOpen(compilation));
     }
 
@@ -72,7 +70,7 @@ class WhatIsShownOfAStopIsSaidOfTheRuleTest {
         Compilation compilation = compiled("ds: List<Int>, q: Int",
                 "if List.any(x -> x < 9223372036854775807, ds) && List.fold((w, l) -> "
                         + "if l > w then l else w, 0, ds) + 1 <= q then 1 else 2");
-        assertEquals(List.of(RuleWhereAStopIsNotShown.class), kinds(compilation));
+        assertEquals(List.of(StepWhereAStopIsNotShown.class), kinds(compilation));
         assertTrue(holdsABorderOpen(compilation));
     }
 
@@ -83,12 +81,12 @@ class WhatIsShownOfAStopIsSaidOfTheRuleTest {
         Compilation compilation = compiled("data Tier = Low | High", "q: Int, t: Tier",
                 "if (match t with | Low -> 3 | High -> q + 1) >= q then 1 else 2");
         List<WhatIsShownOfAStop> shown = stopsShown(compilation);
-        assertEquals(List.of(RuleWhereARunMayStop.class), kinds(shown));
+        assertEquals(List.of(StepWhereARunMayStop.class), kinds(shown));
         assertEquals(List.of(new AStopShown("q + 1", List.of(
                         new AStopShown.NumberAt(TermPath.of("q"),
                                 BigInteger.valueOf(Long.MAX_VALUE)),
                         new AStopShown.NumberAt(TermPath.of("t"), BigInteger.ONE)))),
-                ((RuleWhereARunMayStop) shown.getFirst()).shown());
+                ((StepWhereARunMayStop) shown.getFirst()).shown());
     }
 
     /** A product of two numbers of the input is no form a value is put to, so whether it stops
@@ -98,7 +96,7 @@ class WhatIsShownOfAStopIsSaidOfTheRuleTest {
     void aProductNotResolvedLeavesItsLineStanding() {
         Compilation compilation = compiled("price: Int, quantity: Int",
                 "if 2 * price * quantity >= 1000 then 1 else 2");
-        assertEquals(List.of(RuleWhereARunMayStop.class, RuleWhereAStopIsNotShown.class),
+        assertEquals(List.of(StepWhereARunMayStop.class, StepWhereAStopIsNotShown.class),
                 kinds(compilation));
         assertFalse(holdsABorderOpen(compilation));
     }
@@ -112,8 +110,8 @@ class WhatIsShownOfAStopIsSaidOfTheRuleTest {
         Compilation compilation = compiled("q: Int",
                 "if 2 * q - q >= 9223372036854775807 then 1 else 2");
         List<WhatIsShownOfAStop> shown = stopsShown(compilation);
-        assertEquals(List.of(RuleWhereARunMayStop.class), kinds(shown));
-        assertFalse(((RuleWhereARunMayStop) shown.getFirst()).everyRunStops().isEmpty());
+        assertEquals(List.of(StepWhereARunMayStop.class), kinds(shown));
+        assertFalse(((StepWhereARunMayStop) shown.getFirst()).everyRunStops().isEmpty());
         assertEquals(List.of(), linesAtTheGreatestInt(compilation));
         // And the same comparison of q with nothing before it stopping a run there is drawn.
         assertEquals(List.of("9223372036854775807"), linesAtTheGreatestInt(compiled("q: Int",
@@ -125,14 +123,14 @@ class WhatIsShownOfAStopIsSaidOfTheRuleTest {
                 .map(BorderAssessment::value).filter("9223372036854775807"::equals).toList();
     }
 
-    /** Where every run on an application stops is proved, and no run is shown to make the
-     *  application there: the proof is kept with the stop not resolved. */
+    /** Where every run on an application stops is proved, and a list of one element is a run
+     *  that makes the application there and stops: the proof is kept with the stop shown. */
     @Test
-    void whereEveryRunStopsIsKeptWhereNoRunIsShownToGetThere() {
+    void whereEveryRunStopsIsKeptBesideARunShownToGetThere() {
         List<WhatIsShownOfAStop> shown = stopsShown(compiled("ds: List<Int>",
                 "if List.all(x -> x + 10 > 3, ds) then 1 else 2"));
-        assertEquals(List.of(RuleWhereAStopIsNotShown.class), kinds(shown));
-        assertFalse(((RuleWhereAStopIsNotShown) shown.getFirst()).everyRunStops().isEmpty());
+        assertEquals(List.of(StepWhereARunMayStop.class), kinds(shown));
+        assertFalse(((StepWhereARunMayStop) shown.getFirst()).everyRunStops().isEmpty());
     }
 
     /** A comparison every run getting to which stops in its sides is one runs get to: where the
@@ -188,8 +186,8 @@ class WhatIsShownOfAStopIsSaidOfTheRuleTest {
                 }
                 """);
         List<WhatIsShownOfAStop> shown = stopsShown(compilation);
-        assertEquals(List.of(RuleWhereARunMayStop.class), kinds(shown));
-        RuleWhereARunMayStop stops = (RuleWhereARunMayStop) shown.getFirst();
+        assertEquals(List.of(StepWhereARunMayStop.class), kinds(shown));
+        StepWhereARunMayStop stops = (StepWhereARunMayStop) shown.getFirst();
         assertTrue(stops.shown().isEmpty());
         assertEquals(1, stops.constructions().size());
         assertEquals(List.of(new AStopShown.NumberAt(TermPath.of("gross"),
@@ -216,8 +214,8 @@ class WhatIsShownOfAStopIsSaidOfTheRuleTest {
     void anAttemptRefusedIsNoConstructionARunGotPast() {
         List<WhatIsShownOfAStop> shown = stopsShown(ACompiledModel.answered(AN_ATTEMPT_FIRST
                 .replace("MADE", "Count(q)").replace("RULE", "q <= 3")));
-        assertEquals(List.of(RuleWhereARunMayStop.class), kinds(shown));
-        RuleWhereARunMayStop stops = (RuleWhereARunMayStop) shown.getFirst();
+        assertEquals(List.of(StepWhereARunMayStop.class), kinds(shown));
+        StepWhereARunMayStop stops = (StepWhereARunMayStop) shown.getFirst();
         assertEquals(List.of(new AStopShown.NumberAt(TermPath.of("q"), BigInteger.ONE.negate())),
                 stops.constructions().getFirst().at());
     }
@@ -234,8 +232,9 @@ class WhatIsShownOfAStopIsSaidOfTheRuleTest {
         assertEquals(List.of(), stopsShown(compilation));
     }
 
-    /** What a construction on the way asks of a run, where something worked out before it may
-     *  end the run first, is said as not resolved and never as a stop. */
+    /** What a construction asks of a run, where something worked out before it may end the run
+     *  first, is said as not resolved and never as a stop; the sum it is made of is a step of
+     *  its own, at which a run is shown to stop. */
     @Test
     void whatAConstructionAsksAfterSomethingThatMayEndTheRunIsNotResolved() {
         Compilation compilation = ACompiledModel.answered("""
@@ -246,18 +245,20 @@ class WhatIsShownOfAStopIsSaidOfTheRuleTest {
                 let m (x, c) = Out { n = Count(x + 1), within = x <= c }
                 """);
         List<WhatIsShownOfAStop> shown = stopsShown(compilation);
-        assertEquals(List.of(RuleWhereAStopIsNotShown.class), kinds(shown));
-        RuleWhereAStopIsNotShown open = (RuleWhereAStopIsNotShown) shown.getFirst();
+        assertEquals(List.of(StepWhereARunMayStop.class, StepWhereAStopIsNotShown.class),
+                kinds(shown));
+        assertTrue(((StepWhereARunMayStop) shown.getFirst()).constructions().isEmpty());
+        StepWhereAStopIsNotShown open = (StepWhereAStopIsNotShown) shown.getLast();
         assertFalse(open.asks().isEmpty());
         assertTrue(open.notShown().isEmpty());
     }
 
-    /** A rule read at two calls of the helper it is written in: at the first, nothing comes
-     *  before it and a run stops in it; at the second, the first may stop a run first, and
-     *  whether this one does is not resolved. Both are said of the one rule. */
+    /** A step of a helper read at two calls: what the first call works out, a run with the
+     *  second's number at the greatest gets past, so a stop is shown at each, and both are one
+     *  finding where the step is written. */
     @Test
-    void aStopShownBesideOneNotResolvedIsSaidAsBoth() {
-        assertEquals(List.of(RuleWhereARunMayStop.class, RuleWhereAStopIsNotShown.class),
+    void aStopShownAtOneCallLeavesTheNextToShowItsOwn() {
+        assertEquals(List.of(StepWhereARunMayStop.class),
                 kinds(ACompiledModel.answered("""
                         module w1
                         let over (n: Int) = n + 1 > 3
@@ -279,30 +280,27 @@ class WhatIsShownOfAStopIsSaidOfTheRuleTest {
     void anOperationPastItsTypeOnTheWayIsAStop() {
         List<WhatIsShownOfAStop> shown = stopsShown(compiled("q: Int",
                 "if q > 0 && q + 1 > 3 then 1 else 2"));
-        assertEquals(List.of(RuleWhereARunMayStop.class), kinds(shown));
+        assertEquals(List.of(StepWhereARunMayStop.class), kinds(shown));
         // And it carries what shows it: the operation, and the value of q it stops at.
         assertEquals(List.of(new AStopShown("q + 1", List.of(new AStopShown.NumberAt(
                         TermPath.of("q"), BigInteger.valueOf(Long.MAX_VALUE))))),
-                ((RuleWhereARunMayStop) shown.getFirst()).shown());
+                ((StepWhereARunMayStop) shown.getFirst()).shown());
     }
 
-    /** One rule read at three calls, two of which leave its stop unresolved, is one finding of
-     *  each kind, with every place it was read at. */
+    /** A step of a helper read at three calls is one finding where it is written, with a stop
+     *  shown at each call: a run with the number that call hands it at the greatest and the
+     *  numbers the calls before it are handed below it gets past them and stops there. */
     @Test
-    void oneRuleReadAtSeveralCallsIsOneFindingOfEachKind() {
+    void oneStepReadAtSeveralCallsIsOneFindingWithAStopAtEach() {
         List<WhatIsShownOfAStop> shown = stopsShown(ACompiledModel.answered("""
                 module w1
                 let over (n: Int) = n + 1 > 3
                 behavior m : (q: Int, r: Int, s: Int) -> Int
                 let m (q, r, s) = if over(q) && over(r) && over(s) then 1 else 2
                 """));
-        assertEquals(List.of(RuleWhereARunMayStop.class, RuleWhereAStopIsNotShown.class),
-                kinds(shown));
-        RuleWhereAStopIsNotShown open = shown.stream()
-                .filter(RuleWhereAStopIsNotShown.class::isInstance)
-                .map(RuleWhereAStopIsNotShown.class::cast).findFirst().orElseThrow();
-        assertEquals(List.of(WhyAStopIsNotShown.SOMETHING_BEFORE_IT_MAY_STOP),
-                open.notShown().stream().map(AStopNotShown::why).distinct().toList());
+        assertEquals(List.of(StepWhereARunMayStop.class), kinds(shown));
+        assertEquals(3, ((StepWhereARunMayStop) shown.getFirst()).shown().size(),
+                shown::toString);
     }
 
     /** Whether what a run works out to evaluate a rule holds the border of a place it is filed

@@ -82,7 +82,7 @@ class AnOperationOverWhatAWalkCameToIsNotReadAsOneThatStopsNothingTest {
     @Test
     void aStopThatIsToldIsToldAsItWas() {
         String report = reportOf("q + 1 <= 10");
-        assertTrue(report.contains("every run stops in q + 1"), report);
+        assertTrue(report.contains("every run that gets here stops in q + 1"), report);
         assertFalse(report.contains(NOT_ALL_TOLD), report);
         assertTrue(report.contains("measurement: complete"), report);
     }
@@ -110,15 +110,18 @@ class AnOperationOverWhatAWalkCameToIsNotReadAsOneThatStopsNothingTest {
 
     private static final String ANOTHER_WALK = "List.fold((w, l) -> if l > w then l else w, 1, ds)";
 
-    /** A stop that is told is not the one left untold beside it: the rule is said to be one a
-     *  run may stop in, and the sum over what the walk came to is said all the same. A run works
-     *  out that sum in the same comparison as the sum over the input, so no existence of a run
-     *  stopping is shown, and the stop is said as not resolved. */
+    /** Each side of a comparison is a step of its own, judged where it stands: a list of the one
+     *  element, the greatest {@code Int}, walks to it and stops in the sum over what the walk came
+     *  to, and the greatest {@code q} stops in the sum over the input, whatever the other side
+     *  comes to. */
     @Test
-    void aStopToldBesideOneLeftUntoldIsSaidAsBoth() {
+    void aStopOnEachSideIsSaidAtItsOwnStep() {
         String report = reportOf(THE_WALK + " + 1 <= q + 1");
-        assertTrue(report.contains(STOP_NOT_RESOLVED), report);
-        assertTrue(report.contains(NOT_ALL_TOLD), report);
+        assertTrue(report.contains("a run with ds = [9223372036854775807] gets here and stops in"
+                + " ds[*] + 1"), report);
+        assertTrue(report.contains("a run with q = 9223372036854775807, ds = [] gets here and"
+                + " stops in q + 1"), report);
+        assertFalse(report.contains(STOP_NOT_RESOLVED), report);
     }
 
     @Test

@@ -318,6 +318,28 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "asks which names an expression reads and what each stands for, which no name read"
                         + " off a value adds to: the base of a projection is the one child there is"
                         + " to go down to");
+        row(out, c + "partition/StopsOfABody", "collectSteps",
+                "(" + core + "Ljava/util/Set;)V", Reading.STRUCTURE,
+                "asks which steps the walk met stand under a node, each the node it is: a"
+                        + " projection's base is the one child there is to go down to");
+        row(out, c + "partition/StopsOfABody", "stepsUnder",
+                "(" + core + ")Ljava/util/Set;", Reading.STRUCTURE,
+                "the same, of the nodes strictly under one");
+        row(out, c + "partition/StopsOfABody", "collectUnder",
+                "(" + core + core + "[Z)V", Reading.STRUCTURE,
+                "asks whether one node stands under another, which is the tree's shape: a"
+                        + " projection's base is the one child there is to go down to");
+        row(out, c + "partition/StopsOfABody", "past",
+                "(" + core + reads + "L" + c + "partition/WhatAWayLeavesOfAValue;"
+                        + "Ljava/util/Set;L" + c + "partition/StopsOfABody$GotPast;"
+                        + "Ljava/util/Set;)Z", Reading.STRUCTURE,
+                "goes down what a run works out first to ask each step met there what it asks"
+                        + " of a value getting past it: a projection is no step, and its base is"
+                        + " the one child there is to go down to");
+        row(out, c + "partition/StopsOfABody", "eachStepStopsNoRunOfItsOwn",
+                "(" + core + ")Z", Reading.STRUCTURE,
+                "asks each step the walk met under a node what is shown of it, each the node it"
+                        + " is: a projection's base is the one child there is to go down to");
         row(out, c + "partition/ComparisonReadings", "runsWholeWhenever",
                 "(" + core + ")Z", Reading.STRUCTURE,
                 "asks whether every part of an expression runs whenever it does, which is what is"
@@ -355,10 +377,6 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "partition/WhatARunWorksOutBeforeACount", "wayDownTo",
                 "(" + core + core + ")Ljava/util/List;", Reading.STRUCTURE,
                 "finds the way down to one node by identity, which a projection's base is on");
-        row(out, c + "partition/WhatARunWorksOutBeforeACount", "constructionsUnder",
-                "(" + core + core + core + "Ljava/util/Set;Ljava/util/List;)V", Reading.STRUCTURE,
-                "finds the constructions written under a node, which no field access is and a"
-                        + " projection's base may hold");
         row(out, c + "partition/WhatARunWorksOutBeforeACount$Within", "letsThrough",
                 "(" + core + ")Z", Reading.EACH_SUBEXPRESSION, ASKS_EACH);
         row(out, c + "partition/ConstructionStopAssessment", "getsPast",
@@ -861,19 +879,6 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "(" + core + "Ljava/util/Set;)V", Reading.STRUCTURE,
                 "records each node and goes down to its parts: a projection is held where its"
                         + " base is");
-        row(out, c + "partition/EvaluationPlaces", "meet",
-                "(" + core + "Ljava/util/Set;Ljava/util/Set;)V", Reading.STRUCTURE,
-                "records each node and goes down to its parts, a node met twice being held at two"
-                        + " places: a projection is held where its base is");
-        row(out, c + "partition/EvaluationPlaces", "markEverythingUnder",
-                "(" + core + "Ljava/util/Set;Ljava/util/Set;)V", Reading.STRUCTURE,
-                "records each node under one held at two places, going down to its parts: a"
-                        + " projection is held where its base is");
-        row(out, c + "partition/StopAssessment", "leftUnaccountedBefore",
-                "(L" + c + "partition/ComparisonReadings$Reading;L" + c
-                        + "partition/UndividedByARelation$Working;L" + c
-                        + "core/Evaluated$WorkedOutAfter;Z)Ljava/util/Optional;",
-                Reading.STRUCTURE, EVALUATION);
         row(out, c + "core/Evaluated$WorkedOutAfter", "entirely", "(" + core + ")Z",
                 Reading.STRUCTURE,
                 "asks each node under one whether the walk puts it after the site, a projection"

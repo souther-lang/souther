@@ -155,6 +155,17 @@ public record WhatKeepsEveryRunGoing(Set<ABoundThatKeepsEveryRunGoing> bounds,
     }
 
     /**
+     * What two findings of one step say keeps its runs going, put together: the regions both say
+     * ({@link #together}), or the one either says where the other says none. A finding of a step
+     * that says no region there is one whose declarations are said at another step of what was
+     * read with it, and takes nothing from what is said here.
+     */
+    public static Optional<WhatKeepsEveryRunGoing> besideWhatIsSaidAtOneStep(
+            Optional<WhatKeepsEveryRunGoing> one, Optional<WhatKeepsEveryRunGoing> other) {
+        return one.isEmpty() ? other : other.isEmpty() ? one : together(one, other);
+    }
+
+    /**
      * The region as a report says it: this, where a value of the input was shown to hold all of
      * it at once ({@link #heldTogether}), and none where not. The one place that is asked, and
      * only of the region every reading of the rule put together comes to: what is put together

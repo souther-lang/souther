@@ -7,8 +7,8 @@ import souther.compiler.diag.SourceRendering;
 import souther.compiler.inputs.AConstructionStopNotShown;
 import souther.compiler.inputs.AConstructionStopShown;
 import souther.compiler.inputs.AStopShown;
-import souther.compiler.inputs.RuleWhereARunMayStop;
-import souther.compiler.inputs.RuleWhereAStopIsNotShown;
+import souther.compiler.inputs.StepWhereARunMayStop;
+import souther.compiler.inputs.StepWhereAStopIsNotShown;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.WhatIsShownOfAStop;
 import souther.compiler.inputs.WhyAConstructionStopIsNotShown;
@@ -110,13 +110,15 @@ class AConstructionIsToldOfAStopWhereARunStopsThereTest {
         NOT_SHOWN.put("inANamedFunctionAppliedTwice",
                 WhyAConstructionStopIsNotShown.REACH_NOT_SHOWN);
         // the same written at one call, which a closure around it makes on each of two elements:
-        // one call written is not one application made, and the first ran the body whole
+        // what the construction asks is read in the names of each application, and a run gets
+        // to the second past the first, whose body is worked out in its own names, which what a
+        // construction asks of what comes before it is not read in
         FORMS.put("inANamedFunctionAtOneCallMadeTwice", new Form("OneC", "Count",
                 "{ let p: (Int) -> Bool = x -> { let ok = x <= 3 \n let later = Count(x) \n "
                         + "ok && later.value >= 0 } \n "
                         + "OneC { a = Count(0), w = List.all(y -> List.all(p, [y]), [q, q]) } }"));
         NOT_SHOWN.put("inANamedFunctionAtOneCallMadeTwice",
-                WhyAConstructionStopIsNotShown.REACH_NOT_SHOWN);
+                WhyAConstructionStopIsNotShown.SOMETHING_BEFORE_IT_MAY_STOP);
         // one before a function bound by a name, on the way to the rule the function holds where
         // the call applying it is
         FORMS.put("beforeANamedFunction", new Form("OneC", "Count",
@@ -126,15 +128,11 @@ class AConstructionIsToldOfAStopWhereARunStopsThereTest {
         // the call applies it
         FORMS.put("inWhatTheCallIsHanded", new Form("OneC", "Count",
                 "{ let f = x -> x <= 3 \n OneC { a = Count(0), w = List.all(f, [Count(q).value]) } }"));
-        // the same function applied by two calls, and a construction between them, which only a
-        // run on the way to the rule by the second call gets to first
+        // the same function applied by two calls, and a construction before them, which every
+        // run works out before either call applies the function
         FORMS.put("beforeTwoCallsOfANamedFunction", new Form("OneC", "Count",
                 "{ let m = Count(q) \n let f = x -> x <= 3 \n "
                         + "OneC { a = m, w = List.all(f, [q]) && List.any(f, [q]) } }"));
-        // which elements the applications of a function two calls hand values to are made on is
-        // not said, so that a run makes one whatever the row is is not shown
-        NOT_SHOWN.put("beforeTwoCallsOfANamedFunction",
-                WhyAConstructionStopIsNotShown.A_CONDITION_NOT_READ);
         FORMS.put("betweenTwoCallsOfANamedFunction", new Form("CountFlag", "Count",
                 "{ let f = x -> x <= 3 \n let ok = List.all(f, [q]) \n let m = Count(q) \n "
                         + "CountFlag { a = m, ok = ok, w = List.any(f, [q]) } }"));
@@ -335,12 +333,12 @@ class AConstructionIsToldOfAStopWhereARunStopsThereTest {
         Set<String> shownAt = new TreeSet<>();
         Map<String, List<WhyAConstructionStopIsNotShown>> notShownAt = new TreeMap<>();
         for (WhatIsShownOfAStop each : divided.stopsShown()) {
-            if (each instanceof RuleWhereARunMayStop stops) {
+            if (each instanceof StepWhereARunMayStop stops) {
                 for (AConstructionStopShown one : stops.constructions()) {
                     shown.add(one);
                     shownAt.add(siteOf(one.asks().construction(), one.asks().at(), rendering));
                 }
-            } else if (each instanceof RuleWhereAStopIsNotShown open) {
+            } else if (each instanceof StepWhereAStopIsNotShown open) {
                 for (AConstructionStopNotShown one : open.asks()) {
                     notShownAt.computeIfAbsent(siteOf(one.construction(), one.at(), rendering),
                             _ -> new ArrayList<>()).add(one.why());

@@ -2,12 +2,11 @@ package souther.compiler.query;
 
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleCitations;
-import souther.compiler.check.RuleRef;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.NumericTerm;
-import souther.compiler.inputs.RuleWhereARunMayStop;
-import souther.compiler.inputs.RuleWhereAStopIsNotShown;
+import souther.compiler.inputs.StepWhereARunMayStop;
+import souther.compiler.inputs.StepWhereAStopIsNotShown;
 import souther.compiler.numeric.Place;
 import souther.compiler.observe.RowRef;
 import souther.compiler.partition.ClassOfAPosition;
@@ -511,58 +510,34 @@ public sealed interface About {
     }
 
     /**
-     * A rule of the model that some run reaching it is shown to stop in: an operation it is read
-     * through ends the run, such as a number worked out past its type
-     * ({@link souther.compiler.inputs.RuleWhereARunMayStop}).
+     * A step of a behavior some run is shown to stop at: an operation that works a number out past
+     * its type or divides by nought, or a construction refusing what it is handed
+     * ({@link StepWhereARunMayStop}).
      *
      * <p>A run shown to exist and not a possibility. Where neither that one stops nor that none
-     * does is shown, that is {@link ARuleWhoseStopIsNotShown}, which may be said of the same rule.
+     * does is shown, that is {@link AStepWhoseStopIsNotShown}, which may be said of the same step.
      *
-     * <p>Said of the rule whatever else is said of it, and independent of the line it draws: a
-     * rule that draws a line on the runs that do not stop, one that comes out the same for every
-     * row where a run gets past it, and one whose reading stopped may each have a run that stops
-     * in it. A rule every run stops in is not this, and has its own reason beside
-     * {@link ARuleWithoutALine}.
+     * <p>Said of the step where it is written, whether or not a rule comes after it: a run that
+     * stops there gets to no rule after it, and what it leaves a rule's border is said of the rule
+     * apart.
      */
-    record ARuleThatMayStopARun(RuleWhereARunMayStop finding) implements OfARule {
-        public ARuleThatMayStopARun {
+    record AStepThatMayStopARun(StepWhereARunMayStop finding) implements About {
+        public AStepThatMayStopARun {
             Objects.requireNonNull(finding, "a finding is about something");
-        }
-
-        @Override
-        public RuleRef rule() {
-            return finding.rule();
-        }
-
-        @Override
-        public Set<RuleCitation> cited() {
-            return finding.cited();
         }
     }
 
     /**
-     * A rule of the model where whether a run stops on its way through it is not resolved: neither
-     * that one does nor that none does is shown, of something it works out or of what a
-     * construction on the way to it asks of a run
-     * ({@link RuleWhereAStopIsNotShown}).
+     * A step of a behavior where whether a run stops is not resolved: neither that one does nor
+     * that none does is shown, of an operation it works out or of what it asks, where it is a
+     * construction ({@link StepWhereAStopIsNotShown}).
      *
-     * <p>Not a stop and not that there is none. Said of the rule whatever places it is filed at,
-     * and beside a stop shown in the same rule; what it leaves a place's border is said of the
-     * place apart, and this is no part of it.
+     * <p>Not a stop and not that there is none. Said of the step where it is written, and beside a
+     * stop shown at the same step.
      */
-    record ARuleWhoseStopIsNotShown(RuleWhereAStopIsNotShown finding) implements OfARule {
-        public ARuleWhoseStopIsNotShown {
+    record AStepWhoseStopIsNotShown(StepWhereAStopIsNotShown finding) implements About {
+        public AStepWhoseStopIsNotShown {
             Objects.requireNonNull(finding, "a finding is about something");
-        }
-
-        @Override
-        public RuleRef rule() {
-            return finding.rule();
-        }
-
-        @Override
-        public Set<RuleCitation> cited() {
-            return finding.cited();
         }
     }
 

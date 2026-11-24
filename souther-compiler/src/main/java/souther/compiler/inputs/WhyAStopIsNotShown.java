@@ -14,12 +14,11 @@ package souther.compiler.inputs;
 public enum WhyAStopIsNotShown {
     /** A run may stop in something worked out that is no operation told. */
     NO_OPERATION_TOLD(false, true),
-    /** A run may stop on rows the statement says of its own, which are no operation of numbers. */
-    ON_ROWS_OF_THE_STATEMENT(false, false),
-    /** Some operation the rule works out is not told, or not on every run. */
-    NOT_EVERY_OPERATION_TOLD(true, true),
-    /** Something worked out before the rule may end a run. */
+    /** Something worked out before the step may end a run. */
     SOMETHING_BEFORE_IT_MAY_STOP(true, false),
+    /** Some way a run gets to the step is not read, and no way read shows a run stopping there:
+     *  of the step as a whole, and of no one operation of it. */
+    REACH_NOT_SHOWN(false, false),
     /** A condition on the way is not a relation of whole numbers of the input, nor settled. */
     A_CONDITION_NOT_READ(true, false),
     /** It, or another operation that may be worked out first, is over something that is no

@@ -112,6 +112,7 @@ import souther.compiler.inputs.ABoundThatKeepsEveryRunGoing;
 import souther.compiler.inputs.AConstructionStopNotShown;
 import souther.compiler.inputs.AConstructionStopShown;
 import souther.compiler.inputs.AStopNotShown;
+import souther.compiler.inputs.AStopShown;
 import souther.compiler.inputs.AuthoredOrder;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.ElementKey;
@@ -131,6 +132,7 @@ import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.inputs.InputFact;
 import souther.compiler.inputs.TraversalDirection;
 import souther.compiler.meta.ModuleMetadata;
 import souther.compiler.numeric.ExactRatio;
@@ -258,6 +260,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
@@ -1902,8 +1905,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             copies.add(switch (each.about()) {
                 case About.ARuleWithoutALine(var it) -> it.finding().readAt();
                 case About.ARuleNothingClassified(var it) -> it.finding().readAt();
-                case About.ARuleThatMayStopARun(var it) -> it.readAt();
-                case About.ARuleWhoseStopIsNotShown(var it) -> it.readAt();
                 case About.AQuestionNothingAnswered(var asked) -> asked.asked().readAt();
                 default -> ModelOccurrences.NONE;
             });
@@ -3526,6 +3527,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 partition(out, behavior, module.apart(), module.declaredIn(), page,
                         behavior.rulePlace(),
                         onlyBy, marks);
+                stops(out, behavior, module.declaredIn(), page);
                 branch(out, module.module(), behavior, module.declaredIn(), page, onlyBy,
                         marks);
                 decision(out, behavior, module.declaredIn(), page, onlyBy, marks);
@@ -4624,49 +4626,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         declaredIn);
             }
         }
-        // And a rule that some run is shown to stop in, and one where whether a run stops is not
-        // resolved. Whatever else is said of the rule, and whatever line it draws, this is what
-        // the line leaves out. The region that keeps the rule's runs going is the rule's, said
-        // once: under the stop shown where there is one.
-        Set<RuleRef> aStopShown = new HashSet<>();
-        for (Adequacy.Finding f : behavior.findings()) {
-            if (f.about() instanceof About.ARuleThatMayStopARun(var it)) {
-                aStopShown.add(it.rule());
-            }
-        }
-        for (Adequacy.Finding f : behavior.findings()) {
-            if (f.about() instanceof About.ARuleWhoseStopIsNotShown(var it)) {
-                marked(out, f, page, new ReportMessage.StopNotShown(
-                        cited(it.cited(), page, declaredIn, places),
-                        stopsNotShownSaid(it.notShown(), page, rendering, declaredIn),
-                        aRunGettingThereStopsAt(it.everyRunStops(), page),
-                        it.asks().isEmpty() ? new ReportMessage.Nothing()
-                                : new ReportMessage.AStopAtAConstructionOnTheWayIsNotDetermined(
-                                        constructionsNotShownSaid(it.asks(), page, rendering,
-                                                declaredIn)),
-                        inCopies(it.readAt(), behavior.conditionPlaces().copies(),
-                                page, declaredIn)));
-                if (!aStopShown.contains(it.rule())) {
-                    keepingSaid(it, page, out);
-                }
-            }
-            if (f.about() instanceof About.ARuleThatMayStopARun(var it)) {
-                Message how = it.constructions().isEmpty() ? new ReportMessage.StopsInAnOperation()
-                        : it.shown().isEmpty()
-                        ? new ReportMessage.StopsAtAConstruction(constructionsAsk(
-                                constructionsAsked(it.constructions()), page, rendering,
-                                declaredIn))
-                        : new ReportMessage.StopsInAnOperationAndAtAConstruction(
-                                constructionsAsk(constructionsAsked(it.constructions()), page,
-                                        rendering, declaredIn));
-                marked(out, f, page, new ReportMessage.MayStopARun(
-                        cited(it.cited(), page, declaredIn, places), how,
-                        everyRunStopsAt(it.everyRunStops(), page),
-                        inCopies(it.readAt(), behavior.conditionPlaces().copies(),
-                                page, declaredIn)));
-                keepingSaid(it, page, out);
-            }
-        }
         // And, for a rule a line of which was not worked out because its cases were too many, what
         // those cases were: a line of its own under the rule's, since the count is about the cases
         // and not about why the line was not worked out.
@@ -5057,6 +5016,123 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      */
     private static String subjectOf(PartitionEvidence.Unanswered asked) {
         return asked.measure() != null ? asked.measure() : asked.at();
+    }
+
+    /** Where the step a stop finding is said of is written. */
+    private static SourcePos whereTheStepIs(Adequacy.Finding finding) {
+        return switch (finding.about()) {
+            case About.AStepThatMayStopARun(var it) -> it.at();
+            case About.AStepWhoseStopIsNotShown(var it) -> it.at();
+            default -> throw new IllegalArgumentException("no step: " + finding.about());
+        };
+    }
+
+    /**
+     * Where a run of the behavior stops short of an answer: how many steps some run is shown to
+     * stop at, and at how many whether one does is not resolved, and under that each of them, in
+     * the order they are written. Nothing where neither is said of any step.
+     *
+     * <p>Each step is named where it is written, and said whatever comes after it: a run stopped
+     * there gets to no rule after it. The region that keeps the step's runs going is the step's,
+     * said once: under the stop shown where there is one.
+     */
+    void stops(StringBuilder out, BehaviorReport behavior, SourceId declaredIn, Page page) {
+        SourceRendering rendering = page.rendering();
+        // In the order the steps are written. The walk meets a closure's body where the closure
+        // is written and a run gets to it where the closure is applied, so the order the walk met
+        // them in is no order of the run's, and two ways of writing one call would list the same
+        // steps apart.
+        List<Adequacy.Finding> said = behavior.findings().stream()
+                .filter(f -> f.about() instanceof About.AStepThatMayStopARun
+                        || f.about() instanceof About.AStepWhoseStopIsNotShown)
+                .sorted(Comparator.comparing(AdequacyReport::whereTheStepIs,
+                        SourcePos.IN_A_STEADY_ORDER))
+                .toList();
+        if (said.isEmpty()) {
+            return;
+        }
+        Set<SourcePos> aStopShown = new HashSet<>();
+        for (Adequacy.Finding f : said) {
+            if (f.about() instanceof About.AStepThatMayStopARun(var it)) {
+                aStopShown.add(it.at());
+            }
+        }
+        measureLine(out, new ReportMessage.Stops(), page,
+                page.say(new ReportMessage.StopCounts(aStopShown.size(),
+                        said.size() - aStopShown.size())));
+        for (Adequacy.Finding f : said) {
+            if (f.about() instanceof About.AStepThatMayStopARun(var it)) {
+                String step = writtenAtSaid(it.at(), rendering, declaredIn);
+                Message how = it.shown().isEmpty()
+                        ? new ReportMessage.StopsAtThisConstruction(constructionsAsk(
+                                constructionsAsked(it.constructions()), page, rendering,
+                                declaredIn))
+                        : it.shown().getFirst().at().isEmpty()
+                                && it.shown().getFirst().structure().isEmpty()
+                                ? new ReportMessage.AnyRunStopsInAnOperation(
+                                        it.shown().getFirst().operation())
+                                : new ReportMessage.StopsInAnOperationAt(
+                                        it.shown().getFirst().operation(),
+                                        valuesSaid(it.shown().getFirst(), page));
+                marked(out, f, page, new ReportMessage.StepMayStopARun(step, how,
+                        everyRunStopsAt(it.everyRunStops(), page)));
+                keepingSaid(it, page, out);
+            }
+            if (f.about() instanceof About.AStepWhoseStopIsNotShown(var it)) {
+                marked(out, f, page, new ReportMessage.StepStopNotShown(
+                        writtenAtSaid(it.at(), rendering, declaredIn),
+                        stopsNotShownSaid(it.notShown(), page, rendering, declaredIn),
+                        aRunGettingThereStopsAt(it.everyRunStops(), page),
+                        constructionsNotShownSaid(it.asks(), page, rendering, declaredIn)));
+                if (!aStopShown.contains(it.at())) {
+                    keepingSaid(it, page, out);
+                }
+            }
+        }
+    }
+
+    /** The value of the input {@code shown} rests on, as a reader would write it: the number at
+     *  each place it is asked of, in the order the input declares its places. */
+    private static String valuesSaid(AStopShown shown, Page page) {
+        List<String> each = new ArrayList<>();
+        for (AStopShown.NumberAt at : shown.at()) {
+            each.add(at.place() + " = " + at.number());
+        }
+        each.addAll(listsSaid(shown.structure()));
+        return listed(page, each);
+    }
+
+    /**
+     * The lists a value of the input holds, as {@code structure} says them: a list whose length is
+     * said written out whole, an element nothing fixes written {@code …}; and an element of a list
+     * whose length is not said, by its index.
+     */
+    private static List<String> listsSaid(List<InputFact> structure) {
+        Map<TermPath, Integer> lengths = new LinkedHashMap<>();
+        Map<TermPath, Map<Integer, BigInteger>> elements = new LinkedHashMap<>();
+        for (InputFact fact : structure) {
+            switch (fact) {
+                case InputFact.ListLength(var list, int length) -> lengths.put(list, length);
+                case InputFact.ListElement(var list, int index, var number) ->
+                        elements.computeIfAbsent(list, _ -> new TreeMap<>()).put(index, number);
+            }
+        }
+        List<String> out = new ArrayList<>();
+        for (Map.Entry<TermPath, Integer> length : lengths.entrySet()) {
+            Map<Integer, BigInteger> held = elements.getOrDefault(length.getKey(), Map.of());
+            List<String> written = new ArrayList<>();
+            for (int index = 0; index < length.getValue(); index++) {
+                BigInteger number = held.get(index);
+                written.add(number == null ? "…" : number.toString());
+            }
+            out.add(length.getKey() + " = [" + String.join(", ", written) + "]");
+        }
+        elements.forEach((list, held) -> {
+            if (!lengths.containsKey(list)) {
+                held.forEach((index, number) -> out.add(list + "[" + index + "] = " + number));
+            }
+        });
+        return out;
     }
 
     /**
@@ -7502,15 +7578,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             Message why = switch (each.why()) {
                 case NO_OPERATION_TOLD -> place == null ? new ReportMessage.NoOperationIsReadThere()
                         : new ReportMessage.NoOperationIsReadAt(place);
-                case ON_ROWS_OF_THE_STATEMENT -> new ReportMessage.TheComparisonStopsOnRowsItStates();
-                case NOT_EVERY_OPERATION_TOLD -> place == null
-                        ? new ReportMessage.AnotherPartIsNotRead()
-                        : new ReportMessage.AnotherPartIsNotReadAt(place);
                 case SOMETHING_BEFORE_IT_MAY_STOP -> new ReportMessage.SomethingBeforeItMayStopARun();
+                case REACH_NOT_SHOWN -> new ReportMessage.NoRunIsShownToGetToIt();
                 case A_CONDITION_NOT_READ -> new ReportMessage.AConditionOnTheWayIsNotRead();
                 case NOT_OVER_THE_INPUT -> new ReportMessage.ItIsOverAValueTheBodyWorksOut();
                 case NO_VALUE_SHOWN -> new ReportMessage.NoInputMeetingTheTypesIsBuilt();
-                case NO_VALUE_FOUND -> new ReportMessage.NoInputTriedTakesItPastItsType();
+                case NO_VALUE_FOUND -> new ReportMessage.NoInputTriedStopsARunThere();
                 case NO_VALUE_FOUND_WITHIN_WHAT_IS_TRIED -> new ReportMessage.TheInputsTriedRanOut();
             };
             out.append(page.say(each.operation()
@@ -11771,8 +11844,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // And where every run getting to a rule a run may stop in is shown to stop: the
         // operation it stops in, and the rows, as forms between their ends.
         List<EveryRunStops> proved = switch (finding.about()) {
-            case About.ARuleThatMayStopARun(var it) -> it.everyRunStops();
-            case About.ARuleWhoseStopIsNotShown(var it) -> it.everyRunStops();
+            case About.AStepThatMayStopARun(var it) -> it.everyRunStops();
+            case About.AStepWhoseStopIsNotShown(var it) -> it.everyRunStops();
             default -> List.of();
         };
         if (!proved.isEmpty()) {
@@ -11796,8 +11869,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // And the invariants that keep every run getting to a rule from stopping there, where its
         // stops are where the representation of a number stops, said of a stop shown or not.
         WhatIsShownOfAStop ofAStop = switch (finding.about()) {
-            case About.ARuleThatMayStopARun(var it) -> it;
-            case About.ARuleWhoseStopIsNotShown(var it) -> it;
+            case About.AStepThatMayStopARun(var it) -> it;
+            case About.AStepWhoseStopIsNotShown(var it) -> it;
             default -> null;
         };
         Optional<WhatKeepsEveryRunGoing> said = ofAStop == null ? Optional.empty()
@@ -11822,7 +11895,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // And, of a rule where whether a run stops is not resolved, each operation that is not,
         // and why, and what each construction on the way asks of a run that works it out, which
         // the words beside the rule say from the same condition.
-        if (finding.about() instanceof About.ARuleWhoseStopIsNotShown(var it)
+        if (finding.about() instanceof About.AStepWhoseStopIsNotShown(var it)
                 && !it.notShown().isEmpty()) {
             ArrayNode unresolved = f.putArray("unresolved");
             for (AStopNotShown each : it.notShown()) {
@@ -11833,13 +11906,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         sources));
             }
         }
-        if (finding.about() instanceof About.ARuleWhoseStopIsNotShown(var it)
+        if (finding.about() instanceof About.AStepWhoseStopIsNotShown(var it)
                 && !it.asks().isEmpty()) {
             constructionsNotShownWritten(f.putArray("asks"), it.asks(), sources);
         }
         // And, of a rule a run on the way to is shown to stop at a construction, what each such
         // construction asks that the run does not meet, as the words beside the rule say it.
-        if (finding.about() instanceof About.ARuleThatMayStopARun(var it)
+        if (finding.about() instanceof About.AStepThatMayStopARun(var it)
                 && !it.constructions().isEmpty()) {
             constructionsWritten(f.putArray("constructions"),
                     constructionsAsked(it.constructions()), sources);
@@ -11882,6 +11955,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // behavior's rows are as many as somebody wrote, and the one this is about is the one
             // at this place.
             case About.AnUnansweredRow _ -> true;
+            // And a step a run may stop at, for the same reason: two steps of one body are told
+            // apart by where they are written.
+            case About.AStepThatMayStopARun _, About.AStepWhoseStopIsNotShown _ -> true;
             // A rule is a way through the whole body and stands at no one place in it. Where its
             // conditions are is said under the finding, one note apiece, so a coordinate here
             // would name whichever of them a walk reached first.
@@ -11909,8 +11985,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     About.ALineTheRowsDoNotTellFromAnother _,
                     About.ATiltOfADerivedValueNoRowShows _, About.APositionNoLineDivides _,
                     About.APositionThisCouldNotRead _, About.ARuleWithoutALine _,
-                    About.ARuleNothingClassified _, About.ARuleThatMayStopARun _,
-                    About.ARuleWhoseStopIsNotShown _, About.AQuestionNothingAnswered _,
+                    About.ARuleNothingClassified _, About.AQuestionNothingAnswered _,
                     About.APositionWhoseRulesWereNotReached _,
                     About.APositionReadWiderThanItsRules _ -> false;
         };
@@ -11982,12 +12057,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // Where a reader is sent to look at the rule, which is what such a finding has instead
             // of a subject: what the rule states there is what nothing worked out.
             case About.ARuleNothingClassified(var it) -> words(it.at());
-            // The rule, by the handle a reader finds it with: it stops some runs at no position,
-            // so the rule is all there is to name.
-            case About.ARuleThatMayStopARun(var it) -> PublishedSentence.AroundAHandle.alone(
-                    PublishedRuleHandle.of(handle(it.cited(), places), places));
-            case About.ARuleWhoseStopIsNotShown(var it) -> PublishedSentence.AroundAHandle.alone(
-                    PublishedRuleHandle.of(handle(it.cited(), places), places));
+            // What the step works out, as written: where it is written is said beside it.
+            case About.AStepThatMayStopARun(var it) -> words(it.shown().isEmpty()
+                    ? it.constructions().getFirst().asks().construction().qualified()
+                    : it.shown().getFirst().operation());
+            case About.AStepWhoseStopIsNotShown(var it) -> words(
+                    it.notShown().stream().flatMap(one -> one.operation().stream()).findFirst()
+                            .orElseGet(() -> it.asks().isEmpty() ? "what it works out"
+                                    : it.asks().getFirst().construction().qualified()));
             // The position and not a number measured of it: which of this position's rules went
             // unread is a fact about the location, and the measures on it are as many as the rules
             // name numbers there.
