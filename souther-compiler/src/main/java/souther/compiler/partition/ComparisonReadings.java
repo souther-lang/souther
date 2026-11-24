@@ -1313,7 +1313,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                         .map(past::then);
             };
             each.add(new WaysToASite.Reach(way.toTheComparison(), new Pullback.Once<>(before),
-                    new Pullback.Once<>(read)));
+                    new Pullback.Once<>(read), () -> outside));
         }
         return new WaysToASite(each, ways.every());
     }
@@ -2318,7 +2318,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                         WhereAnApplicationIsMade.nothingAsked(), Map.of(),
                         metOn.madeWhere(made.stated()).stoppingIn(list, onward.denied()),
                         List.of(), ClosureApplications.MadeOnEvery.NOT_SHOWN, List.of(),
-                        WhereAnApplicationIsMade.nothingAsked()))));
+                        Optional.empty()))));
     }
 
     /**

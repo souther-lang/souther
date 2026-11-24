@@ -286,13 +286,25 @@ final class StopAssessment {
     static List<List<TakenConstraint.Affine>> asWaysOfRelations(List<OnTheWay> way,
                                                                 boolean[] left) {
         List<List<TakenConstraint.Affine>> out = new ArrayList<>();
-        return waysOfRelations(way, 0, new ArrayList<>(), out, left) ? out : null;
+        return waysOfRelations(way, 0, new ArrayList<>(), out, left, false) ? out : null;
+    }
+
+    /**
+     * The same, each entry not read as relations left out: what a value on the way meets at
+     * least, for a reader asking where a run on it may not go, which a way holding less leaves
+     * wider and never narrower. A way left unmade for the figure is said by {@code left}.
+     */
+    static List<List<TakenConstraint.Affine>> asWaysOfRelationsAtLeast(List<OnTheWay> way,
+                                                                       boolean[] left) {
+        List<List<TakenConstraint.Affine>> out = new ArrayList<>();
+        waysOfRelations(way, 0, new ArrayList<>(), out, left, true);
+        return out;
     }
 
     private static boolean waysOfRelations(List<OnTheWay> way, int at,
                                            List<TakenConstraint.Affine> sofar,
                                            List<List<TakenConstraint.Affine>> out,
-                                           boolean[] left) {
+                                           boolean[] left, boolean leavingOutWhatIsNotRead) {
         if (at == way.size()) {
             if (out.size() >= MOST_WAYS_OF_ALTERNATIVES) {
                 left[0] = true;
@@ -306,7 +318,7 @@ final class StopAssessment {
             for (List<OnTheWay> alternative : several.alternatives()) {
                 List<OnTheWay> past = new ArrayList<>(alternative);
                 past.addAll(way.subList(at + 1, way.size()));
-                if (!waysOfRelations(past, 0, sofar, out, left)) {
+                if (!waysOfRelations(past, 0, sofar, out, left, leavingOutWhatIsNotRead)) {
                     return false;
                 }
             }
@@ -314,12 +326,15 @@ final class StopAssessment {
         }
         List<TakenConstraint.Affine> one = asRelations(List.of(entry));
         if (one == null) {
-            return false;
+            if (!leavingOutWhatIsNotRead) {
+                return false;
+            }
+            one = List.of();
         }
         int mark = sofar.size();
         sofar.addAll(one);
         try {
-            return waysOfRelations(way, at + 1, sofar, out, left);
+            return waysOfRelations(way, at + 1, sofar, out, left, leavingOutWhatIsNotRead);
         } finally {
             sofar.subList(mark, sofar.size()).clear();
         }

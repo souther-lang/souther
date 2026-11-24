@@ -31,10 +31,14 @@ record WaysToASite(List<Reach> each, boolean every) {
      * @param read   whether the way is on the way the walk carried: outside every function value,
      *               or got to whatever the row is ({@link ClosureApplications}). A way not read
      *               holds what every run by it meets, and not what one run takes
+     * @param readUpToTheApplications whether the way is on the way the walk carried as far as
+     *               the function value the step stands in, if any: what {@code read} asks, short of
+     *               whether the application is made whatever the row is, which a reader judging
+     *               each application asks of the application
      */
     record Reach(List<OnTheWay> way,
                  Supplier<Optional<WhatARunWorksOutBeforeACount.BeforeAConstruction>> before,
-                 Supplier<Boolean> read) {
+                 Supplier<Boolean> read, Supplier<Boolean> readUpToTheApplications) {
 
         Reach {
             way = List.copyOf(way);

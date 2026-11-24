@@ -179,9 +179,26 @@ final class StopsOfABody {
      * @param before   what a run on one application works out before the step, each part with the
      *                 names it is worked out in, where the way's own account of it is not read and
      *                 this one is ({@link #onEachApplication}); null otherwise
+     * @param made     what a run meets for the application to be made at all, beside the way,
+     *                 where the step stands inside a closure: what is met inside the closure on
+     *                 the way to the step goes there and not onto the way
+     *                 ({@link ClosureApplications#saysWhatStandsInIt}); null outside one
+     * @param forEvery whether the application stands for every element a container holds, so
+     *                 that a value looked for at the element is a list of one, on which what the
+     *                 application is made under is met by that element
+     *                 ({@link #madeOnTheElementAs})
      */
     private record Reached(WhereARunMayStop.Met met, WaysToASite.Reach reach, InputReads reads,
-                           boolean onTheWay, List<Part> before) {}
+                           boolean onTheWay, List<Part> before, Proposition made,
+                           boolean forEvery) {}
+
+    /** Whether the way {@code reached} is by is on the way the walk carried: inside a closure
+     *  judged on each application ({@link Reached#made}), as far as the closure, the application
+     *  being {@link Reached#onTheWay}'s to say. */
+    private static boolean wayRead(Reached reached) {
+        return reached.made() != null ? reached.reach().readUpToTheApplications().get()
+                : reached.reach().read().get();
+    }
 
     /** A part of what a run works out before a step, with the names it is worked out in; with
      *  none, each step in it is read with the names where the walk met it. */
@@ -206,11 +223,33 @@ final class StopsOfABody {
                     case ClosureApplications.None _ -> { }
                     case ClosureApplications.Each(var made) ->
                             each.addAll(onEachApplication(step, met, reach, made));
-                    default -> each.add(new Reached(met, reach, met.reads(), true, null));
+                    default -> each.add(new Reached(met, reach, met.reads(), true, null, null,
+                            false));
                 }
             }
         }
         return new Ways(each, every);
+    }
+
+    /**
+     * Whether {@code step} stands inside one closure, met once, that the owner of what a run works
+     * out shows to end no run where the call it is handed to applies it, with what the call hands
+     * it ({@link WorkedOutToReachIt#whereARunMayEndWhereApplied}): each element it is applied to,
+     * and for a walk's step every number the walk comes to over the most elements there are.
+     */
+    private boolean endsNoRunWhereItsClosureIsApplied(Core step) {
+        Optional<WhereARunMayStop.Met> met = where.at(step);
+        if (met.isEmpty()) {
+            return false;
+        }
+        WhatARunWorksOutBeforeACount.FirstApplication first =
+                WhatARunWorksOutBeforeACount.workedOutAtTheFirstApplication(met.get().tree(), step);
+        if (first == null || first.entered().size() != 1) {
+            return false;
+        }
+        WhatARunWorksOutBeforeACount.Applying applying = first.entered().getFirst();
+        return WorkedOutToReachIt.of(read).whereARunMayEndWhereApplied(
+                new Denotation(applying.call(), met.get().reads()), applying.closure()).isEmpty();
     }
 
     /**
@@ -232,11 +271,31 @@ final class StopsOfABody {
                 WhatARunWorksOutBeforeACount.workedOutAtTheFirstApplication(met.tree(), step);
         Core.Block closure = first == null || first.entered().size() != 1 ? null
                 : first.entered().getFirst().closure();
+        // One application standing for every element a container holds is no one application
+        // after another: what it carries in is not the seed. A value looked for at the element
+        // holds a list of one, on which it is the first and only one, so what comes before it is
+        // what comes before the first.
+        boolean forEvery = made.stream().anyMatch(one -> one.held().isEmpty());
         List<Reached> out = new ArrayList<>();
         Set<BindingId> carrying = new LinkedHashSet<>();
         InputReads answered = null;
         for (ClosureApplications.Application one : made) {
             if (!one.isMadeOnSomeRow()) {
+                continue;
+            }
+            if (forEvery) {
+                List<Part> before = null;
+                if (closure != null) {
+                    before = new ArrayList<>();
+                    for (Core part : first.parts().subList(0, first.parts().size() - 1)) {
+                        before.add(new Part(part, under(closure, part) ? one.reads() : null));
+                    }
+                }
+                out.add(new Reached(met, reach, one.reads(),
+                        ClosureApplications.madeWhateverTheRow(one)
+                                || (ClosureApplications.madeWhereverTheContainerHoldsIt(one)
+                                        && madeOnTheElementAs(one.reached()) != null),
+                        before, one.reached(), true));
                 continue;
             }
             InputReads reads = one.reads();
@@ -268,7 +327,7 @@ final class StopsOfABody {
             boolean onTheWay = before == null || Type.BOOL.equals(closure.body().type())
                     ? ClosureApplications.madeWhateverTheRow(one)
                     : ClosureApplications.madeWhereverTheOnesBeforeItAreGotPast(one);
-            out.add(new Reached(met, reach, reads, onTheWay, before));
+            out.add(new Reached(met, reach, reads, onTheWay, before, one.reached(), false));
             answered = reads;
         }
         return out;
@@ -395,6 +454,10 @@ final class StopsOfABody {
      */
     private List<StopAssessment.Judgement> ofAnOperation(Core step,
                                                          List<TakenConstraint.Affine> within) {
+        if (endsNoRunWhereItsClosureIsApplied(step)) {
+            return List.of(new StopAssessment.Judgement.Safe(null,
+                    StopAssessment.WhyNone.WITHIN_ITS_ENDS));
+        }
         Ways ways = waysTo(step);
         List<List<StopAssessment.Judgement>> byWay = new ArrayList<>();
         for (Reached each : ways.each()) {
@@ -413,7 +476,7 @@ final class StopsOfABody {
         Set<EveryRunStops> out = new LinkedHashSet<>();
         for (Reached each : waysTo(step).each()) {
             WhatAWayLeavesOfAValue left = WhatAWayLeavesOfAValue.along(read, each.reach().way());
-            if (left == null || !each.onTheWay() || !each.reach().read().get()
+            if (left == null || !each.onTheWay() || !wayRead(each)
                     || !(Reachability.of(new WayToTheBorder(each.reach().way()),
                             read.quantities().region()) instanceof Reachability.Reaching reaching)) {
                 continue;
@@ -618,6 +681,30 @@ final class StopsOfABody {
                 || list >= call.args().size()) {
             return null;
         }
+        // Every element kept on every row: the sum of what each comes to as an operand, as an
+        // addition of them written out is.
+        if (WrittenOutElements.of(new Denotation(call.args().get(list), at),
+                read.rules().symbols(), read.rules().newtypes())
+                instanceof WrittenOutElements.Walked.Each written
+                && written.asWritten().stream().allMatch(each -> each.keptWhere().isEmpty())) {
+            LinearForm<UndividedByARelation.IntOperand> sum = LinearForm.constant(ExactRatio.ZERO);
+            for (ReadMeaning.Occurrence each : written.asWritten()) {
+                LinearForm<UndividedByARelation.IntOperand> one =
+                        operand(each.value().value(), each.value().at());
+                if (one == null || !(sum.plus(one)
+                        instanceof ExactAnswer.Held<LinearForm<UndividedByARelation.IntOperand>>(
+                                var added))) {
+                    sum = null;
+                    break;
+                }
+                sum = added;
+            }
+            if (sum != null) {
+                return new UndividedByARelation.IntOperation(sum,
+                        BigInteger.valueOf(Long.MIN_VALUE), BigInteger.valueOf(Long.MAX_VALUE),
+                        List.of(), true, new UndividedByARelation.IntOperation.Origin(node));
+            }
+        }
         Keeping keeping = keeping(call.args().get(list), at, each -> AffineReading.formOf(
                 each.value(), each.at(), read, new ElementsMet(),
                 AffineReading.Unkept.EVERY_NAME_AFRESH));
@@ -698,7 +785,7 @@ final class StopsOfABody {
                 }
                 dropped = alternativesOf(keeping.denied());
             }
-            FormRange one = FormRange.of(form, read, boundsUnder(form, kept));
+            FormRange one = FormRange.of(form, read, boundsUnder(form, kept, true));
             if (one == null) {
                 return null;
             }
@@ -773,6 +860,63 @@ final class StopsOfABody {
         }
     }
 
+    /**
+     * {@code made}, what an application standing for every element a container holds is made
+     * under, as the relations of numbers of the input a row meets for it on a list of one element
+     * — the list a value looked for at the element is ({@link AValueOfTheInput#ofTheOnlyElement}):
+     * that the container holds some element meeting something is that its one element meets it.
+     * Null where some part of it is no relation read so.
+     */
+    private List<TakenConstraint.Affine> madeOnTheElementAs(Proposition made) {
+        List<TakenConstraint.Affine> out = new ArrayList<>();
+        for (Proposition part : made instanceof Proposition.All(var all, var _, var _) ? all
+                : List.of(made)) {
+            Proposition asked = part instanceof Proposition.Some(var _, var element,
+                    boolean holds, var _) && holds ? element : part;
+            if (asked instanceof Proposition.Always(boolean holds) && holds) {
+                continue;
+            }
+            List<TakenConstraint.Affine> relations = relationsOf(asked);
+            if (relations == null) {
+                return null;
+            }
+            out.addAll(relations);
+        }
+        return out;
+    }
+
+    /**
+     * {@code stated}, what an application is made under, as the ways a row meets it at least:
+     * each part of a statement that holds where one of them does, each holding the relations of
+     * numbers of the input it asks and nothing for what else it asks; one way asking nothing where
+     * a part asks nothing read so, since a row may meet the statement there whatever its numbers.
+     *
+     * <p>An application standing for every element a container keeps is made where the container
+     * keeps some element ({@link WhereAClosureIsApplied}), and the element it is made on is one
+     * kept: what keeping it asks of that element is what the element meets there.
+     */
+    private List<List<TakenConstraint.Affine>> alternativesAtLeast(Proposition stated) {
+        List<Proposition> parts = stated instanceof Proposition.Any(var any, var _, var _)
+                ? any : List.of(stated);
+        List<List<TakenConstraint.Affine>> out = new ArrayList<>();
+        for (Proposition part : parts) {
+            List<TakenConstraint.Affine> relations = new ArrayList<>();
+            for (Proposition conjunct : part instanceof Proposition.All(var all, var _, var _)
+                    ? all : List.of(part)) {
+                Proposition asked = conjunct instanceof Proposition.Some(var _, var element,
+                        boolean holds, var _) && holds ? element : conjunct;
+                for (DemandReading.Read each : DemandReading.asked(asked, read)) {
+                    if (each instanceof DemandReading.Read.Demands(
+                            RowDemand.Relational(TakenConstraint.Affine affine))) {
+                        relations.add(affine);
+                    }
+                }
+            }
+            out.add(relations);
+        }
+        return out;
+    }
+
     /** {@code stated} as the ways a row meets it, each the relations of numbers of the input it
      *  meets: one for each part of a statement that holds where one of them does, or null where
      *  one asks anything else of a row ({@link #relationsOf}). */
@@ -805,21 +949,34 @@ final class StopsOfABody {
         return out;
     }
 
+    /** {@code number} moved by {@code by}, or null where that is no number held exactly. */
+    private static ExactRatio stepped(ExactRatio number, long by) {
+        return number.plus(ExactRatio.of(by)) instanceof ExactAnswer.Held<ExactRatio>(var moved)
+                ? moved : null;
+    }
+
     /**
-     * The ends of each number of the input {@code form} is over, as its declaration and
-     * {@code holding} leave them: a relation of that number alone to a number written narrows
-     * them, and any other relation is not read.
+     * The ends of each number of the input {@code form} is over, as a run works it out before
+     * any type holds it ({@link FormRange#asWorkedOut}) and as {@code holding} leaves them: a
+     * relation of that number alone to a number written narrows them, and any other relation is
+     * not read. Where the numbers are {@code whole}, as those an operation of {@code Int}s is over
+     * are, a strict relation to a whole number ends one past it, and an end the number is said
+     * not to be is the next one in. A number whose ends are not known is held to none, so that a
+     * range of the form is none.
      */
     private Map<NumericTerm, FormRange> boundsUnder(LinearForm<NumericTerm> form,
-                                                    List<TakenConstraint.Affine> holding) {
+                                                    List<TakenConstraint.Affine> holding,
+                                                    boolean whole) {
         Map<NumericTerm, FormRange> out = new HashMap<>();
         for (NumericTerm term : form.coefs().keySet()) {
-            FormRange ends = FormRange.endsOf(term, read);
+            FormRange ends = FormRange.asWorkedOut(term, read);
             if (ends == null) {
+                out.put(term, null);
                 continue;
             }
             ExactRatio least = ends.least();
             ExactRatio greatest = ends.greatest();
+            Set<ExactRatio> notAt = new HashSet<>();
             for (TakenConstraint.Affine each : holding) {
                 if (each.form().coefs().size() != 1 || !each.form().coefs().containsKey(term)) {
                     continue;
@@ -830,16 +987,29 @@ final class StopsOfABody {
                     continue;
                 }
                 Rel rel = coef.signum() > 0 ? each.rel() : each.rel().turned();
-                if ((rel == Rel.GE || rel == Rel.GT || rel == Rel.EQ)
-                        && (least == null || bound.compareTo(least) > 0)) {
-                    least = bound;
+                boolean oneIn = whole && bound.isWhole() && (rel == Rel.GT || rel == Rel.LT);
+                ExactRatio from = oneIn && rel == Rel.GT ? stepped(bound, 1) : bound;
+                ExactRatio to = oneIn && rel == Rel.LT ? stepped(bound, -1) : bound;
+                if ((rel == Rel.GE || rel == Rel.GT || rel == Rel.EQ) && from != null
+                        && (least == null || from.compareTo(least) > 0)) {
+                    least = from;
                 }
-                if ((rel == Rel.LE || rel == Rel.LT || rel == Rel.EQ)
-                        && (greatest == null || bound.compareTo(greatest) < 0)) {
-                    greatest = bound;
+                if ((rel == Rel.LE || rel == Rel.LT || rel == Rel.EQ) && to != null
+                        && (greatest == null || to.compareTo(greatest) < 0)) {
+                    greatest = to;
+                }
+                if (rel == Rel.NE && whole && bound.isWhole()) {
+                    notAt.add(bound);
                 }
             }
-            out.put(term, new FormRange(least, greatest));
+            while (greatest != null && notAt.contains(greatest)) {
+                greatest = stepped(greatest, -1);
+            }
+            while (least != null && notAt.contains(least)) {
+                least = stepped(least, 1);
+            }
+            out.put(term, least == null || greatest == null ? ends
+                    : new FormRange(least, greatest));
         }
         return out;
     }
@@ -917,21 +1087,34 @@ final class StopsOfABody {
                     return attainmentsOf(stands, through);
                 }
             }
+            // A form of the input's numbers is what a row makes it, whatever the row.
+            LinearForm<NumericTerm> form = AffineReading.formOf(node, value.at(), read,
+                    new ElementsMet(), AffineReading.Unkept.EVERY_NAME_AFRESH);
+            if (form != null) {
+                return Attainments.of(List.of(Attainment.always(form)));
+            }
             Choice choice = Choice.of(node);
             if (choice == null) {
                 return WorkedOutToReachIt.of(read).attainmentsOf(value);
             }
+            // Each arm, on the rows that enter it: what entering it states, read with the names
+            // the choice is read with, beside each way its answer comes to a number. An arm
+            // whose entering or answer is not read leaves the ways short, which is said.
             List<Attainment> ways = new ArrayList<>();
             boolean leftUnmade = false;
-            for (Choice.Arm arm : choice.arms()) {
-                for (WhereARunMayStop.Reached met : where.reachedAt(arm.answers())) {
-                    List<TakenConstraint.Affine> taken = StopAssessment.asRelations(met.way());
-                    if (taken == null) {
-                        continue;
-                    }
-                    Attainments ofTheArm = attainmentsOf(
-                            new Denotation(arm.answers(), met.reads()), through);
-                    leftUnmade |= ofTheArm.leftUnmade();
+            for (int part = 0; part < choice.arms().size(); part++) {
+                Choice.Arm arm = choice.arms().get(part);
+                List<List<TakenConstraint.Affine>> entering =
+                        alternativesOf(conditions.arm(node, part, value.at()).proposition());
+                Attainments ofTheArm = attainmentsOf(new Denotation(arm.answers(),
+                        value.at().choosing(arm.decidedBy(), read.rules().symbols(),
+                                read.rules().newtypes())), through);
+                if (entering == null || ofTheArm.ways().isEmpty()) {
+                    leftUnmade = true;
+                    continue;
+                }
+                leftUnmade |= ofTheArm.leftUnmade();
+                for (List<TakenConstraint.Affine> taken : entering) {
                     for (Attainment one : ofTheArm.ways()) {
                         List<TakenConstraint.Affine> holding = new ArrayList<>(one.holding());
                         holding.addAll(taken);
@@ -991,7 +1174,13 @@ final class StopsOfABody {
                 }
             }
         }
-        if (!reached.onTheWay() || !reached.reach().read().get()) {
+        if (stopsNothingAlongEvery(site, reached, within)) {
+            return new StopAssessment.Judgement.Safe(site,
+                    site instanceof StopAssessment.Site.ByNought
+                            ? StopAssessment.WhyNone.DIVISOR_AWAY_FROM_NOUGHT
+                            : StopAssessment.WhyNone.WITHIN_ITS_ENDS);
+        }
+        if (!reached.onTheWay() || !wayRead(reached)) {
             return new StopAssessment.Judgement.Unresolved(site,
                     WhyAStopIsNotShown.A_CONDITION_NOT_READ);
         }
@@ -1007,11 +1196,23 @@ final class StopsOfABody {
             return new StopAssessment.Judgement.Unresolved(site,
                     WhyAStopIsNotShown.SOMETHING_BEFORE_IT_MAY_STOP);
         }
+        // What one application standing for every element is made under, met by the one element
+        // of the list a value looked for holds: only where it is over the numbers the site and
+        // the way are, so that it is a statement of that element and not of another.
+        List<TakenConstraint.Affine> made = List.of();
+        if (reached.forEvery()) {
+            made = madeOnTheElementAs(reached.made());
+            if (made == null || !overTheNumbersOf(made, site, ways)) {
+                return new StopAssessment.Judgement.Unresolved(site,
+                        WhyAStopIsNotShown.A_CONDITION_NOT_READ);
+            }
+        }
         // A condition that came out one of several ways is got past along any of them: a stop
         // shown along one is shown.
         StopAssessment.Judgement first = null;
         for (List<TakenConstraint.Affine> one : ways) {
             List<TakenConstraint.Affine> way = new ArrayList<>(one);
+            way.addAll(made);
             way.addAll(within);
             StopAssessment.Judgement judged = lookedForByEachWay(site, gotPast, left, way);
             if (judged instanceof StopAssessment.Judgement.Stops) {
@@ -1054,6 +1255,12 @@ final class StopsOfABody {
         gotPast.operations().forEach(each -> valuesWorkedOutIn(each, worked));
         gotPast.divisors().forEach(each -> countsIn(each, worked));
         if (worked.isEmpty()) {
+            if (stopsNothingUnder(site, way)) {
+                return new StopAssessment.Judgement.Safe(site,
+                        site instanceof StopAssessment.Site.ByNought
+                                ? StopAssessment.WhyNone.DIVISOR_AWAY_FROM_NOUGHT
+                                : StopAssessment.WhyNone.WITHIN_ITS_ENDS);
+            }
             return StopAssessment.aStopLookedFor(site, gotPast.operations(), gotPast.divisors(),
                     left, way, read);
         }
@@ -1109,6 +1316,61 @@ final class StopsOfABody {
                 : first;
     }
 
+    /** Whether every number {@code relations} are over is one {@code site} or one of
+     *  {@code ways} is over. */
+    private static boolean overTheNumbersOf(List<TakenConstraint.Affine> relations,
+                                            StopAssessment.Site site,
+                                            List<List<TakenConstraint.Affine>> ways) {
+        Set<NumericTerm> numbers = new HashSet<>();
+        switch (site) {
+            case StopAssessment.Site.PastItsEnds(var operation) -> {
+                if (operation.overTheInput() != null) {
+                    numbers.addAll(operation.overTheInput().coefs().keySet());
+                }
+            }
+            case StopAssessment.Site.ByNought(var divisor) -> {
+                if (divisor != null) {
+                    numbers.addAll(divisor.coefs().keySet());
+                }
+            }
+        }
+        ways.forEach(way -> way.forEach(each -> numbers.addAll(each.form().coefs().keySet())));
+        return relations.stream().allMatch(each ->
+                numbers.containsAll(each.form().coefs().keySet()));
+    }
+
+    /**
+     * Whether {@code site} stops no run that gets there on {@code reached}: along each way of
+     * relations the way to it is ({@link StopAssessment#asWaysOfRelations}), with each way the
+     * application it stands in is made under ({@link Reached#made}), and {@code within}, it stops
+     * nothing ({@link #stopsNothingUnder}). A run meets everything on the way to get there, so
+     * what it meets narrows where it may stop whether or not every run taking the way gets there.
+     * False where some of that is not read as relations, or a way was left unmade.
+     */
+    private boolean stopsNothingAlongEvery(StopAssessment.Site site, Reached reached,
+                                           List<TakenConstraint.Affine> within) {
+        // What is not read of either is left out: it leaves where a run may go wider.
+        boolean[] left = {false};
+        List<List<TakenConstraint.Affine>> ways =
+                StopAssessment.asWaysOfRelationsAtLeast(reached.reach().way(), left);
+        if (left[0]) {
+            ways = List.of(List.of());
+        }
+        List<List<TakenConstraint.Affine>> made = reached.made() == null ? List.of(List.of())
+                : alternativesAtLeast(reached.made());
+        for (List<TakenConstraint.Affine> way : ways) {
+            for (List<TakenConstraint.Affine> one : made) {
+                List<TakenConstraint.Affine> holding = new ArrayList<>(way);
+                holding.addAll(one);
+                holding.addAll(within);
+                if (!stopsNothingUnder(site, holding)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
     /**
      * Whether {@code site}, over numbers of the input, stops no run meeting {@code holding}: its
      * operation lies within its ends, or its divisor away from nought, over the ends each number
@@ -1120,12 +1382,12 @@ final class StopsOfABody {
             case StopAssessment.Site.PastItsEnds(var operation) -> {
                 LinearForm<NumericTerm> form = operation.overTheInput();
                 FormRange range = form == null ? null
-                        : FormRange.of(form, read, boundsUnder(form, holding));
+                        : FormRange.of(form, read, boundsUnder(form, holding, true));
                 yield range != null && range.liesWithin(operation.least(), operation.greatest());
             }
             case StopAssessment.Site.ByNought(var divisor) -> {
                 FormRange range = divisor == null ? null
-                        : FormRange.of(divisor, read, boundsUnder(divisor, holding));
+                        : FormRange.of(divisor, read, boundsUnder(divisor, holding, false));
                 yield range != null && !range.holds(ExactRatio.ZERO);
             }
         };
@@ -1308,7 +1570,7 @@ final class StopsOfABody {
             return false;
         }
         List<StopAssessment.Site> sites = sitesOf(step,
-                new Reached(met.get(), null, names, true, null));
+                new Reached(met.get(), null, names, true, null, null, false));
         if (sites == null) {
             return false;
         }

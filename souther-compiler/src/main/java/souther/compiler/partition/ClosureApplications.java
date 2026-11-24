@@ -193,18 +193,20 @@ sealed interface ClosureApplications {
      *                          it on every one of
      * @param handed            the values handed to each closure it stands in, the outermost
      *                          first, with where the walk handing each is entered
-     * @param held              what has to hold for a run to make it beside what the applications
-     *                          before it answer: where the containers hold what it is applied to
+     * @param held              where it is the application of one value written out, and not one
+     *                          standing for every element a container holds: what has to hold for
+     *                          a run to make it beside what the applications before it answer,
+     *                          which is where the containers hold that value
      */
     record Application(InputReads reads, Proposition reached,
                        Map<BindingId, Denotation> carriedIntoTheFirst, ElementsMetOn metOn,
                        List<MadeBy> madeBy, MadeOnEvery madeOnEvery, List<Handed> handed,
-                       Proposition held) {
+                       Optional<Proposition> held) {
 
         public Application {
             Objects.requireNonNull(reads, "an application is read in some names");
             Objects.requireNonNull(reached, "and is made under something");
-            Objects.requireNonNull(held, "and held under something");
+            Objects.requireNonNull(held, "and is of one value or of every element");
             Objects.requireNonNull(metOn, "and on some elements");
             Objects.requireNonNull(madeOnEvery, "and on every one of some, or of none shown");
             carriedIntoTheFirst = Collections.unmodifiableMap(
@@ -223,7 +225,7 @@ sealed interface ClosureApplications {
         Application madePast(Proposition stated) {
             return new Application(reads, WhereAnApplicationIsMade.past(reached, stated),
                     carriedIntoTheFirst, metOn, madeBy, madeOnEvery, handed,
-                    WhereAnApplicationIsMade.past(held, stated));
+                    held.map(it -> WhereAnApplicationIsMade.past(it, stated)));
         }
 
         /** The same application, carrying {@code carried} into the first step of each walk. */
@@ -244,20 +246,22 @@ sealed interface ClosureApplications {
          * by {@code by}, where a call some source wrote made it — and made on every element of
          * {@code everyOf}, where it is one application standing for every element of that
          * position, on every element this one is — and handed {@code values}, which are made
-         * wherever {@code held} holds: where the container holds them.
+         * wherever {@code held} holds: where the container holds them. Of one value written out
+         * where {@code ofOne}, and otherwise standing for every element a container holds.
          *
          * <p>Which call made an application is carried here and handed on only by these, so
          * nothing a reading reads it in passing ({@code WhatExplainsACountIsReadOnlyWhereItIsTold}).
          */
         Application inside(InputReads names, Proposition where, ElementsMetOn on,
                            Optional<MadeBy> by, Optional<TermPath> everyOf,
-                           List<Denotation> values, Proposition held) {
+                           List<Denotation> values, Proposition held, boolean ofOne) {
             List<MadeBy> deeper = new ArrayList<>(madeBy);
             by.ifPresent(deeper::add);
             List<Handed> handedDeeper = new ArrayList<>(handed);
             values.forEach(value -> handedDeeper.add(new Handed(value, held)));
             return new Application(names, where, carriedIntoTheFirst, on, deeper,
-                    madeOnEvery.inside(everyOf), handedDeeper, held);
+                    madeOnEvery.inside(everyOf), handedDeeper,
+                    ofOne ? Optional.of(held) : Optional.empty());
         }
 
         /** {@code stated}, said to be the statement of this application of each call it is
@@ -404,8 +408,7 @@ sealed interface ClosureApplications {
         return switch (this) {
             case Outside(var metOn, var made) -> applied(block, step,
                     List.of(new Application(reads, WhereAnApplicationIsMade.nothingAsked(),
-                            Map.of(), metOn, List.of(), made, List.of(),
-                            WhereAnApplicationIsMade.nothingAsked())),
+                            Map.of(), metOn, List.of(), made, List.of(), Optional.empty())),
                     read, true, saysWhereEachIsMade);
             case Each(var outer) -> applied(block, step, outer, read, false, saysWhereEachIsMade);
             case NotSaid _, None _ -> this;
@@ -480,7 +483,7 @@ sealed interface ClosureApplications {
                         }
                         out.add(around.inside(names, reached.get(at), around.metOn(),
                                 madeBy.map(call -> new MadeBy(asWritten(call, symbols), ordinal)),
-                                Optional.empty(), values, held.get(at)));
+                                Optional.empty(), values, held.get(at), true));
                     }
                 }
                 case InputReads.Applications.NoneHanded _ -> {
@@ -498,7 +501,7 @@ sealed interface ClosureApplications {
                             saysWhereEachIsMade ? metOn(block, containers, around, entered, read)
                                     : around.metOn(), Optional.empty(),
                             everyElementOf(block, containers, around, read), List.of(),
-                            around.reached()));
+                            around.reached(), false));
                 }
                 case InputReads.Applications.Unsaid _ -> {
                     return new NotSaid(around.metOn().notSaidAnywhere(new ReadingGap.ReachNotRead(
@@ -679,15 +682,17 @@ sealed interface ClosureApplications {
     /**
      * Whether every run that gets past the applications before {@code one} makes it, whatever
      * the row: what {@link #madeWhateverTheRow} asks, with where the applications before it answer
-     * left to whoever reads them: what it is applied to is held whatever the row
-     * ({@link Application#held}).
+     * left to whoever reads them: it is the application of one value written out, held whatever
+     * the row ({@link Application#held}).
      */
     static boolean madeWhereverTheOnesBeforeItAreGotPast(Application one) {
-        return one.held() instanceof Proposition.Always(boolean held) && held
+        return one.held().orElse(null) instanceof Proposition.Always(boolean held) && held
                 && madeWhereverTheContainerHoldsIt(one);
     }
 
-    private static boolean madeWhereverTheContainerHoldsIt(Application one) {
+    /** Whether nothing beside what {@code one} is made under is asked of a row for it to be made:
+     *  no container of the input it stops short in, and no way to a call of a helper it is in. */
+    static boolean madeWhereverTheContainerHoldsIt(Application one) {
         return one.metOn().levels().isEmpty()
                 && one.metOn().made() instanceof Proposition.Always(boolean made) && made;
     }
