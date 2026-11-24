@@ -1225,21 +1225,13 @@ final class WorkedOutToReachIt {
     }
 
     /**
-     * The same, where the asker tells the stops of what it can ({@code tells}): whether every
-     * stop a run may come to working {@code value} out is either none or told. Asked of what may
-     * end a run least first, so what is told is only ever the least of it; and only of what every
-     * run working {@code value} out works out, so nothing an arm or a closure's body holds is told
-     * as a stop of runs, or of values, that never work it out
-     * ({@link Question#notOnEveryRun}).
+     * The expression whose own stop is left untold working out {@code value}, where it was read,
+     * as {@link #whereARunMayEndWhereItWasPassedOver} finds it, where the asker tells the stops of
+     * what it can ({@code tells}); none where every stop there is told. Asked of what may end a
+     * run least first, so what is told is only ever the least of it; and only of what every run
+     * working {@code value} out works out, so nothing an arm or a closure's body holds is told as
+     * a stop of runs, or of values, that never work it out ({@link Question#notOnEveryRun}).
      */
-    boolean endsNoRunUntoldWhereItWasPassedOver(Denotation value,
-                                               Predicate<Denotation> tells) {
-        return whereAStopIsLeftUntoldWhereItWasPassedOver(value, tells).isEmpty();
-    }
-
-    /** The expression whose own stop is left untold working out {@code value}, where it was
-     *  read, as {@link #whereARunMayEndWhereItWasPassedOver} finds it; none where every stop
-     *  there is told ({@link #endsNoRunUntoldWhereItWasPassedOver}). */
     Optional<Denotation> whereAStopIsLeftUntoldWhereItWasPassedOver(Denotation value,
                                                                     Predicate<Denotation> tells) {
         return Optional.ofNullable(whereItMayEnd(value,

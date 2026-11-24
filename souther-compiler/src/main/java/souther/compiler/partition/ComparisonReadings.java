@@ -561,12 +561,6 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     helperBody, Optional.of(at), metOnly);
         }
 
-        /** The trees a run on the way to a comparison here may have worked out anything of: the
-         *  behavior's body, and the tree the walk is in where that is another. */
-        List<Core> trees() {
-            return within == whole ? List.of(whole) : List.of(whole, within);
-        }
-
         /** That the walk met the fork at {@code occurrence} where it is now, as this reading's copy
          *  of it. */
         void forkMet(ConstructOccurrence occurrence) {

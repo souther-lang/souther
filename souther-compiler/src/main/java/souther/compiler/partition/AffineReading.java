@@ -3202,7 +3202,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          * The same, where {@code tells} tells the stops of what it can of what {@code skipped}
          * works out, as operations kept for where a run stops: a row is not shown to get past
          * them, and a stop is left untold only where something that may end a run is left that
-         * nothing tells ({@link WorkedOutToReachIt#endsNoRunUntoldWhereItWasPassedOver}).
+         * nothing tells ({@link WorkedOutToReachIt#whereAStopIsLeftUntoldWhereItWasPassedOver}).
          *
          * <p>Asked where no value on the way is taken as another ({@link InputReads#untaken}):
          * whether working {@code skipped} out may end a run is one question for every arm of the

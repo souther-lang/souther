@@ -391,7 +391,7 @@ class AStopShownAtAnOperationIsOneTheProgramRunsIntoTest {
                 at++;
             }
         }
-        return at == sum.strip().length() && at > 0 ? out : null;
+        return (at == sum.strip().length() && at > 0) ? out : null;
     }
 
     /** What every run of the grid that stops stops for, by the run. */
