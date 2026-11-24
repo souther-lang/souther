@@ -1,5 +1,5 @@
 {
-  "schemaVersion" : 28,
+  "schemaVersion" : 29,
   "compilerVersion" : "<version>",
   "status" : "partial",
   "weakening" : [ "rule_unread", "reachable_node_cases_unmeasured", "rewrite_undecided" ],
@@ -4700,17 +4700,9 @@
         },
         "reason" : "non_constant_divisor"
       }, {
-        "kind" : "rule_stop_not_shown",
+        "kind" : "step_stop_not_shown",
         "disposition" : "reported",
-        "subject" : "comparison@1:49:24",
-        "ruleId" : {
-          "kind" : "comparison",
-          "declaredIn" : "conformance.splitting",
-          "definition" : "apportionExactly",
-          "behavior" : "apportionExactly",
-          "ordinal" : 4,
-          "lowered" : 0
-        },
+        "subject" : "what it works out",
         "unresolved" : [ {
           "reason" : "no_operation_told",
           "restsOn" : {
@@ -4724,7 +4716,50 @@
               }
             }
           }
-        } ]
+        } ],
+        "at" : {
+          "sourceId" : "1",
+          "line" : 47,
+          "column" : 11,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        }
+      }, {
+        "kind" : "step_stop_not_shown",
+        "disposition" : "reported",
+        "subject" : "conformance.splitting.Share",
+        "asks" : [ {
+          "construction" : "conformance.splitting.Share",
+          "at" : {
+            "sourceId" : "1",
+            "line" : 50,
+            "column" : 28,
+            "writtenAt" : {
+              "kind" : "here"
+            }
+          },
+          "asked" : {
+            "allOf" : [ {
+              "form" : "conformance.splitting.apportionExactly.2",
+              "is" : "at_most",
+              "than" : "9223372036854775807"
+            }, {
+              "form" : "conformance.splitting.apportionExactly.2",
+              "is" : "at_least",
+              "than" : "0"
+            } ]
+          },
+          "reason" : "something_before_it_may_stop"
+        } ],
+        "at" : {
+          "sourceId" : "1",
+          "line" : 50,
+          "column" : 28,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        }
       }, {
         "kind" : "rule_unaccounted",
         "disposition" : "reported",
@@ -7853,17 +7888,40 @@
         },
         "reason" : "rule_relating_two_values"
       }, {
-        "kind" : "rule_stop_not_shown",
+        "kind" : "step_stop_not_shown",
         "disposition" : "reported",
-        "subject" : "comparison@2:85:39",
-        "ruleId" : {
-          "kind" : "comparison",
-          "declaredIn" : "conformance.shipping",
-          "definition" : "高額割増",
-          "behavior" : "出荷する",
-          "ordinal" : 1,
-          "lowered" : 0
-        },
+        "subject" : "what it works out",
+        "unresolved" : [ {
+          "reason" : "no_operation_told",
+          "restsOn" : {
+            "kind" : "call",
+            "module" : "conformance.shipping",
+            "behavior" : "台帳へ書く",
+            "passage" : {
+              "reason" : "no_body"
+            },
+            "at" : {
+              "sourceId" : "2",
+              "line" : 95,
+              "column" : 11,
+              "writtenAt" : {
+                "kind" : "here"
+              }
+            }
+          }
+        } ],
+        "at" : {
+          "sourceId" : "2",
+          "line" : 95,
+          "column" : 11,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        }
+      }, {
+        "kind" : "step_stop_not_shown",
+        "disposition" : "reported",
+        "subject" : "what it works out",
         "unresolved" : [ {
           "reason" : "no_operation_told",
           "restsOn" : {
@@ -7882,7 +7940,41 @@
               }
             }
           }
-        } ]
+        } ],
+        "at" : {
+          "sourceId" : "2",
+          "line" : 98,
+          "column" : 62,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        }
+      }, {
+        "kind" : "step_stop_not_shown",
+        "disposition" : "reported",
+        "subject" : "what it works out",
+        "unresolved" : [ {
+          "reason" : "no_operation_told",
+          "restsOn" : {
+            "kind" : "worked_out",
+            "at" : {
+              "sourceId" : "2",
+              "line" : 98,
+              "column" : 37,
+              "writtenAt" : {
+                "kind" : "here"
+              }
+            }
+          }
+        } ],
+        "at" : {
+          "sourceId" : "2",
+          "line" : 98,
+          "column" : 37,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        }
       } ]
     }, {
       "name" : "送料を出す",
@@ -9988,6 +10080,58 @@
         "kind" : "partition_not_derivable",
         "disposition" : "reported",
         "subject" : "shelf.counts"
+      }, {
+        "kind" : "step_stop_not_shown",
+        "disposition" : "reported",
+        "subject" : "what it works out",
+        "unresolved" : [ {
+          "reason" : "no_operation_told",
+          "restsOn" : {
+            "kind" : "worked_out",
+            "at" : {
+              "sourceId" : "4",
+              "line" : 24,
+              "column" : 58,
+              "writtenAt" : {
+                "kind" : "here"
+              }
+            }
+          }
+        } ],
+        "at" : {
+          "sourceId" : "4",
+          "line" : 24,
+          "column" : 58,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        }
+      }, {
+        "kind" : "step_stop_not_shown",
+        "disposition" : "reported",
+        "subject" : "what it works out",
+        "unresolved" : [ {
+          "reason" : "no_operation_told",
+          "restsOn" : {
+            "kind" : "worked_out",
+            "at" : {
+              "sourceId" : "4",
+              "line" : 28,
+              "column" : 21,
+              "writtenAt" : {
+                "kind" : "here"
+              }
+            }
+          }
+        } ],
+        "at" : {
+          "sourceId" : "4",
+          "line" : 28,
+          "column" : 21,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        }
       } ]
     }, {
       "name" : "restockByFold",
@@ -10993,6 +11137,32 @@
         "kind" : "partition_not_derivable",
         "disposition" : "reported",
         "subject" : "zone.zones"
+      }, {
+        "kind" : "step_stop_not_shown",
+        "disposition" : "reported",
+        "subject" : "what it works out",
+        "unresolved" : [ {
+          "reason" : "no_operation_told",
+          "restsOn" : {
+            "kind" : "worked_out",
+            "at" : {
+              "sourceId" : "4",
+              "line" : 66,
+              "column" : 32,
+              "writtenAt" : {
+                "kind" : "here"
+              }
+            }
+          }
+        } ],
+        "at" : {
+          "sourceId" : "4",
+          "line" : 66,
+          "column" : 32,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        }
       } ]
     }, {
       "name" : "everyZoneStocked",
@@ -11224,6 +11394,32 @@
         "kind" : "partition_not_derivable",
         "disposition" : "reported",
         "subject" : "zone.zones"
+      }, {
+        "kind" : "step_stop_not_shown",
+        "disposition" : "reported",
+        "subject" : "what it works out",
+        "unresolved" : [ {
+          "reason" : "no_operation_told",
+          "restsOn" : {
+            "kind" : "worked_out",
+            "at" : {
+              "sourceId" : "4",
+              "line" : 83,
+              "column" : 34,
+              "writtenAt" : {
+                "kind" : "here"
+              }
+            }
+          }
+        } ],
+        "at" : {
+          "sourceId" : "4",
+          "line" : 83,
+          "column" : 34,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        }
       } ]
     }, {
       "name" : "restockAnyZoneWithoutALeafRow",
@@ -11448,6 +11644,32 @@
         "kind" : "partition_not_derivable",
         "disposition" : "reported",
         "subject" : "zone.zones"
+      }, {
+        "kind" : "step_stop_not_shown",
+        "disposition" : "reported",
+        "subject" : "what it works out",
+        "unresolved" : [ {
+          "reason" : "no_operation_told",
+          "restsOn" : {
+            "kind" : "worked_out",
+            "at" : {
+              "sourceId" : "4",
+              "line" : 99,
+              "column" : 47,
+              "writtenAt" : {
+                "kind" : "here"
+              }
+            }
+          }
+        } ],
+        "at" : {
+          "sourceId" : "4",
+          "line" : 99,
+          "column" : 47,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        }
       } ]
     } ]
   }, {
@@ -13683,6 +13905,32 @@
           "lowered" : 0
         },
         "reason" : "relation_not_shown_reached_at_every_value"
+      }, {
+        "kind" : "step_stop_not_shown",
+        "disposition" : "reported",
+        "subject" : "what it works out",
+        "unresolved" : [ {
+          "reason" : "no_operation_told",
+          "restsOn" : {
+            "kind" : "worked_out",
+            "at" : {
+              "sourceId" : "5",
+              "line" : 63,
+              "column" : 30,
+              "writtenAt" : {
+                "kind" : "here"
+              }
+            }
+          }
+        } ],
+        "at" : {
+          "sourceId" : "5",
+          "line" : 63,
+          "column" : 30,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        }
       }, {
         "kind" : "rule_unaccounted",
         "disposition" : "reported",
