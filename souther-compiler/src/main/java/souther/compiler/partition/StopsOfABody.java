@@ -435,7 +435,7 @@ final class StopsOfABody {
         // application the run makes of the closure ({@link WhereARunMayStop#applicationsOf}),
         // and never off the ones that get to the step: one that does not get here is worked out
         // all the same, and hands on what it answered.
-        List<ClosureApplications.Application> history = closure == null || forEvery ? null
+        List<ClosureApplications.Application> history = (closure == null || forEvery) ? null
                 : where.applicationsOf(closure).orElse(null);
         List<InputReads> namesOnTheRun = history == null ? null
                 : namesOfEachApplication(history, closure);
