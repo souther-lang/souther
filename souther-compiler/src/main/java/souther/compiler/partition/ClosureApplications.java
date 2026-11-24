@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.UnaryOperator;
@@ -174,10 +175,6 @@ sealed interface ClosureApplications {
      */
     record None() implements ClosureApplications {}
 
-    /** The place of an application standing for every element a container holds, which is no
-     *  one application of a run ({@link Application#places}). */
-    int STANDS_FOR_EVERY_ELEMENT = -1;
-
     /**
      * One application.
      *
@@ -194,10 +191,13 @@ sealed interface ClosureApplications {
      * @param madeBy            which application of which call it is, for each closure it stands
      *                          inside whose call some source wrote, the outermost first
      * @param places            where it stands among the applications a run makes of each closure
-     *                          it stands in, the outermost first, or
-     *                          {@link #STANDS_FOR_EVERY_ELEMENT}: which application of the run it
-     *                          is, which is what the run's account of what it worked out is
-     *                          read by ({@link WhereARunMayStop#applicationsOf})
+     *                          it stands in that is applied to values written out, the outermost
+     *                          first: which application of the run it is, which is what the run's
+     *                          account of what it worked out is read by
+     *                          ({@link WhereARunMayStop#applicationsOf}). Every application of one
+     *                          closure stands in the same closures, so one standing for every
+     *                          element of a container, which has no place, leaves none out of
+     *                          step
      * @param madeOnEvery       the elements a run making what stands in it once is shown to make
      *                          it on every one of
      * @param handed            the values handed to each closure it stands in, the outermost
@@ -265,13 +265,13 @@ sealed interface ClosureApplications {
          * nothing a reading reads it in passing ({@code WhatExplainsACountIsReadOnlyWhereItIsTold}).
          */
         Application inside(InputReads names, Proposition where, ElementsMetOn on,
-                           Optional<MadeBy> by, int place, Optional<TermPath> everyOf,
+                           Optional<MadeBy> by, OptionalInt place, Optional<TermPath> everyOf,
                            List<Denotation> values, Proposition held,
                            Optional<Proposition> apart) {
             List<MadeBy> deeper = new ArrayList<>(madeBy);
             by.ifPresent(deeper::add);
             List<Integer> placesDeeper = new ArrayList<>(places);
-            placesDeeper.add(place);
+            place.ifPresent(placesDeeper::add);
             List<Handed> handedDeeper = new ArrayList<>(handed);
             values.forEach(value -> handedDeeper.add(new Handed(value, held)));
             return new Application(names, where, carriedIntoTheFirst, on, deeper, placesDeeper,
@@ -503,7 +503,7 @@ sealed interface ClosureApplications {
                         }
                         out.add(around.inside(names, reached.get(at), around.metOn(),
                                 madeBy.map(call -> new MadeBy(asWritten(call, symbols), ordinal)),
-                                ordinal, Optional.empty(), values, held.get(at), Optional.of(stopsShort
+                                OptionalInt.of(ordinal), Optional.empty(), values, held.get(at), Optional.of(stopsShort
                                         ? reached.get(at) : held.get(at))));
                     }
                 }
@@ -520,7 +520,7 @@ sealed interface ClosureApplications {
                             where.map(some -> WhereAnApplicationIsMade.past(around.reached(),
                                     some.holdingSomething())).orElse(around.reached()),
                             saysWhereEachIsMade ? metOn(block, containers, around, entered, read)
-                                    : around.metOn(), Optional.empty(), STANDS_FOR_EVERY_ELEMENT,
+                                    : around.metOn(), Optional.empty(), OptionalInt.empty(),
                             everyElementOf(block, containers, around, read), List.of(),
                             around.reached(), Optional.empty()));
                 }
