@@ -66,7 +66,7 @@ import java.util.function.Supplier;
  * before it, and never along the way to something after it: a condition a run asks after the
  * step is not one a run stopping there got to. A step met on several ways, or met where the
  * walk reads it on each application of a function value, is judged on each and put together
- * ({@link ConstructionStopAssessment#together}): a stop shown on one is a run that stops; no
+ * ({@link WhatEveryWayShows#together}): a stop shown on one is a run that stops; no
  * stop only where every way is read and shows none.
  *
  * <p>That no run stops rests on what a way leaves of the input, which holds every run getting
