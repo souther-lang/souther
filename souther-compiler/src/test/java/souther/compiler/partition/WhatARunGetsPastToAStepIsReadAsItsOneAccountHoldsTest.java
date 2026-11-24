@@ -35,21 +35,22 @@ class WhatARunGetsPastToAStepIsReadAsItsOneAccountHoldsTest {
         return InputReads.ofWhatIsDeclared(Map.of(), DeclaredInput.NONE);
     }
 
-    /** A part worked out on every run is met by a reader of a construction only where it is
-     *  read in the names that reader reads in; one read in an application's names is only got
-     *  past. */
+    /** A reader of a construction, which reads in the names where the walk met each part, is
+     *  handed the account whole, every part read in those names, or not at all: a part read in
+     *  an application's names is neither met nor got past in other names. */
     @Test
-    void aPartReadInNamesOfItsOwnIsNotMetByAReaderOfAConstruction() {
-        Core inTheWalkersNames = part(1);
-        Core inAnApplicationsNames = part(2);
-        Core onSomeRuns = part(3);
+    void aReaderOfAConstructionIsHandedTheAccountWholeOrNotAtAll() {
+        Core onEveryRun = part(1);
+        Core onSomeRuns = part(2);
         WhatARunWorksOutBeforeACount.BeforeAConstruction read = new BeforeAStep(List.of(
-                new BeforeAStep.Part(inTheWalkersNames, null, true),
-                new BeforeAStep.Part(inAnApplicationsNames, names(), true),
-                new BeforeAStep.Part(onSomeRuns, null, false))).asAConstructionReadsIt();
-        assertEquals(List.of(inTheWalkersNames, inAnApplicationsNames, onSomeRuns),
-                read.onSomeRun());
-        assertEquals(List.of(inTheWalkersNames), read.onEveryRun());
+                new BeforeAStep.Part(onEveryRun, null, true),
+                new BeforeAStep.Part(onSomeRuns, null, false))).asAConstructionReadsIt()
+                .orElseThrow();
+        assertEquals(List.of(onEveryRun, onSomeRuns), read.onSomeRun());
+        assertEquals(List.of(onEveryRun), read.onEveryRun());
+        assertEquals(Optional.empty(), new BeforeAStep(List.of(
+                new BeforeAStep.Part(onEveryRun, null, true),
+                new BeforeAStep.Part(part(3), names(), true))).asAConstructionReadsIt());
     }
 
     /** What one application works out comes after what a run works out going into the tree,

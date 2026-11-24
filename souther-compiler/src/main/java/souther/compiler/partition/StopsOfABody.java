@@ -414,9 +414,10 @@ final class StopsOfABody {
      * on an application is read here: what the call works out before it applies the closure and
      * what the body works out before the step, as on the first application
      * ({@link WhatARunWorksOutBeforeACount#workedOutAtTheFirstApplication}), and each application
-     * before this one whole, in the names that application was made in. A walk from a seed hands
-     * each application after the first what the one before it answered, and the first its seed.
-     * Elsewhere what comes before is the way's to say, and is not read.
+     * the run makes before this one whole, whether or not it gets to the step, in the names it
+     * was made in. A walk from a seed hands each application after the first what the one before
+     * it answered, and the first its seed. Elsewhere what comes before is the way's to say, and
+     * is not read.
      */
     private List<Reached> onEachApplication(Core step, WhereARunMayStop.Met met,
                                             WaysToASite.Reach reach,
@@ -430,9 +431,15 @@ final class StopsOfABody {
         // holds a list of one, on which it is the first and only one, so what comes before it is
         // what comes before the first.
         boolean forEvery = made.stream().anyMatch(one -> one.held().isEmpty());
+        // What a run has worked out by an application, and what it is handed, are read off every
+        // application the run makes of the closure ({@link WhereARunMayStop#applicationsOf}),
+        // and never off the ones that get to the step: one that does not get here is worked out
+        // all the same, and hands on what it answered.
+        List<ClosureApplications.Application> history = closure == null || forEvery ? null
+                : where.applicationsOf(closure).orElse(null);
+        List<InputReads> namesOnTheRun = history == null ? null
+                : namesOfEachApplication(history, closure);
         List<Reached> out = new ArrayList<>();
-        Set<BindingId> carrying = new LinkedHashSet<>();
-        InputReads answered = null;
         for (ClosureApplications.Application one : made) {
             if (!one.isMadeOnSomeRow()) {
                 continue;
@@ -448,32 +455,73 @@ final class StopsOfABody {
                         before, one.reached(), true));
                 continue;
             }
-            InputReads reads = one.reads();
-            for (Map.Entry<BindingId, Denotation> seed : one.carriedIntoTheFirst().entrySet()) {
-                carrying.add(seed.getKey());
-                if (answered == null) {
-                    reads = reads.handing(seed.getKey(), seed.getValue(),
-                            read.rules().newtypes());
-                }
-            }
-            if (answered != null && closure != null) {
-                for (BindingId accumulator : carrying) {
-                    reads = reads.handing(accumulator, new Denotation(closure.body(), answered),
-                            read.rules().newtypes());
-                }
-            }
-            BeforeAStep before = closure == null ? null
+            // Which application of the run this is. One that is none of them is read with
+            // nothing before it known, and what comes before it is not read.
+            int at = history == null ? -1 : placeAmong(history, one);
+            InputReads reads = at < 0 ? one.reads()
+                    : handedAsOnTheRun(one.reads(), history, at, namesOnTheRun, closure);
+            BeforeAStep before = at < 0 ? null
                     : beforeOnTheApplication(reach, first, closure, step, reads,
-                            out.stream().map(Reached::reads).toList());
+                            namesOnTheRun.subList(0, at));
             // Where an operation stops at an answer, what the applications before answered decides
             // whether this one is made, which is what it is held under then.
             boolean onTheWay = closure == null
                     ? ClosureApplications.madeWhateverTheRow(one)
                     : ClosureApplications.madeWhereverTheOnesBeforeItAreGotPast(one);
             out.add(new Reached(met, reach, reads, onTheWay, before, one.reached(), false));
-            answered = reads;
         }
         return out;
+    }
+
+    /**
+     * The names each application of {@code history} is made in on a run: its own, with what a
+     * walk from a seed carries into it — the seed into the first, and into each after it what the
+     * one before it answered, {@code closure}'s body in that one's names.
+     */
+    private List<InputReads> namesOfEachApplication(
+            List<ClosureApplications.Application> history, Core.Block closure) {
+        List<InputReads> out = new ArrayList<>();
+        for (int at = 0; at < history.size(); at++) {
+            out.add(handedAsOnTheRun(history.get(at).reads(), history, at, out, closure));
+        }
+        return out;
+    }
+
+    /**
+     * {@code reads} with what a walk from a seed carries into the {@code at}-th application of
+     * {@code history}: the seed where it is the first, and otherwise what the one before it
+     * answered, read in {@code namesOnTheRun}'s names for that one.
+     */
+    private InputReads handedAsOnTheRun(InputReads reads,
+                                        List<ClosureApplications.Application> history, int at,
+                                        List<InputReads> namesOnTheRun, Core.Block closure) {
+        InputReads out = reads;
+        for (Map.Entry<BindingId, Denotation> seed
+                : history.getFirst().carriedIntoTheFirst().entrySet()) {
+            out = out.handing(seed.getKey(), at == 0 ? seed.getValue()
+                    : new Denotation(closure.body(), namesOnTheRun.get(at - 1)),
+                    read.rules().newtypes());
+        }
+        return out;
+    }
+
+    /** Where {@code one} stands among the applications of {@code history}, by which application
+     *  of which call it is; -1 where it is none of them, or not one only. */
+    private static int placeAmong(List<ClosureApplications.Application> history,
+                                  ClosureApplications.Application one) {
+        if (one.madeBy().isEmpty()) {
+            return -1;
+        }
+        int found = -1;
+        for (int at = 0; at < history.size(); at++) {
+            if (history.get(at).madeBy().equals(one.madeBy())) {
+                if (found >= 0) {
+                    return -1;
+                }
+                found = at;
+            }
+        }
+        return found;
     }
 
     /**
@@ -552,7 +600,7 @@ final class StopsOfABody {
             WaysToASite.Reach reach = reached.reach();
             Supplier<Optional<WhatARunWorksOutBeforeACount.BeforeAConstruction>> before =
                     reached.before() == null ? reach.before()
-                            : () -> Optional.of(reached.before().asAConstructionReadsIt());
+                            : () -> reached.before().asAConstructionReadsIt();
             // One application of many is made where {@link Reached#onTheWay} says; one standing
             // for every element is made under what its element meets, which a value looked for
             // here is not held to, so it is looked for only where that asks nothing.

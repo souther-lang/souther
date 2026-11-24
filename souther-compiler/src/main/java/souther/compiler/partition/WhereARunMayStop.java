@@ -125,6 +125,32 @@ final class WhereARunMayStop {
         return once(met.get(step));
     }
 
+    /**
+     * That the walk went into the body of {@code closure} on {@code applications}: every
+     * application a run makes of it there, in the order it makes them, as they stand where the
+     * body is entered — before anything in the body narrows them to the ones that get somewhere
+     * in it.
+     *
+     * <p>What a run has worked out by an application is every application before it, whether or
+     * not those get to a given step, and what one is handed is what the one before it answered.
+     * That is a fact of the run and of no step in the body, so it is kept here once, apart from
+     * which applications get to each step ({@link Met#applying}).
+     */
+    void appliedOn(Core.Block closure, ClosureApplications applications) {
+        applied.computeIfAbsent(closure, _ -> new ArrayList<>(1)).add(applications);
+    }
+
+    /** Every application a run makes of {@code closure}, in order, where the walk went into its
+     *  body once and was told each one ({@link #appliedOn}); empty otherwise. */
+    Optional<List<ClosureApplications.Application>> applicationsOf(Core.Block closure) {
+        List<ClosureApplications> entered = applied.get(closure);
+        return entered != null && entered.size() == 1
+                && entered.getFirst() instanceof ClosureApplications.Each(var each)
+                ? Optional.of(each) : Optional.empty();
+    }
+
+    private final Map<Core.Block, List<ClosureApplications>> applied = new IdentityHashMap<>();
+
     /** That the walk met the function value {@code closure} on {@code way}. */
     void made(Core.Block closure, List<OnTheWay> way) {
         made.computeIfAbsent(closure, _ -> new ArrayList<>(1)).add(List.copyOf(way));

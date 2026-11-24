@@ -62,15 +62,17 @@ record BeforeAStep(List<Part> parts) {
 
     /**
      * The same as a reader of what a construction asks reads it, which reads each part in the
-     * names where the walk met it: every part as one a run may work out first, and as one every
-     * run does only where it is read in those names. A part worked out in names of its own — an
-     * application's — is one whose success on that application says nothing of the part read
-     * in other names, so nothing is taken as met of it.
+     * names where the walk met it; empty where some part is worked out in names of its own — an
+     * application's — which that reader cannot read it in. Read in other names, such a part is
+     * neither what a run has met nor what a value has to get past, so the account is not handed
+     * to that reader in part: it is handed whole or not at all.
      */
-    WhatARunWorksOutBeforeACount.BeforeAConstruction asAConstructionReadsIt() {
-        return new WhatARunWorksOutBeforeACount.BeforeAConstruction(
+    Optional<WhatARunWorksOutBeforeACount.BeforeAConstruction> asAConstructionReadsIt() {
+        if (parts.stream().anyMatch(part -> part.names() != null)) {
+            return Optional.empty();
+        }
+        return Optional.of(new WhatARunWorksOutBeforeACount.BeforeAConstruction(
                 parts.stream().map(Part::node).toList(),
-                parts.stream().filter(part -> part.every() && part.names() == null)
-                        .map(Part::node).toList());
+                parts.stream().filter(Part::every).map(Part::node).toList()));
     }
 }

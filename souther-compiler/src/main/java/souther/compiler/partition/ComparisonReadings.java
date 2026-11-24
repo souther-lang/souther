@@ -2118,12 +2118,16 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                         Denotation seed = new Denotation(seeded.seed(), reads);
                         in.oneApplication().entering(seeded.step(),
                                 shortOfEachElement(seeded.step(), inside, in));
-                        ScopeStep.forEachChild(seeded.step(), (body, into) -> walk(body, in,
-                                inside.entering(into, symbols, in.newtypes()),
-                                through.into(seeded.step(), into, inside, in.read(),
-                                                in.metOnly().isEmpty())
-                                        .carryingIntoTheFirst(seeded.accumulator(), seed),
-                                flow, assumed, live, out, forks, numbering));
+                        ScopeStep.forEachChild(seeded.step(), (body, into) -> {
+                            ClosureApplications applied = through.into(seeded.step(), into,
+                                            inside, in.read(), in.metOnly().isEmpty())
+                                    .carryingIntoTheFirst(seeded.accumulator(), seed);
+                            if (body == seeded.step().body() && in.metOnly().isEmpty()) {
+                                in.constructions().appliedOn(seeded.step(), applied);
+                            }
+                            walk(body, in, inside.entering(into, symbols, in.newtypes()),
+                                    applied, flow, assumed, live, out, forks, numbering);
+                        });
                         in.oneApplication().leaving();
                     });
             // A helper that calls itself over a list the input holds, read where the call stands:
@@ -2166,6 +2170,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                             applying.into(block, step, reads, in.read(), !readsNothing);
                     if (child == block.body() && !readsNothing) {
                         answeredBy(block, applied, in);
+                        in.constructions().appliedOn(block, applied);
                     }
                     walk(child, in, reads.entering(step, symbols, in.newtypes()), applied, flow,
                             child == block.body() ? handed : assumed, live, out, forks,
