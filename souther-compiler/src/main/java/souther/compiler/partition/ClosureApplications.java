@@ -238,6 +238,17 @@ sealed interface ClosureApplications {
                     held.map(it -> WhereAnApplicationIsMade.past(it, stated)));
         }
 
+        /**
+         * The same application, held only past {@code stated} and made under what it was: where
+         * a run may make it is no narrower, and where every run getting past the ones before it
+         * makes it is ({@link #madeWhereverTheOnesBeforeItAreGotPast}). For a condition that holds
+         * of one application and not shown of this one.
+         */
+        Application heldPast(Proposition stated) {
+            return new Application(reads, reached, carriedIntoTheFirst, metOn, madeBy, places,
+                    madeOnEvery, handed, held.map(it -> WhereAnApplicationIsMade.past(it, stated)));
+        }
+
         /** The same application, carrying {@code carried} into the first step of each walk. */
         Application carrying(Map<BindingId, Denotation> carried) {
             return new Application(reads, reached, carried, metOn, madeBy, places, madeOnEvery,
@@ -746,8 +757,10 @@ sealed interface ClosureApplications {
      * first step what it carried is its seed. Where the condition, read with each walk around the
      * application carrying its seed, comes out {@code holding} whatever the row is, the first step
      * gets past it, so a run making the application at all makes one past it, and it is left
-     * standing under what it was reached under. Anything less settled than that is no such
-     * account: a later step past it would be a step the seed says nothing of.
+     * standing under what it was reached under. That is said of the first step and of no other:
+     * a later step is handed what the one before it answered, which the seed says nothing of, so
+     * the application is not held to be made past it wherever the ones before it are got past
+     * ({@link Application#heldPast}). Anything less settled than that is no such account.
      */
     default ClosureApplications taking(Core condition, boolean holding, InputReading read) {
         return switch (this) {
@@ -755,9 +768,9 @@ sealed interface ClosureApplications {
                 WhatConditionsState conditions = WhatConditionsState.of(read);
                 Proposition stated = conditions.truth(condition, one.reads(), read).proposition();
                 Proposition past = holding ? stated : conditions.denied(stated);
-                return Proposition.leavesSomethingUnread(past)
-                        && pastOnTheFirstStep(condition, holding, one, read) ? one.forked()
-                        : one.madePast(past)
+                return (Proposition.leavesSomethingUnread(past)
+                        && pastOnTheFirstStep(condition, holding, one, read)
+                        ? one.heldPast(past) : one.madePast(past))
                                 .forked();
             }).toList());
             case Outside(var metOn, var made) -> new Outside(metOn, made.forked());

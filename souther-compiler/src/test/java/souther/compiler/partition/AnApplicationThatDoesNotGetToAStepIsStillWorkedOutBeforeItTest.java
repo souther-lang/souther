@@ -38,6 +38,10 @@ class AnApplicationThatDoesNotGetToAStepIsStillWorkedOutBeforeItTest {
                 behavior filtered : (i: In) -> Int
                 let filtered (i) = List.fold((a, x) -> if x == 0 then 0 else a + 1,
                     9223372036854775807, List.filter(x -> x /= i.p, [0, 1]))
+
+                behavior seeded : (i: In) -> Int
+                let seeded (i) = List.fold((a, x) -> if a * a == 0 then x + 1 else 0, 0,
+                    [1, i.q])
                 """, new Adequacy.Asked(Adequacy.Level.OFF, false));
 
     private static List<StopAssessment.Judgement> judged(String behavior) {
@@ -67,6 +71,16 @@ class AnApplicationThatDoesNotGetToAStepIsStillWorkedOutBeforeItTest {
         assertFalse(judged.stream().anyMatch(one -> one instanceof StopAssessment.Judgement.Stops(
                 var shown) && shown.site() instanceof StopAssessment.Site.PastItsEnds
                 && ExactRatio.ZERO.equals(shown.at().get(valueOf("p")))), judged::toString);
+    }
+
+    /** The first application answers two, so the second takes the other arm and never works
+     *  {@code x + 1} out over {@code i.q}: whether a run gets to the sum on an application is
+     *  read with what that application is handed, and no run is shown to stop. */
+    @Test
+    void whetherARunGetsToAStepIsReadWithWhatTheApplicationIsHanded() {
+        List<StopAssessment.Judgement> judged = judged("seeded");
+        assertTrue(judged.stream().noneMatch(StopAssessment.Judgement.Stops.class::isInstance),
+                judged::toString);
     }
 
     /** The first application is made only where {@code i.p} is not nought: where it is, the

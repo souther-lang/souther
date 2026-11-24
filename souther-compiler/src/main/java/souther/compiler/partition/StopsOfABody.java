@@ -481,7 +481,7 @@ final class StopsOfABody {
      * a run makes next and what it is handed turn on the row, so none of them is placed, and
      * what comes before it is not read.
      */
-    private static List<ClosureApplications.Application> madeInTurn(
+    static List<ClosureApplications.Application> madeInTurn(
             List<ClosureApplications.Application> applications) {
         List<ClosureApplications.Application> out = new ArrayList<>();
         for (ClosureApplications.Application each : applications) {
