@@ -163,6 +163,12 @@
              a Maven artifact anyone depends on sets it in its own pom, so it is left out of a
              release and of a snapshot alike. -->
         <souther.publish.skip>false</souther.publish.skip>
+        <!-- Whether a release ships this module's javadoc jar as the README in its own
+             src/javadoc-readme rather than as the Javadoc. Central asks a release for a javadoc jar,
+             not for what is in it. A module only the backends built against the same version depend
+             on sets it in its own pom: its Javadoc is most of what a release uploads against the
+             organisation's monthly limit, and the sources jar still carries every comment. -->
+        <souther.javadoc.readme>false</souther.javadoc.readme>
         <!-- The Enforcer the release and snapshot profiles check with. -->
         <enforcer.version>3.7.0</enforcer.version>
         <!-- What the build copies into an artifact from outside every module's own src, as paths
@@ -903,6 +909,7 @@
                             <doclint>none</doclint>
                             <failOnError>false</failOnError>
                             <quiet>true</quiet>
+                            <skip>${souther.javadoc.readme}</skip>
                         </configuration>
                         <executions>
                             <execution>
@@ -910,6 +917,26 @@
                                 <goals>
                                     <goal>jar</goal>
                                 </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <!-- The javadoc jar of a module that sets souther.javadoc.readme. Every other module
+                         has no src/javadoc-readme, so nothing is packaged for it. -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-jar-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>javadoc-readme</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>jar</goal>
+                                </goals>
+                                <configuration>
+                                    <classifier>javadoc</classifier>
+                                    <classesDirectory>${project.basedir}/src/javadoc-readme</classesDirectory>
+                                    <skipIfEmpty>true</skipIfEmpty>
+                                </configuration>
                             </execution>
                         </executions>
                     </plugin>

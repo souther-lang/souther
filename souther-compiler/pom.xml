@@ -18,6 +18,10 @@
         that emits JVM bytecode directly. No external dependencies beyond the JDK.
     </description>
 
+    <properties>
+        <souther.javadoc.readme>true</souther.javadoc.readme>
+    </properties>
+
     <dependencies>
         <!-- souther-syntax carries the lossless CST and the diagnostics (SourcePos, CompileException,
              Diagnostic) the whole pipeline is built on. -->

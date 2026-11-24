@@ -19,6 +19,10 @@
         so the formatter and the language server can depend on it without the whole compiler.
     </description>
 
+    <properties>
+        <souther.javadoc.readme>true</souther.javadoc.readme>
+    </properties>
+
     <dependencies>
         <!-- Jackson 3: the JSON diagnostic renderer serialises a Diagnostic for tools and agents. -->
         <dependency>
