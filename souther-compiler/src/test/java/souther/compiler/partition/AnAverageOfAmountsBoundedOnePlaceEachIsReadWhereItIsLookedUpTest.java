@@ -305,10 +305,11 @@ class AnAverageOfAmountsBoundedOnePlaceEachIsReadWhereItIsLookedUpTest {
         assertFalse(stopsWhereATotalPassesAnInt(report(BOUNDS, "", AVERAGE_WRITTEN_AT_THE_CALL)));
     }
 
-    /** Whether {@code report} says a run that gets there stops where the total of a month passes
-     *  an {@code Int}. */
+    /** Whether {@code report} shows a run stopping where the total of a month passes an
+     *  {@code Int}. What every run getting there stops at is not said: the addition is got to on
+     *  each of three applications, each proved in its own names. */
     private static boolean stopsWhereATotalPassesAnInt(List<String> report) {
         return report.stream().anyMatch(line -> line.contains("may stop a run:")
-                && line.contains("w.first.base + w.first.extra is at least 9223372036854775808"));
+                && line.contains("stops in w.first.base + w.first.extra"));
     }
 }
