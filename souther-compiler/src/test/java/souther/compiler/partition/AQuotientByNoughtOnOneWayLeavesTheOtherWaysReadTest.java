@@ -216,12 +216,12 @@ class AQuotientByNoughtOnOneWayLeavesTheOtherWaysReadTest {
     }
 
     /**
-     * The finding is about a rule, and names it by the identity the document gives every rule a
-     * finding is about. A division by nought is a stop not resolved, and that finding is the one
-     * said of the rule.
+     * The finding is about a step, and names it by where it is written, and by no rule. What a
+     * run works out there is said as a stop not resolved, and that finding is the one said of
+     * the step.
      */
     @Test
-    void aRuleSomeRunsStopInIsNamedByItsRuleIdInTheDocument() {
+    void aStepSomeRunsStopAtIsNamedByWhereItIsWrittenInTheDocument() {
         Compilation compilation = measured(MODEL.formatted("", QUOTIENT));
         JsonNode findings = JsonMapper.builder().build()
                 .readTree(AdequacyReport.of(compilation)
@@ -236,16 +236,20 @@ class AQuotientByNoughtOnOneWayLeavesTheOtherWaysReadTest {
         }
         assertEquals(1, stopping.size(), findings.toString());
         assertEquals("step_stop_not_shown", stopping.getFirst().get("kind").asString());
-        assertTrue(stopping.getFirst().has("ruleId"), stopping.getFirst().toString());
+        assertTrue(stopping.getFirst().has("at"), stopping.getFirst().toString());
+        assertFalse(stopping.getFirst().has("ruleId"), stopping.getFirst().toString());
         assertFalse(stopping.getFirst().has("reason"), stopping.getFirst().toString());
     }
 
-    /** A comparison every run stops in is said once, as one that draws no line. */
+    /** A division by nought written is a step every run that gets to it stops at, whatever the
+     *  input holds, and is said once there. */
     @Test
-    void aComparisonEveryRunStopsInIsNotSaidTwice() {
+    void aDivisionEveryRunStopsAtIsSaidOnceWhereItIsWritten() {
         String report = human(MODEL.formatted("", "a / 0 >= k"));
-        assertFalse(saysAStop(report), report);
-        assertTrue(report.contains(SUCH_A_RUN_STOPS), report);
+        assertEquals(1, report.lines().filter(line -> line.contains("· may stop a run:")).count(),
+                report);
+        assertTrue(report.contains("any run that gets here stops in division by 0, whatever the"
+                + " input holds"), report);
     }
 
     private static final String ALL = """

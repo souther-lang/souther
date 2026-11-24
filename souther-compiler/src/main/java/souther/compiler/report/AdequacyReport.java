@@ -5052,8 +5052,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         ? new ReportMessage.StopsAtThisConstruction(constructionsAsk(
                                 constructionsAsked(it.constructions()), page, rendering,
                                 declaredIn))
-                        : new ReportMessage.StopsInAnOperationAt(it.shown().getFirst().operation(),
-                                valuesSaid(it.shown().getFirst(), page));
+                        : it.shown().getFirst().at().isEmpty()
+                                && it.shown().getFirst().structure().isEmpty()
+                                ? new ReportMessage.AnyRunStopsInAnOperation(
+                                        it.shown().getFirst().operation())
+                                : new ReportMessage.StopsInAnOperationAt(
+                                        it.shown().getFirst().operation(),
+                                        valuesSaid(it.shown().getFirst(), page));
                 marked(out, f, page, new ReportMessage.StepMayStopARun(step, how,
                         everyRunStopsAt(it.everyRunStops(), page)));
                 keepingSaid(it, page, out);

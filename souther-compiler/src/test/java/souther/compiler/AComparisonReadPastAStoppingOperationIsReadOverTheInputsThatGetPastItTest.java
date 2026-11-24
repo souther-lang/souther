@@ -208,12 +208,22 @@ class AComparisonReadPastAStoppingOperationIsReadOverTheInputsThatGetPastItTest 
         return report.contains("not read:");
     }
 
-    /** Whether the report says of some comparison that a run reaching it stops in what it works
-     *  out, either as a stop shown to exist or as one not resolved. A stop past an operation that
-     *  may end a run before the comparison is one no existence is shown of, and is said as not
-     *  resolved. */
-    private static boolean mayStop(String report) {
-        return report.contains("may stop a run:") || report.contains("stop not resolved:");
+    /** Whether {@code report} says a run may stop at a step written on {@code line}, shown or not
+     *  resolved: a step of the comparison where that is the comparison's line. */
+    private static boolean mayStopOn(String report, int line) {
+        return report.contains("may stop a run: " + line + ":")
+                || report.contains("stop not resolved: " + line + ":");
+    }
+
+    /** The line of {@code source} the comparison of {@link #body} is written on, from one. */
+    private static int lineOfTheComparison(String source) {
+        List<String> lines = source.lines().toList();
+        for (int at = 0; at < lines.size(); at++) {
+            if (lines.get(at).strip().startsWith("let c = ")) {
+                return at + 1;
+            }
+        }
+        throw new IllegalArgumentException("no comparison is written in " + source);
     }
 
     /** The rows of the grid a run of {@code behavior} gets to the end of. */
@@ -325,9 +335,11 @@ class AComparisonReadPastAStoppingOperationIsReadOverTheInputsThatGetPastItTest 
                         + report);
             }
             // What may stop a run in the comparison is a row that gets to it and does not evaluate
-            // it: a stop after it is no stop of the comparison.
+            // it: a stop before it or after it is a step of its own, and no stop of the
+            // comparison.
             if (!each.unread() && !gets.isEmpty()
-                    && mayStop(report) != !evaluates.equals(gets)) {
+                    && mayStopOn(report, lineOfTheComparison(source(Map.of("m", whole))))
+                            != !evaluates.equals(gets)) {
                 wrong.add(each.name() + ": a run that gets to the comparison "
                         + (evaluates.equals(gets) ? "always" : "does not always") + " evaluates"
                         + " it, and the report says otherwise\n" + report);

@@ -542,6 +542,9 @@ public sealed interface ReportMessage extends Message {
     record StopsInAnOperationAt(String operation, String values)
             implements ReportMessage, Prose {}
 
+    /** How: any run that gets to the step stops in {@code operation}, whatever the input holds. */
+    record AnyRunStopsInAnOperation(String operation) implements ReportMessage, Prose {}
+
     /** How: a run that gets to the construction does not meet what each of {@code asks} asks,
      *  each said by {@link ConstructionAsks} or {@link ConstructionNeverPassed}. */
     record StopsAtThisConstruction(Message asks) implements ReportMessage, Prose {}

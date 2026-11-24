@@ -433,8 +433,9 @@ class ACallOfABehaviorIsGottenPastByTheRunsTheBehaviorAnswersTest {
                 || report.contains("a run may stop at the call of second at "), report);
     }
 
-    /** An operation another part of the comparison may stop a run before is told with the part
-     *  its being unresolved turned on: here the call worked out before it. */
+    /** An operation a call worked out before it may stop a run before is said as not resolved
+     *  for that, and the call is a step of its own, said with where in the called behavior a run
+     *  may stop. */
     @Test
     void anOperationLeftOpenByAPartBeforeItNamesThatPart() {
         Compilation compilation = readByItsRules("""
@@ -446,9 +447,12 @@ class ACallOfABehaviorIsGottenPastByTheRunsTheBehaviorAnswersTest {
                 """);
         List<String> open = notResolved(reportOf(compilation, "both"));
 
-        assertTrue(open.stream().anyMatch(line -> line.contains("another part of the comparison"
-                + " may end the run first, and whether it does is not checked; a run may stop at"
-                + " the call of first at ")), open::toString);
+        assertTrue(open.stream().anyMatch(line -> line.contains("whether a run stops in n + 1 is"
+                + " not determined: something evaluated before it may end the run first")),
+                open::toString);
+        assertTrue(open.stream().anyMatch(line -> line.contains("a run may stop at the call of"
+                + " first at ") && line.contains("first may stop at what is worked out at")),
+                open::toString);
     }
 
     /** What a passage is left open at is said of the behavior's own body: an operation in it, or
