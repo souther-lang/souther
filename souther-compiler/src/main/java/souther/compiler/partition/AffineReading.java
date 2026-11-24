@@ -3572,10 +3572,39 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
     private static WhatWasTold toldForWhereARunStops(Core expression, InputReads at,
                                                      InputReading ofTheInput,
                                                      WhatTheAnalysisAnswersFor answersFor) {
+        return toldForWhereARunStops(expression, at, ofTheInput, answersFor,
+                new StoppedValues(null, null, false, ofTheInput, answersFor));
+    }
+
+    /**
+     * What a run works out evaluating {@code expression} ({@link #stopsOfEvaluating}), and what
+     * each number it holds aside there stands for: the expression, with its names, that the
+     * reading reads nothing of and holds as one number in an operation over it.
+     */
+    record WhatIsWorkedOutBesideWhatIsHeldAside(StopEvidence stops,
+                                                Map<NumericTerm, Denotation> heldAside) {}
+
+    /** The same as {@link #stopsOfEvaluating}, with what is held aside. */
+    static WhatIsWorkedOutBesideWhatIsHeldAside stopsOfEvaluatingBesideWhatIsHeldAside(
+            Core expression, InputReads at, InputReading ofTheInput,
+            WhatTheAnalysisAnswersFor answersFor) {
+        if (WorkedOutToReachIt.of(ofTheInput).endsNoRun(new Denotation(expression, at))) {
+            return new WhatIsWorkedOutBesideWhatIsHeldAside(
+                    StopEvidence.ofWhatIsToldOf(UndividedByARelation.Working.NO_STOPS), Map.of());
+        }
+        StoppedValues held = new StoppedValues(null, null, false, ofTheInput, answersFor);
+        StopEvidence stops = toldForWhereARunStops(expression, at, ofTheInput, answersFor, held)
+                .workedOut().stops();
+        return new WhatIsWorkedOutBesideWhatIsHeldAside(stops, held.whatEachStandsFor());
+    }
+
+    private static WhatWasTold toldForWhereARunStops(Core expression, InputReads at,
+                                                     InputReading ofTheInput,
+                                                     WhatTheAnalysisAnswersFor answersFor,
+                                                     StoppedValues held) {
         WhatWasTold told = new WhatWasTold();
         Arithmetic reading = reading(ofTheInput, new LinkedHashSet<>(), new ElementsMet(), told,
-                new StoppedValues(null, null, false, ofTheInput, answersFor), null,
-                answersFor.saidOnItsWays());
+                held, null, answersFor.saidOnItsWays());
         boolean read = AffineForms.outcome(expression, at, reading)
                 instanceof AffineForms.Outcome.Composed<NumericTerm, InputReads>;
         if (read) {
@@ -3908,6 +3937,14 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             Map<NumericTerm, FormRange> out = new HashMap<>();
             byAtom.forEach((atom, held) -> out.put(atom, held.range));
             return out;
+        }
+
+        /** The expression each number held aside stands for, with its names. */
+        Map<NumericTerm, Denotation> whatEachStandsFor() {
+            Map<NumericTerm, Denotation> out = new LinkedHashMap<>();
+            byAtom.forEach((atom, held) -> out.put(atom, new Denotation(held.expression,
+                    held.at)));
+            return Collections.unmodifiableMap(out);
         }
 
         /** Whether the analysis that drew the lines answers for what working {@code held}, an

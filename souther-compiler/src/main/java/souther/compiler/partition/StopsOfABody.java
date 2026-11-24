@@ -6,6 +6,8 @@ import souther.compiler.abort.GetsPast;
 import souther.compiler.check.ARowsRun;
 import souther.compiler.check.Choice;
 import souther.compiler.check.ClausesInOrder;
+import souther.compiler.check.BoundOperationFacts;
+import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.StopOrigin;
 import souther.compiler.check.ValueTemplates;
@@ -583,17 +585,17 @@ final class StopsOfABody {
         // the reading answers for, that is it: an element of a list of whole numbers is read
         // there as the number it is, between the ends of the list. One over a part it held aside
         // is over no such number, and is read here from its operands.
+        // A number it held aside is the expression it stands for, read here as an operand is.
         List<StopAssessment.Site> told = new ArrayList<>();
-        for (UndividedByARelation.IntOperation each
-                : evaluated(node, reached.reads()).operations().operations()) {
-            if (each.origin().node() == node && each.form().coefs().keySet().stream()
-                    .allMatch(operand -> switch (operand) {
-                        case UndividedByARelation.IntOperand.OfTheInput(var term) ->
-                                read.quantities().answersFor(term);
-                        case UndividedByARelation.IntOperand.OfABinding _ -> true;
-                        default -> false;
-                    })) {
-                told.add(new StopAssessment.Site.PastItsEnds(each));
+        AffineReading.WhatIsWorkedOutBesideWhatIsHeldAside beside =
+                evaluatedBeside(node, reached.reads());
+        for (UndividedByARelation.IntOperation each : beside.stops().operations().operations()) {
+            if (each.origin().node() != node) {
+                continue;
+            }
+            UndividedByARelation.IntOperation read = asReadHere(each, beside.heldAside());
+            if (read != null) {
+                told.add(new StopAssessment.Site.PastItsEnds(read));
             }
         }
         if (!told.isEmpty()) {
@@ -647,6 +649,42 @@ final class StopsOfABody {
         // (StopEvidence#everyStopSaid), is that working it out here stops no run. Where it leaves
         // one untold, or to another owner, nothing here reads it.
         return out.isEmpty() && !evidence.everyStopSaid() ? null : out;
+    }
+
+    /**
+     * {@code operation}, as the reading of what a run works out told it, over what this owner
+     * reads of each number in it: a number of the input the reading answers for and a name a
+     * container hands it as they are, and a number it held aside as what the expression it stands
+     * for comes to as an operand ({@link #operand}). Null where one of them is none of these.
+     */
+    private UndividedByARelation.IntOperation asReadHere(
+            UndividedByARelation.IntOperation operation, Map<NumericTerm, Denotation> heldAside) {
+        LinearForm<UndividedByARelation.IntOperand> form = LinearForm.constant(
+                operation.form().constant());
+        for (Map.Entry<UndividedByARelation.IntOperand, ExactRatio> each
+                : operation.form().coefs().entrySet()) {
+            LinearForm<UndividedByARelation.IntOperand> one = switch (each.getKey()) {
+                case UndividedByARelation.IntOperand.OfTheInput(var term)
+                        when heldAside.get(term) instanceof Denotation stands ->
+                        operand(stands.value(), stands.at());
+                case UndividedByARelation.IntOperand.OfAValueWorkedOut(var term, var _, var _)
+                        when heldAside.get(term) instanceof Denotation stands ->
+                        operand(stands.value(), stands.at());
+                case UndividedByARelation.IntOperand.OfTheInput(var term)
+                        when read.quantities().answersFor(term) -> LinearForm.atom(each.getKey());
+                case UndividedByARelation.IntOperand.OfABinding _ -> LinearForm.atom(each.getKey());
+                default -> null;
+            };
+            if (one == null || !(one.times(each.getValue()) instanceof ExactAnswer.Held<
+                    LinearForm<UndividedByARelation.IntOperand>>(var weighed))
+                    || !(form.plus(weighed) instanceof ExactAnswer.Held<
+                            LinearForm<UndividedByARelation.IntOperand>>(var sum))) {
+                return null;
+            }
+            form = sum;
+        }
+        return new UndividedByARelation.IntOperation(form, operation.least(), operation.greatest(),
+                operation.after(), operation.ofTheRepresentation(), operation.origin());
     }
 
     /**
@@ -1053,15 +1091,94 @@ final class StopsOfABody {
         if (worked != null) {
             return worked.form();
         }
+        LinearForm<UndividedByARelation.IntOperand> ofItsArguments =
+                aFormOfItsArguments(Core.withoutStanding(operand), at);
+        if (ofItsArguments != null) {
+            return ofItsArguments;
+        }
         WorkedOutToReachIt owner = WorkedOutToReachIt.of(read);
         Denotation value = new Denotation(operand, at);
+        Attainments ways = attainmentsOf(value, Collections.newSetFromMap(new IdentityHashMap<>()));
         WhereAValueComesFrom origin = owner.originOf(value);
+        if (origin == null) {
+            origin = comingFrom(ways);
+        }
         if (origin == null) {
             return null;
         }
         return LinearForm.atom(new UndividedByARelation.IntOperand.OfAValueWorkedOut(
-                heldAs(new Denotation(Core.withoutStanding(operand), at)), origin,
-                attainmentsOf(value, Collections.newSetFromMap(new IdentityHashMap<>()))));
+                heldAs(new Denotation(Core.withoutStanding(operand), at)), origin, ways));
+    }
+
+    /**
+     * The way to {@code answer} as relations of numbers of the input, where it is a step the walk
+     * met once outside every closure: what entering the arm it answers asks, with what the way to
+     * the choice asks, as the walk met it — a narrowing to some cases of a position among it. Null
+     * where it is not, or a condition of the way is not read so.
+     */
+    private List<List<TakenConstraint.Affine>> wayToAStepMetOnce(Core answer) {
+        Optional<WhereARunMayStop.Met> met = where.at(Core.withoutStanding(answer));
+        if (met.isEmpty() || !(met.get().applying() instanceof ClosureApplications.Outside)) {
+            return null;
+        }
+        boolean[] left = {false};
+        List<List<TakenConstraint.Affine>> ways =
+                StopAssessment.asWaysOfRelations(met.get().way(), left);
+        return left[0] ? null : ways;
+    }
+
+    /**
+     * What {@code node} comes to, where it is a call of an operation declared to answer a form of
+     * its arguments, counted as they are ({@link BoundOperationFacts#answersAFormOfItsArguments}):
+     * a date moved by days is the day it is moved from and the days. Each argument is read as an
+     * operand ({@link #operand}); null where it is no such call or an argument is not read.
+     */
+    private LinearForm<UndividedByARelation.IntOperand> aFormOfItsArguments(Core node,
+                                                                           InputReads at) {
+        if (!(node instanceof Core.PreservedCall call)) {
+            return null;
+        }
+        LinearForm<DeclaredArgument> declared = DefaultBoundOperationFacts.get()
+                .answersAFormOfItsArguments(call.declared().operation());
+        if (declared == null) {
+            return null;
+        }
+        LinearForm<UndividedByARelation.IntOperand> out = LinearForm.constant(
+                declared.constant());
+        for (Map.Entry<DeclaredArgument, ExactRatio> each : declared.coefs().entrySet()) {
+            int position = each.getKey().position();
+            LinearForm<UndividedByARelation.IntOperand> argument = position < call.args().size()
+                    ? operand(call.args().get(position), at) : null;
+            if (argument == null || !(argument.times(each.getValue()) instanceof ExactAnswer.Held<
+                    LinearForm<UndividedByARelation.IntOperand>>(var weighed))
+                    || !(out.plus(weighed) instanceof ExactAnswer.Held<
+                            LinearForm<UndividedByARelation.IntOperand>>(var sum))) {
+                return null;
+            }
+            out = sum;
+        }
+        return out;
+    }
+
+    /**
+     * Where a value comes from, as the ways a row makes it come to a number say: the numbers each
+     * way's form comes to under what the way asks, put together. Null where a way was left unmade
+     * or its form's numbers are not known, so that the ways are not every number it may be.
+     */
+    private WhereAValueComesFrom comingFrom(Attainments ways) {
+        if (ways.leftUnmade() || ways.ways().isEmpty()) {
+            return null;
+        }
+        FormRange range = null;
+        for (Attainment way : ways.ways()) {
+            FormRange one = FormRange.of(way.form(), read,
+                    boundsUnder(way.form(), way.holding(), true));
+            if (one == null) {
+                return null;
+            }
+            range = range == null ? one : range.hull(one);
+        }
+        return new WhereAValueComesFrom.Derived(range);
     }
 
     /**
@@ -1115,6 +1232,15 @@ final class StopsOfABody {
             if (form != null) {
                 return Attainments.of(List.of(Attainment.always(form)));
             }
+            // A call answering a form of its arguments, each a number of the input: that form.
+            if (aFormOfItsArguments(node, value.at()) instanceof LinearForm<
+                    UndividedByARelation.IntOperand> ofItsArguments
+                    && new UndividedByARelation.IntOperation(ofItsArguments, BigInteger.ZERO,
+                            BigInteger.ZERO, List.of(), true,
+                            new UndividedByARelation.IntOperation.Origin(node)).overTheInput()
+                            instanceof LinearForm<NumericTerm> overTheInput) {
+                return Attainments.of(List.of(Attainment.always(overTheInput)));
+            }
             Choice choice = Choice.of(node);
             if (choice == null) {
                 return WorkedOutToReachIt.of(read).attainmentsOf(value);
@@ -1128,6 +1254,9 @@ final class StopsOfABody {
                 Choice.Arm arm = choice.arms().get(part);
                 List<List<TakenConstraint.Affine>> entering =
                         alternativesOf(conditions.arm(node, part, value.at()).proposition());
+                if (entering == null) {
+                    entering = wayToAStepMetOnce(arm.answers());
+                }
                 Attainments ofTheArm = attainmentsOf(new Denotation(arm.answers(),
                         value.at().choosing(arm.decidedBy(), read.rules().symbols(),
                                 read.rules().newtypes())), through);
@@ -1153,11 +1282,19 @@ final class StopsOfABody {
     /** What a run works out evaluating {@code node} with the names {@code at} has, read once for
      *  each, however many steps above it ask. */
     private StopEvidence evaluated(Core node, InputReads at) {
-        return evaluatedAt.computeIfAbsent(new Denotation(node, at), value ->
-                AffineReading.stopsOfEvaluating(value.value(), value.at(), read, readsWith));
+        return evaluatedBeside(node, at).stops();
     }
 
-    private final Map<Denotation, StopEvidence> evaluatedAt = new HashMap<>();
+    /** The same, with what each number the reading held aside stands for. */
+    private AffineReading.WhatIsWorkedOutBesideWhatIsHeldAside evaluatedBeside(Core node,
+                                                                              InputReads at) {
+        return evaluatedAt.computeIfAbsent(new Denotation(node, at), value ->
+                AffineReading.stopsOfEvaluatingBesideWhatIsHeldAside(value.value(), value.at(),
+                        read, readsWith));
+    }
+
+    private final Map<Denotation, AffineReading.WhatIsWorkedOutBesideWhatIsHeldAside> evaluatedAt =
+            new HashMap<>();
 
     /** The steps strictly under {@code node} that the walk met, each judged where it stands. */
     private Set<Core> stepsUnder(Core node) {
