@@ -690,11 +690,10 @@ final class StopsOfABody {
 
     /**
      * The rows at which every run that gets to {@code step} by some way stops there: where its
-     * own operation, over numbers of the input, is past its type and everything worked out before
-     * it on that way is within its own ({@link UndividedByARelation#everyRunStopsAt}), within
-     * what the way leaves. Said of the runs that get to the step and of no other, so whether every
-     * run taking the way gets there is not asked: a run that does not stops nowhere here. Asked of
-     * a way only where what comes first on it is read.
+     * own operation, over numbers of the input, is past its type
+     * ({@link UndividedByARelation#everyRunStopsAt}), within what the way leaves. Said of the
+     * runs that get to the step and of no other, so whether every run taking the way gets there
+     * is not asked, nor is what it works out before: a run that stops there stops nowhere here.
      */
     private List<EveryRunStops> everyRunStops(Core step) {
         if (endsNoRunWhereItsClosureIsApplied(step)) {
@@ -712,16 +711,15 @@ final class StopsOfABody {
                             read.quantities().region()) instanceof Reachability.Reaching reaching)) {
                 continue;
             }
-            GotPast gotPast = gotPastOn(each, left);
             List<StopAssessment.Site> sites = sitesOf(step, each);
-            if (gotPast == null || sites == null) {
+            if (sites == null) {
                 continue;
             }
             for (StopAssessment.Site site : sites) {
                 if (site instanceof StopAssessment.Site.PastItsEnds(var operation)
                         && !left.keepsWithinItsEnds(operation)) {
-                    out.addAll(UndividedByARelation.everyRunStopsAt(operation,
-                            gotPast.operations(), read, List.of(reaching.region())));
+                    out.addAll(UndividedByARelation.everyRunStopsAt(operation, read,
+                            List.of(reaching.region())));
                 }
             }
         }

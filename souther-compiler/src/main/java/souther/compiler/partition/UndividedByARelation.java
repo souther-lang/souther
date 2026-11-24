@@ -267,18 +267,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
 
         /**
-         * The node of the expression a run works an operation out at, which says where it stands
-         * among everything else the expression works out ({@link EvaluationPlaces}). Two origins
-         * are equal where they are the same node, as two stops of a run are the same only where
-         * they are worked out at the same place. What an operation is as a number, wherever it is
-         * worked out, is {@link IntOperation#sameOperationAs}.
+         * The node of the expression a run works an operation out at. Two origins are equal
+         * where they are the same node, as two stops of a run are the same only where they are
+         * worked out at the same place. What an operation is as a number, wherever it is worked
+         * out, is {@link IntOperation#sameOperationAs}.
          *
          * <p>The node is where the operation is told, and the operation may stop anywhere in what
          * that node works out: a product, or a total over a list, stops in the middle of its
-         * node, not at its own step. So an operation is after another place only where the whole
-         * of its node is ({@link EvaluationPlaces#comesAfter}), and never by
-         * {@link EvaluationPlaces#isWorkedOutAfter}, which says where a node's own step stands
-         * and is for a quotient's divisor.
+         * node, not at its own step.
          */
         static final class Origin {
 
@@ -830,21 +826,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         /** The same operations, for a relation not every run that gets to the comparison reaches. */
         Working notOnEveryRun() {
             return new Working(operations, told, false, partials, aStopUntold, leftUntold);
-        }
-
-        /**
-         * Whether the operation at {@code index} may be worked out before what stands at
-         * {@code node}: it is not the one at {@code at}, is not worked out of it
-         * ({@link IntOperation#after}), and the whole of its node does not come after
-         * {@code node} ({@link EvaluationPlaces#comesAfter}). The one place the order of the
-         * operations against a stop is asked; a node with no place is taken to come before.
-         *
-         * @param at the index of the operation the stop is at, or -1 where it is at no operation
-         */
-        boolean mayComeBefore(int index, int at, Core node, EvaluationPlaces places) {
-            IntOperation it = operations.get(index);
-            return index != at && !it.after().contains(at)
-                    && !places.comesAfter(it.origin().node(), node);
         }
 
         /** Whether every operation that can stop a run is told. */
@@ -2971,105 +2952,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * Where every run getting to this relation stops in one of the operations the reading of the
-     * comparison told of, said only where every operation that can stop a run was told.
-     *
-     * <p>A run stops in the first operation it works out that is past its type. So the rows it
-     * stops in one are those at which that one is past its type and every operation it may work
-     * out before it is within its own: all the others but those worked out of its value, which
-     * come after it on every run. The rows are said as the forms of the operations between their
-     * ends, over as many numbers as each is over, and a form over one number as that number's
-     * run. Rows at which two operations either of which may come first are both past their types
-     * stop in one of them, and are said of neither.
-     *
-     * <p>Said where some region leaves such a row: none of what the ways to the comparison leave
-     * holds one, and every row there gets past.
-     *
-     * @param regions what the ways to the comparison leave, before what the rows that get past
-     *                its operations are narrowed to: a region a row got past them in holds none
-     *                of the rows a run stops at
-     */
-    List<EveryRunStops> everyRunStopsIn(InputReading read, List<SearchRegion> regions,
-                                        EvaluationPlaces places) {
-        return everyRunStopsIn(working, read, regions, List.of(), places);
-    }
-
-    /**
-     * The same of what {@code working} works out, where a run may also work out
-     * {@code alsoWorkedOut} before it, in any order: each of those within its type at every row
-     * said, so that no row is said to stop in one operation where it stops in another first.
-     * Nothing where one of those has an end that is no form of the input's numbers.
-     *
-     * <p>An operation is not asked to be within its type where it is worked out of the value of
-     * the one asked ({@code after}), or where its whole node comes after that one's in the order
-     * a run works the comparison out ({@code places}): a run that stops in the one never gets to
-     * it. Where either has no place, it is asked.
-     */
-    static List<EveryRunStops> everyRunStopsIn(Working working, InputReading read,
-                                               List<SearchRegion> regions,
-                                               List<IntOperation> alsoWorkedOut,
-                                               EvaluationPlaces places) {
-        if (!working.exact() || !working.onEveryRun()) {
-            return List.of();
-        }
-        List<Bounded> besides = new ArrayList<>();
-        for (IntOperation one : alsoWorkedOut) {
-            if (!withinItsEnds(one, besides)) {
-                return List.of();
-            }
-        }
-        List<IntOperation> operations = working.operations();
-        Set<EveryRunStops> out = new LinkedHashSet<>();
-        for (int at = 0; at < operations.size(); at++) {
-            IntOperation it = operations.get(at);
-            List<Bounded> before = new ArrayList<>(besides);
-            for (int other = 0; other < operations.size(); other++) {
-                IntOperation one = operations.get(other);
-                // An operation told twice is one a run works out, and is not another that has to
-                // be within the type before this one is asked.
-                if (!one.sameOperationAs(it)
-                        && working.mayComeBefore(other, at, it.origin().node(), places)
-                        && !withinItsEnds(one, before)) {
-                    before = null;
-                    break;
-                }
-            }
-            LinearForm<NumericTerm> atItsLeast = it.atItsEnd(false);
-            LinearForm<NumericTerm> atItsGreatest = it.atItsEnd(true);
-            if (before == null || atItsLeast == null || atItsGreatest == null) {
-                continue;
-            }
-            for (Bounded past : List.of(
-                    new Bounded(atItsLeast, it.greatest().add(BigInteger.ONE), null),
-                    new Bounded(atItsGreatest, null, it.least().subtract(BigInteger.ONE)))) {
-                List<Bounded> rows = new ArrayList<>(before);
-                rows.add(past);
-                List<EveryRunStops.Within> where = rowsWhere(rows, read, regions);
-                if (where != null && !where.isEmpty()) {
-                    out.add(new EveryRunStops(written(it.form()), where));
-                }
-            }
-        }
-        return List.copyOf(out);
-    }
-
-    /**
-     * The rows at which every run that works {@code it} out stops in it, having worked out
-     * {@code before} first: where {@code it} is past an end of its type and each of
-     * {@code before} within its own, said within {@code regions}. A name it is over that a
+     * The rows at which every run that works {@code it} out stops in it: where {@code it} is past
+     * an end of its type, said within {@code regions}. Of the runs that get to it and of no
+     * other, so what a run works out before it is not said among the rows: a run stopping there
+     * never gets here, and which runs get here is the way's to say. A name it is over that a
      * container hands it ({@link IntOperand.OfABinding}) is handed a value only where the
      * container holds one, from the least it hands to the greatest: rows where it holds none are
-     * none a run works {@code it} out at. Nothing where one of them has an end that is no form of
-     * the input's numbers, or no such row is in any region.
+     * none a run works {@code it} out at. Nothing where an end of it is no form of the input's
+     * numbers, or no such row is in any region.
      */
-    static List<EveryRunStops> everyRunStopsAt(IntOperation it, List<IntOperation> before,
-                                               InputReading read, List<SearchRegion> regions) {
-        List<Bounded> besides = new ArrayList<>();
-        for (IntOperation one : before) {
-            if (!one.sameOperationAs(it) && !withinItsEnds(one, besides)) {
-                return List.of();
-            }
-        }
+    static List<EveryRunStops> everyRunStopsAt(IntOperation it, InputReading read,
+                                               List<SearchRegion> regions) {
         LinearForm<NumericTerm> atItsLeast = it.atItsEnd(false);
         LinearForm<NumericTerm> atItsGreatest = it.atItsEnd(true);
         if (atItsLeast == null || atItsGreatest == null) {
@@ -3089,9 +2982,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         for (Bounded past : List.of(
                 new Bounded(atItsLeast, it.greatest().add(BigInteger.ONE), null),
                 new Bounded(atItsGreatest, null, it.least().subtract(BigInteger.ONE)))) {
-            List<Bounded> rows = new ArrayList<>(besides);
-            rows.add(past);
-            List<EveryRunStops.Within> where = rowsWhere(rows, read, regions, handed);
+            List<EveryRunStops.Within> where = rowsWhere(List.of(past), read, regions, handed);
             if (where != null && !where.isEmpty()) {
                 out.add(new EveryRunStops(written(it.form()), where));
             }
@@ -3357,29 +3248,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *  ({@link Working#NO_STOPS}). */
     static boolean tellsNoOperation(Working working) {
         return working.operations().isEmpty();
-    }
-
-    /**
-     * That {@code operation} lies between its ends, added to {@code into}: over numbers of the
-     * input, its form between them; over a bound number, its form at the least it comes to over
-     * the values that number takes above the least end, and at the greatest below the greatest,
-     * so that it lies between them whichever of the values a run hands it. False where a bound
-     * number's end is no form of the input's numbers, and nothing is added.
-     */
-    private static boolean withinItsEnds(IntOperation operation, List<Bounded> into) {
-        LinearForm<NumericTerm> overTheInput = operation.overTheInput();
-        if (overTheInput != null) {
-            into.add(new Bounded(overTheInput, operation.least(), operation.greatest()));
-            return true;
-        }
-        LinearForm<NumericTerm> least = operation.atItsEnd(false);
-        LinearForm<NumericTerm> greatest = operation.atItsEnd(true);
-        if (least == null || greatest == null) {
-            return false;
-        }
-        into.add(new Bounded(least, operation.least(), null));
-        into.add(new Bounded(greatest, null, operation.greatest()));
-        return true;
     }
 
     /**

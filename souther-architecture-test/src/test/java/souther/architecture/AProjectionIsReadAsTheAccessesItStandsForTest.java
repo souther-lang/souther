@@ -879,14 +879,6 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "(" + core + "Ljava/util/Set;)V", Reading.STRUCTURE,
                 "records each node and goes down to its parts: a projection is held where its"
                         + " base is");
-        row(out, c + "partition/EvaluationPlaces", "meet",
-                "(" + core + "Ljava/util/Set;Ljava/util/Set;)V", Reading.STRUCTURE,
-                "records each node and goes down to its parts, a node met twice being held at two"
-                        + " places: a projection is held where its base is");
-        row(out, c + "partition/EvaluationPlaces", "markEverythingUnder",
-                "(" + core + "Ljava/util/Set;Ljava/util/Set;)V", Reading.STRUCTURE,
-                "records each node under one held at two places, going down to its parts: a"
-                        + " projection is held where its base is");
         row(out, c + "core/Evaluated$WorkedOutAfter", "entirely", "(" + core + ")Z",
                 Reading.STRUCTURE,
                 "asks each node under one whether the walk puts it after the site, a projection"

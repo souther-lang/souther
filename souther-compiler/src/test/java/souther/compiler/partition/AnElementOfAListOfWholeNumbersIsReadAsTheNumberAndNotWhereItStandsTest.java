@@ -34,8 +34,8 @@ class AnElementOfAListOfWholeNumbersIsReadAsTheNumberAndNotWhereItStandsTest {
      *  relation of the element to another value, and each of its sums a step a run that gets
      *  there stops at where the sum is past its type. What a walk stopping at an answer is made
      *  under is not read as relations, so each stop is said as not resolved, with the rows every
-     *  run getting there stops at: a run whose first sum is past its type stops at that sum and
-     *  does not get to the second, so the rows of the second keep the first within its type. */
+     *  run getting there stops at: those of the second are where it is past its type, said of
+     *  the runs that get to it, which a run whose first sum is past its type does not. */
     @Test
     void theSameComparisonOverAnElementOfTheInputIsReadAsItWas() {
         List<String> report = report("a: Int, ns: List<Nat>",
@@ -49,8 +49,8 @@ class AnElementOfAListOfWholeNumbersIsReadAsTheNumberAndNotWhereItStandsTest {
                         + " any such run exists",
                 "· stop not resolved: 4:37; whether a run stops in a + ns[*] + 3 is not"
                         + " determined: " + A_CONDITION_NOT_READ + "; a run that gets there stops"
-                        + " in a + ns[*] + 3 where a + ns[*] is 9223372036854775805 to"
-                        + " 9223372036854775807, and it is not shown that any such run exists"),
+                        + " in a + ns[*] + 3 where a + ns[*] is at least 9223372036854775805, and"
+                        + " it is not shown that any such run exists"),
                 report.stream().filter(line -> line.startsWith("· no line")
                         || line.startsWith("· may stop")
                         || line.startsWith("· stop not resolved")).toList());
