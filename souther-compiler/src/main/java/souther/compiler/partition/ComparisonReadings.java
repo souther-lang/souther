@@ -2325,8 +2325,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 new ClosureApplications.Each(List.of(new ClosureApplications.Application(step,
                         WhereAnApplicationIsMade.nothingAsked(), Map.of(),
                         metOn.madeWhere(made.stated()).stoppingIn(list, onward.denied()),
-                        List.of(), ClosureApplications.MadeOnEvery.NOT_SHOWN, List.of(),
-                        Optional.empty()))));
+                        List.of(), List.of(), ClosureApplications.MadeOnEvery.NOT_SHOWN,
+                        List.of(), Optional.empty()))));
     }
 
     /**

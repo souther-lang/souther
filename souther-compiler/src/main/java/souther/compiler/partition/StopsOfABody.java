@@ -505,16 +505,14 @@ final class StopsOfABody {
         return out;
     }
 
-    /** Where {@code one} stands among the applications of {@code history}, by which application
-     *  of which call it is; -1 where it is none of them, or not one only. */
+    /** Where {@code one} stands among the applications of {@code history}, by its place among
+     *  the applications of each closure it stands in; -1 where it is none of them, or not one
+     *  only. */
     private static int placeAmong(List<ClosureApplications.Application> history,
                                   ClosureApplications.Application one) {
-        if (one.madeBy().isEmpty()) {
-            return -1;
-        }
         int found = -1;
         for (int at = 0; at < history.size(); at++) {
-            if (history.get(at).madeBy().equals(one.madeBy())) {
+            if (history.get(at).places().equals(one.places())) {
                 if (found >= 0) {
                     return -1;
                 }

@@ -174,6 +174,10 @@ sealed interface ClosureApplications {
      */
     record None() implements ClosureApplications {}
 
+    /** The place of an application standing for every element a container holds, which is no
+     *  one application of a run ({@link Application#places}). */
+    int STANDS_FOR_EVERY_ELEMENT = -1;
+
     /**
      * One application.
      *
@@ -189,6 +193,11 @@ sealed interface ClosureApplications {
      *                          none before it stopped the operation
      * @param madeBy            which application of which call it is, for each closure it stands
      *                          inside whose call some source wrote, the outermost first
+     * @param places            where it stands among the applications a run makes of each closure
+     *                          it stands in, the outermost first, or
+     *                          {@link #STANDS_FOR_EVERY_ELEMENT}: which application of the run it
+     *                          is, which is what the run's account of what it worked out is
+     *                          read by ({@link WhereARunMayStop#applicationsOf})
      * @param madeOnEvery       the elements a run making what stands in it once is shown to make
      *                          it on every one of
      * @param handed            the values handed to each closure it stands in, the outermost
@@ -200,8 +209,8 @@ sealed interface ClosureApplications {
      */
     record Application(InputReads reads, Proposition reached,
                        Map<BindingId, Denotation> carriedIntoTheFirst, ElementsMetOn metOn,
-                       List<MadeBy> madeBy, MadeOnEvery madeOnEvery, List<Handed> handed,
-                       Optional<Proposition> held) {
+                       List<MadeBy> madeBy, List<Integer> places, MadeOnEvery madeOnEvery,
+                       List<Handed> handed, Optional<Proposition> held) {
 
         public Application {
             Objects.requireNonNull(reads, "an application is read in some names");
@@ -212,31 +221,32 @@ sealed interface ClosureApplications {
             carriedIntoTheFirst = Collections.unmodifiableMap(
                     new LinkedHashMap<>(carriedIntoTheFirst));
             madeBy = List.copyOf(madeBy);
+            places = List.copyOf(places);
             handed = List.copyOf(handed);
         }
 
         /** The same application, read in {@code names}. */
         Application readIn(InputReads names) {
-            return new Application(names, reached, carriedIntoTheFirst, metOn, madeBy,
+            return new Application(names, reached, carriedIntoTheFirst, metOn, madeBy, places,
                     madeOnEvery, handed, held);
         }
 
         /** The same application, made and held only past {@code stated}. */
         Application madePast(Proposition stated) {
             return new Application(reads, WhereAnApplicationIsMade.past(reached, stated),
-                    carriedIntoTheFirst, metOn, madeBy, madeOnEvery, handed,
+                    carriedIntoTheFirst, metOn, madeBy, places, madeOnEvery, handed,
                     held.map(it -> WhereAnApplicationIsMade.past(it, stated)));
         }
 
         /** The same application, carrying {@code carried} into the first step of each walk. */
         Application carrying(Map<BindingId, Denotation> carried) {
-            return new Application(reads, reached, carried, metOn, madeBy, madeOnEvery, handed,
-                    held);
+            return new Application(reads, reached, carried, metOn, madeBy, places, madeOnEvery,
+                    handed, held);
         }
 
         /** The same application, past a fork ({@link MadeOnEvery#forked}). */
         Application forked() {
-            return new Application(reads, reached, carriedIntoTheFirst, metOn, madeBy,
+            return new Application(reads, reached, carriedIntoTheFirst, metOn, madeBy, places,
                     madeOnEvery.forked(), handed, held);
         }
 
@@ -255,14 +265,16 @@ sealed interface ClosureApplications {
          * nothing a reading reads it in passing ({@code WhatExplainsACountIsReadOnlyWhereItIsTold}).
          */
         Application inside(InputReads names, Proposition where, ElementsMetOn on,
-                           Optional<MadeBy> by, Optional<TermPath> everyOf,
+                           Optional<MadeBy> by, int place, Optional<TermPath> everyOf,
                            List<Denotation> values, Proposition held,
                            Optional<Proposition> apart) {
             List<MadeBy> deeper = new ArrayList<>(madeBy);
             by.ifPresent(deeper::add);
+            List<Integer> placesDeeper = new ArrayList<>(places);
+            placesDeeper.add(place);
             List<Handed> handedDeeper = new ArrayList<>(handed);
             values.forEach(value -> handedDeeper.add(new Handed(value, held)));
-            return new Application(names, where, carriedIntoTheFirst, on, deeper,
+            return new Application(names, where, carriedIntoTheFirst, on, deeper, placesDeeper,
                     madeOnEvery.inside(everyOf), handedDeeper, apart);
         }
 
@@ -410,7 +422,8 @@ sealed interface ClosureApplications {
         return switch (this) {
             case Outside(var metOn, var made) -> applied(block, step,
                     List.of(new Application(reads, WhereAnApplicationIsMade.nothingAsked(),
-                            Map.of(), metOn, List.of(), made, List.of(), Optional.empty())),
+                            Map.of(), metOn, List.of(), List.of(), made, List.of(),
+                            Optional.empty())),
                     read, true, saysWhereEachIsMade);
             case Each(var outer) -> applied(block, step, outer, read, false, saysWhereEachIsMade);
             case NotSaid _, None _ -> this;
@@ -490,7 +503,7 @@ sealed interface ClosureApplications {
                         }
                         out.add(around.inside(names, reached.get(at), around.metOn(),
                                 madeBy.map(call -> new MadeBy(asWritten(call, symbols), ordinal)),
-                                Optional.empty(), values, held.get(at), Optional.of(stopsShort
+                                ordinal, Optional.empty(), values, held.get(at), Optional.of(stopsShort
                                         ? reached.get(at) : held.get(at))));
                     }
                 }
@@ -507,7 +520,7 @@ sealed interface ClosureApplications {
                             where.map(some -> WhereAnApplicationIsMade.past(around.reached(),
                                     some.holdingSomething())).orElse(around.reached()),
                             saysWhereEachIsMade ? metOn(block, containers, around, entered, read)
-                                    : around.metOn(), Optional.empty(),
+                                    : around.metOn(), Optional.empty(), STANDS_FOR_EVERY_ELEMENT,
                             everyElementOf(block, containers, around, read), List.of(),
                             around.reached(), Optional.empty()));
                 }
