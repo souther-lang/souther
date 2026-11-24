@@ -4,16 +4,212 @@
   <img src="docs/images/souther.png" alt="Souther" width="420">
 </p>
 
-Souther is a small JVM language for business rules that stay true: what a value may be, which states
-follow which, and what each decision answers. You write them once, as `data` and `behavior`, and
-they compile to Java types that keep the distinctions the model made.
+Souther is a language for writing business rules as a model: which values are allowed, what a
+decision answers in each case, and which outcome a request ends in. A model compiles to Java
+classes that an application calls. Next to the rules you write examples, concrete inputs with the
+answer you expect, and the compiler runs every example on every build.
 
-What a rule is worth depends on whether anything holds it to account, so the examples that describe
-a behavior are part of the language rather than a suite beside it. An `example` is evaluated while
-the model compiles, and `souther examples` measures what those examples cover: which class of an
-input nothing stands in, which boundary value nothing sits at, which rule of a body nothing goes
-through. Where it cannot answer, it says what the question is still open on instead of reporting a
-clean result.
+The compiler also tells you which parts of the rules no example tests. It derives the equivalence
+partitions and boundary values from the rules themselves and lists the ones no example uses. A
+person who knows the business checks rules by reading concrete cases, so this report shows where
+nobody has checked yet. Souther does not prove that the rules are what the business wants. It
+shows how much of the rules the examples have checked, and says plainly when it cannot tell.
+
+## A first model
+
+A travel request is submitted when its planned cost is at most 100,000, and rejected otherwise. A
+cost is never negative.
+
+```text
+module example.trip exposing (Amount, DraftRequest, Submitted, Rejected, submit)
+
+data Amount = Int
+    invariant value >= 0
+
+data DraftRequest = { applicant: String, plannedCost: Amount }
+data Submitted = { ...DraftRequest, submittedOn: Date }
+data Rejected = { reason: String }
+
+behavior submit : (request: DraftRequest, submittedOn: Date) -> Submitted | Rejected
+    constructs Submitted, Rejected
+
+let submit (request, submittedOn) = {
+    guard request.plannedCost.value <= 100000 else Rejected { reason = "high_cost" }
+    Submitted { ...request, submittedOn = submittedOn }
+}
+
+example submit
+    | "a trip within the limit is submitted" :
+        (DraftRequest { applicant = "E001", plannedCost = Amount(30000) }, Date("2026-04-01"))
+            -> Submitted { applicant = "E001", plannedCost = Amount(30000), submittedOn = Date("2026-04-01") }
+    | "a trip over the limit is rejected" :
+        (DraftRequest { applicant = "E001", plannedCost = Amount(150000) }, Date("2026-04-01"))
+            -> Rejected { reason = "high_cost" }
+```
+
+- `data` declares a value or a state. `|` separates alternatives and `...` copies the fields of
+  another record.
+- `invariant` is checked every time the value is constructed, so an `Amount` below zero cannot
+  exist anywhere in the program.
+- `behavior` declares the inputs and every outcome. `Rejected` is an ordinary value, not an
+  exception, and a caller has to handle it.
+- `constructs` lists what the behavior may create. Nothing else can construct a `Submitted`.
+- `example` is a table of inputs and expected answers. The build fails when an answer changes.
+
+The full runnable version is
+[`businesstrip`](https://github.com/souther-lang/examples/tree/main/businesstrip) in the
+[examples repository](https://github.com/souther-lang/examples).
+
+## What the examples miss
+
+Both examples pass, yet they miss the limit itself. `souther examples` says so (some lines of the
+output are left out here):
+
+```text
+$ souther examples trip.sou
+example.trip                                             measurement: complete
+  submit                   implemented   rows 2    pending 0
+    signature   out specified 2/2  observed 2/2  verified 2/2
+    partition   axes 1   equivalence partitions 2/2
+    border      borders 1   obligations 2/4
+      ! no row is at the ON point (comparison@14:37)
+          · read as submit/request.plannedCost: = 100000
+      ! no row is at the OFF point (comparison@14:37)
+          · read as submit/request.plannedCost: = 100001
+    branch      2/2
+    decision    rules 2   taken 2
+    replacement 2/2
+  Amount
+      ! no row is at the ON point value = 0 (invariant Amount #1)
+
+adequacy: not satisfied
+3 gaps marked `!`: what a strict build refuses over.
+```
+
+The `guard` draws a line at 100,000, so a cost of exactly 100,000 and a cost of 100,001 each need
+an example. They are the two cases where a `<` written instead of `<=` would go unnoticed. The
+invariant on `Amount` asks for an example at 0. The report also checks that every outcome is
+expected by some example (`signature`), that every branch of the body is taken (`branch`), and
+that some example would fail if a branch of the body were replaced by another branch, or the
+whole body by one fixed answer (`replacement`).
+
+`--generate` prints the report followed by the missing examples, with the inputs filled in. You
+replace `<?>` with the answer the business expects:
+
+```text
+$ souther examples trip.sou --generate
+example submit
+// fills ON point of comparison@trip.sou:14:37
+    | (DraftRequest { applicant = "x", plannedCost = Amount(100000) }, Date("2026-11-24")) -> <?>
+// fills OFF point of comparison@trip.sou:14:37
+    | (DraftRequest { applicant = "x", plannedCost = Amount(100001) }, Date("2026-11-24")) -> <?>
+```
+
+For a behavior that calls other behaviors, `--generate` also offers the inputs that the examples
+of the called behaviors use. These rows are optional: the header counts them separately, and each
+carries the comment `suggested input; no uncovered obligation`.
+
+`--strict` exits with a non-zero status while any `!` remains, which is how a CI build uses it.
+`--lang ja` writes the report in Japanese with the JSTQB terms, and `--format json` writes a
+document with a published schema for other tools.
+
+A line can depend on two inputs. A reminder that goes out three days before an invoice is due
+draws its line on `today` relative to `dueOn`, and the report asks for an example one day before
+that line and one well inside it:
+
+```text
+    border      borders 1   obligations 2/4
+      ! no row is at the OFF point (comparison@11:17)
+          · read as remindOf/today: = invoice.dueOn - 4
+      ! no row is at an IN point (comparison@11:17)
+          · read as remindOf/today: in invoice.dueOn - 3 < today
+```
+
+A line can also be on a number that only running the body computes, such as a sum over a list.
+No rule says which input lands on such a line, so the compiler writes candidate inputs, runs the
+behavior on them, and checks what each one computed. If none lands on the point, the report lists
+the candidates it tried. That does not mean no input can reach the point; an example written by
+hand may still reach it.
+
+## When the report cannot tell, it says why and what to change
+
+Some rules cannot be measured completely. A date has a first and a last day, and an integer has a
+largest value, so a calculation near those ends stops the run. The report does not hide such a
+case. In the reminder model, `dueOn - 3` has no answer when `dueOn` is one of the first three days
+a `Date` can hold. The report says which input stops the run and which invariant would rule the
+stop out:
+
+```text
+    stops       may stop 1   not resolved 0
+      · may stop a run: 11:20 — a run with invoice.dueOn = -365243219160 gets here and stops in
+        invoice.dueOn - 3; every run that gets here stops in invoice.dueOn - 3 where invoice.dueOn
+        is at most -365243219160
+          · declaring `invariant dueOn >= Date("-999999999-01-04")` on example.reminder.Invoice keeps
+            every run from taking a number past its type there; a bound one step further out lets
+            in a run that does, and the value to declare is the one the domain has
+```
+
+The suggested value is the loosest bound that still rules the stop out. A real model declares the
+bound the business has, such as `invariant dueOn >= Date("2000-01-01")`.
+
+Measuring a behavior can also reach a limit of this compiler, such as the number of cases it reads
+for one rule. When a change to the model would keep the measurement within that limit, the report
+names the change and does not measure the rest of the behavior. One such change is declaring a
+helper function as a behavior, so that its comparisons are read once over its own inputs instead
+of once for every call. `--strict` fails on such a behavior, and `--to-the-end` measures it as it
+is written.
+
+Where the report cannot settle a question, it says `undetermined` instead of a result and lists
+what each open question depends on: a limit of this compiler, which a larger search would decide,
+or a missing example, which only you can add. A limit of the compiler is never reported as a fact
+about the model. `--strict` does not fail on `undetermined`, so an exit status of 0 means that no
+gap was found, not that everything was measured.
+
+## What the compiler checks without examples
+
+Some mistakes are found when the model compiles, before any example runs.
+
+```text
+$ souther compile refund.sou -d out
+-- INVARIANT (WARNING)  E2011 ---------------refund.sou:9:28
+
+9| let refundOf (paid, fee) = Amount(paid.value - fee.value)
+                              ^
+
+4|     invariant value >= 0
+       ^^^^^^^^^^^^^^^^^^^^
+Nothing known at this point shows that this clause holds.
+
+Constructing `Amount` here may violate its invariant: nothing known at this point shows that it holds.
+Hint: If inputs for which the construction fails are ones the behavior accepts, that failure is a business case: guard the construction with `guard`, or attempt it with `... as name else ...`, which checks the invariant once. If those inputs are not admitted by the model, the relation belongs to a data — declare it as an `invariant` on the input that holds these values, introducing such a data where none exists.
+```
+
+- A construction that may violate an invariant is reported at the line that constructs it.
+  `--warnings error` makes such a warning fail the compile.
+- Only a decoder, a behavior that declares `constructs T`, or code the compiler generates can
+  construct a `T`. The generated Java constructors are not public, so Java code cannot bypass the
+  invariant either.
+- A behavior's outcomes are a sum of named data such as `Submitted | Rejected`. A `match` over them
+  must handle every case, and so must a Java `switch` over the generated types.
+- `Decimal` arithmetic is exact. Addition, subtraction, multiplication and rounding always answer,
+  and `1m` equals `1.0m`.
+
+## The outside world stays in Java
+
+A model does not call databases, HTTP services, files, clocks or ID generators. It declares a
+behavior without a body, and Java supplies the implementation:
+
+```text
+behavior currentTime : () -> DateTime
+
+behavior approve : (request: AwaitingApproval) -> Approved
+    depends on currentTime
+```
+
+A model cannot call arbitrary Java APIs, but Java can use every generated type and behavior. The
+part that computes business answers and the part that talks to the outside are therefore in
+different languages, and a review can tell which is which. An `example` replaces such a dependency
+with a `fake` written in the same table form.
 
 ```text
 external input -> decoder -> Souther data / behavior -> encoder -> external output
@@ -21,47 +217,9 @@ external input -> decoder -> Souther data / behavior -> encoder -> external outp
                            Java injects dependencies
 ```
 
-The rest of the language is there to keep that measurable. `invariant` puts a constraint next to the
-type it belongs to, so construction is the one place it is checked. A behavior's outcomes are
-ordinary data rather than exceptions, so a rejection is a case a caller can be held to. A dependency
-on the outside world is declared and injected from Java, so what the domain computes stays separate
-from what it reaches for.
-
-## Start with an example
-
-This example either moves a travel request into the `Submitted` state or rejects it. An `Amount` cannot be negative, and the behavior produces either `Submitted` or `Rejected`.
-
-```text
-module example.trip
-import String ( length )
-
-data EmployeeId = String
-    invariant length(value) > 0
-
-data Amount = Int
-    invariant value >= 0
-
-data DraftRequest = { applicant: EmployeeId, plannedCost: Amount }
-data Submitted = { ...DraftRequest, submittedAt: String }
-data Rejected = { reason: String }
-
-behavior submit : (request: DraftRequest, submittedAt: String) -> Submitted | Rejected
-    constructs Submitted, Rejected
-
-let submit (request, submittedAt) = {
-    guard request.plannedCost.value <= 100000 else Rejected { reason = "high_cost" }
-    Submitted { ...request, submittedAt = submittedAt }
-}
-```
-
-The example introduces Souther's central ideas:
-
-- `data` represents domain values and states. `|` means alternatives, and `...` composes fields.
-- An `invariant` is checked every time that `data` is constructed by a decoder or behavior.
-- A `behavior` declares its input and possible business outcomes; `constructs` grants it authority to construct those values.
-- `guard ... else ...` is a business branch. `Rejected` is an ordinary domain value, not an exception.
-
-The complete runnable example is [`businesstrip`](https://github.com/souther-lang/examples/tree/main/businesstrip), in the [examples repository](https://github.com/souther-lang/examples).
+`f >-> g` composes two behaviors: the outcomes `g` accepts go on to `g`, and the others are passed
+through unchanged. A rejection therefore leaves the main path because of how the behaviors are
+composed, not because it is a special kind of value.
 
 ## Install
 
@@ -78,138 +236,138 @@ scoop bucket add souther https://github.com/souther-lang/scoop-souther
 scoop install souther
 ```
 
-`install.ps1` is the Windows install without Scoop. It takes a release, holds it against the `SHA256SUMS` published beside it, unpacks it under `%LOCALAPPDATA%\Programs\souther` with a `current` link at the version it just wrote, and puts that link on the user's `PATH`. It installs for one user, needs no administrator, and owns that directory: an uninstall removes it and the one `PATH` entry it added, and leaves the rest of `PATH` alone.
+Without Scoop, `install.ps1` installs for the current user without administrator rights. It
+checks the download against the release's `SHA256SUMS`, unpacks it under
+`%LOCALAPPDATA%\Programs\souther`, and adds that directory to the user's `PATH`. Its uninstall
+removes the directory and that one `PATH` entry. The script's header shows how to ask for a
+particular version, for the archive without a Java runtime, or for an uninstall.
 
 ```powershell
 irm https://raw.githubusercontent.com/souther-lang/souther/main/install.ps1 | iex
 ```
 
-Piping into `iex` passes no arguments, so asking for a particular version, for the distribution without a runtime, or for an uninstall names the script block instead. The script's header says how.
+Each [GitHub Release](https://github.com/souther-lang/souther/releases) also carries the files for
+a manual download, with `SHA256SUMS` covering all of them:
 
-Every release also attaches its artifacts to the [GitHub Release](https://github.com/souther-lang/souther/releases) for a download by hand. `SHA256SUMS` covers all of them, so `sha256sum -c SHA256SUMS` in the directory they were downloaded into says which arrived intact.
+- `souther`: the command line for macOS and Linux, a single executable file that runs on the Java
+  25 found on `PATH`.
+- `souther-<version>-windows-x64.zip`: the command line for Windows with its own Java runtime.
+  The command is `souther\souther.exe`.
+- `souther-<version>-windows-x64-nojdk.zip`: the same without the runtime, for a machine or a CI
+  image that already has JDK 25. The command is `souther\souther.cmd`, which uses `JAVA_HOME` or
+  the `java` on `PATH`.
 
-- `souther` is the whole of the command line on Unix — a launcher prepended to an uber jar. Put it somewhere on `PATH` and it runs on a Java 25 it finds there.
-- `souther-<version>-windows-x64.zip` carries a Java runtime of its own, so nothing has to be installed beside it. The command in it is `souther\souther.exe`, which `jpackage` writes from the same jar the other archive runs.
-- `souther-<version>-windows-x64-nojdk.zip` is that same command line without the runtime, for a machine that has a JDK 25 already and for a CI image that would rather not carry a second one. The command in it is `souther\souther.cmd`, which reads `JAVA_HOME` and otherwise takes `java` from `PATH`.
-
-Either Windows archive unpacks to one directory with the launcher at its root, so the directory to put on `PATH` is the same one. Neither keeps the class-data archive described below, so a compile there costs what a first compile costs on Unix.
-
-A JDK and not a JRE, because `souther japi` reads a library's javadoc out of its sources and reaches a compiler to do it. On a runtime without one, that command ends on a class it cannot find and every other command answers as though nothing were missing.
-
-Souther requires JDK 25, and so does an application consuming its output: generated `.class` files and `souther-runtime` are pinned to the Java 25 class-file version, and `raoh` — which every derived decoder and encoder calls — is a Java 25 artifact. The Java that runs Souther and the Java a project's build runs on are separate questions, and a bundled runtime answers only the first.
+Souther needs JDK 25, and so does an application that uses the generated classes: they,
+`souther-runtime` and the `raoh` library the generated decoders call are compiled for Java 25. It
+has to be a JDK rather than a JRE, because `souther japi` uses the Java compiler to read javadoc
+from sources.
 
 ## Start a project
-
-`souther init` writes a project rather than leaving one to be copied from an example. It takes the coordinate — a group and an artifact are yours to decide — and writes a build that already declares the Souther plugin and one `.sou` holding a model with the `example` rows covering it, so the first compile checks those rows and `souther examples` answers on the first run.
 
 ```sh
 souther init com.example:hello
 cd hello && mvn compile
 ```
 
-`--build gradle` writes a Gradle build instead. Run inside a project that already has a `pom.xml` or a `build.gradle.kts`, it reads the coordinate out of that build and adds a source directory and the plugin declaration to it. Nothing already written is overwritten, and what it left alone it says.
+`souther init` writes a Maven project with the Souther plugin and one `.sou` file containing a
+small model and its examples, so the first `mvn compile` already runs them. `--build gradle`
+writes a Gradle project instead. Run inside an existing project, it adds a source directory and the
+plugin to the `pom.xml` or `build.gradle.kts` it finds, and changes nothing that is already there.
 
-The build plugins are released from their own repositories, and either compiles `.sou` under `src/main/souther` into the classes the rest of the build reads:
+The build plugins live in their own repositories and compile `.sou` files under
+`src/main/souther`:
 
-- [souther-maven-plugin](https://github.com/souther-lang/souther-maven-plugin), which takes the Souther to compile with from the `souther-runtime` dependency the pom already declares
-- [souther-gradle-plugin](https://github.com/souther-lang/souther-gradle-plugin), where a project with a model names it as `southerVersion`
+- [souther-maven-plugin](https://github.com/souther-lang/souther-maven-plugin) takes the Souther
+  version from the `souther-runtime` dependency in the pom.
+- [souther-gradle-plugin](https://github.com/souther-lang/souther-gradle-plugin) takes it from
+  `southerVersion`.
 
-A build may also run the compiler as the `SoutherProcessor` annotation processor, which is what a project holding Java beside its model can do without a separate plugin. The [examples repository](https://github.com/souther-lang/examples) has both, with the generated types used from Java, Kotlin and Clojure boundaries (Spring Boot, jOOQ, Pedestal).
+A project with Java sources can instead run the compiler as the `SoutherProcessor` annotation
+processor. The [examples repository](https://github.com/souther-lang/examples) shows both, and
+calls the generated types from Java, Kotlin and Clojure (Spring Boot, jOOQ, Pedestal).
 
-## Measure what the examples cover
+## Run a behavior from the command line
 
-`souther examples` reports, for every behavior, what the rows written beside it reach and what they do not:
-
-```sh
-souther examples businesstrip.sou
-```
-
-It answers on the positions of an input — which classes the behavior's own rules divide it into, and which of them no row stands in — on the boundary values those rules place, on the rules of the body and which of them a row goes through, and on the invariants of the types the behavior reaches, which are owed a row wherever such a value is constructed. What nothing covers is marked `!`, and `--strict` exits non-zero over those, which is the form a build takes.
-
-A boundary on a number only a run works out, such as a sum over a list, has no rule saying which input lands on it. The compiler writes candidate rows, runs them, and reads what each came to. Where none reaches the point, the report names the candidates it tried. That does not make the point unreachable: a row written by hand may still reach it.
-
-Where measuring a behavior stops at a limit of the compiler in a condition the compiler can say how to change, the report says that instead of measuring the rest of it. `--strict` refuses such a behavior too, and `--to-the-end` measures it as it is written.
-
-An adequacy line closes the report. It is not a grade: where the report could not settle a question it says `undetermined` and lists what each open position is waiting on, separating what a wider search would decide from what only a new row can. A limit of the compiler is never reported as an answer about the model. `--strict` passes an `undetermined` report, so an exit of 0 there says no gap was found, not that every measure was made.
+`souther run` compiles a file in memory, decodes the `--input` JSON, runs one behavior and prints
+the result as JSON. A file run on its own does not need a `module` line.
 
 ```sh
-souther examples businesstrip.sou --behavior submitTrip   # one behavior
-souther examples businesstrip.sou --generate              # rows for what nothing covers
-souther examples businesstrip.sou --strict                # refuse over the gaps
-```
-
-`--generate` writes the rows themselves, with the inputs filled in and `<?>` where the answer is owed — a row the report then counts as waiting for one. It also offers a behavior the inputs that the rows of the behaviors it calls were written with. Those rows owe nothing: the header counts them apart as optional, and each carries the comment `suggested input; no uncovered obligation`. The [tutorial](https://souther-lang.org/tutorial/) works a model up from a record layout to a covered one by reading this report.
-
-## Run a behavior
-
-To try a behavior without writing any Java, `souther run` compiles a `.sou` in memory and drives one behavior: it decodes the `--input` JSON through the behavior's derived decoders, applies it, and prints the result through its derived encoder. A single file run on its own may omit the `module` header — it is named after the file (ADR-0043).
-
-```sh
-# hello.sou  (no module header needed)
+# hello.sou
 #   behavior greet : (name: String) -> String
 #   let greet (name) = "Hello, " ++ name
 souther run hello.sou --behavior greet --input '"world"'
 # => "Hello, world"
 ```
 
-`run` runs a behavior that is both runnable and exposed. It is runnable when it has a `let` and depends on nothing, or when it is a `>->` pipeline whose stages are all runnable in that same sense; an injected behavior, one with injected dependencies, or a pipeline with such a stage is refused with a reason. It is exposed when the module's `exposing` list names it — the runner reaches a behavior the way any reader outside the module does — and a file with no `exposing` list exposes everything in it. `--behavior` may be omitted when the module holds exactly one behavior that is both, and `--input` when the behavior takes no argument. A multi-argument behavior takes a JSON array (`--input '[3, 7]'`). The runner drives one file: stdlib imports resolve, and an import of another user module resolves against `-cp`, the same class path `compile` takes (`souther compile catalog.sou -d out` then `souther run enrollment.sou -cp out …`).
+A behavior with several arguments takes a JSON array (`--input '[3, 7]'`). `run` refuses a
+behavior that depends on something Java supplies, because there is no Java implementation to call,
+and a behavior the module's `exposing` list does not name. `--behavior` can be left out when the
+file has exactly one behavior it can run. Imports of other modules resolve against `-cp`, the same
+class path `compile` takes.
 
-`souther compile hello.sou -d out` is the same binary writing `.class` files. Most of what a small compile from the command line costs is the JVM loading and verifying the compiler's classes, so the first compile leaves an archive of them under `${XDG_CACHE_HOME:-$HOME/.cache}/souther`, named for the version, and the compiles after it start from that. Deleting it costs one slower compile; where it cannot be written, nothing is written and every compile is that one. An archive belongs to the binary that wrote it and to the JDK that wrote it, so one whose binary has been rebuilt or copied elsewhere, or which the JDK now running will not take, may be left unusable rather than rewritten — deleting it is what puts the next compile back to the faster one.
+`souther compile hello.sou -d out` writes `.class` files. The first compile stores the compiler's
+loaded classes under `${XDG_CACHE_HOME:-$HOME/.cache}/souther`, which makes later compiles start
+faster. Deleting that directory is safe and costs one slower compile.
+
+## Other targets
+
+`souther compile --target wasm` and `--target native` use backends released from their own
+repositories. `souther backend fetch <target>` downloads one ahead of time; otherwise the first
+compile for that target downloads it from Maven Central.
+
+- [souther-wasm-compiler](https://github.com/souther-lang/souther-wasm-compiler) compiles a model
+  to a WebAssembly module whose behaviors take and return JSON.
+- [souther-native-compiler](https://github.com/souther-lang/souther-native-compiler) compiles a
+  model to a native object or shared library, with generated bindings that let PHP, Rust and Go
+  call it.
 
 ## Formatting
 
-`souther fmt <file.sou>` prints the canonical form, `-w` rewrites in place, and `--check` exits non-zero when a file is not formatted, printing each difference as the rule it answers to, where in your own source it is, and what the two forms write there. The layout is re-derived from the tree rather than patched into the text, so there is one form and nothing to configure.
+`souther fmt <file.sou>` prints the formatted source, `-w` rewrites the file, and `--check` exits
+non-zero when a file is not formatted and prints each difference with its location. There is one
+format and nothing to configure.
 
 ## Editor support
 
-The VS Code extension lives in [souther-lang/souther-vscode](https://github.com/souther-lang/souther-vscode) and is published to the Visual Studio Marketplace and Open VSX. It bundles the language server and fetches a Java 25 runtime by itself when the machine does not already have one, so installing it and opening a `.sou` file is enough. It gives diagnostics, the document outline, hover, go-to-definition, find-references, rename, completion, quick-fix code actions, formatting, and semantic tokens.
+The VS Code extension, [souther-lang/souther-vscode](https://github.com/souther-lang/souther-vscode),
+is published to the Visual Studio Marketplace and Open VSX. It contains the language server and
+downloads a Java 25 runtime when the machine has none. It provides diagnostics, outline, hover,
+go to definition, find references, rename, completion, quick fixes, formatting and semantic
+highlighting.
 
-The server is `souther-lsp`, a self-contained jar that speaks LSP over stdio, attached to every release here. Other editors can launch it with `java -Xss4m -XX:+UseCompactObjectHeaders -jar souther-lsp.jar`. Where the `souther` binary is already on the path, `souther lsp` serves the same server and needs no jar path and no flags — this is what an agent harness takes, alongside `souther mcp`. The stack flag is the compiler's supported one, not a tuning knob: what a definition may say is bounded, and a source at that bound needs about a megabyte to walk. The layout flag is the object layout the compiler is measured under, which holds what a compile keeps in less. The `souther` binary sets both for itself.
-
-An editor integration should not copy any of this out of prose. Both jars carry `META-INF/souther/tooling.json`, which states the language id, the source extension, the minimum Java and the JVM arguments the server needs, and where the syntax contract and the schema of `initializationOptions.souther` are inside the jar. It is a file in an archive so that a client can read it before it has a Java that can run anything here; `souther tooling` prints the same file. The syntax contract is versioned by the release it ships in and has no version of its own; the options schema has one, in its file name. In the answer to `initialize`, `capabilities.experimental.souther` names each `souther` option the running server reads, one key per option, and a key that is absent is an option that server does not read. An option it does not read is ignored; one it reads, written with a value the schema does not allow, is read as unset and reported with `window/showMessage` after `initialized`.
+Other editors can start the same server with `souther lsp` (LSP over stdio), or with the
+`souther-lsp.jar` attached to each release:
+`java -Xss4m -XX:+UseCompactObjectHeaders -jar souther-lsp.jar`. The `souther` command sets these
+JVM options itself. An editor integration can read the language id, file extension, minimum Java
+version, JVM options and the schema of the server's settings from `META-INF/souther/tooling.json`
+inside either jar, or from `souther tooling`, instead of copying them from this page.
 
 ## Documentation on the command line
 
-The `souther` binary answers questions about the language and its libraries itself, so neither a
-person nor a coding agent has to hunt through a workspace or disassemble jars:
+The `souther` command answers questions about the language and its libraries, for people and for
+coding agents:
 
 ```sh
-souther --version              # which Souther this is
-souther help                   # every command, with a line saying what it is for
-souther help compile           # one command's arguments and every option it takes
-souther doc                    # every specification section and shipped topic, name<TAB>title
-souther doc newtype            # one section, by its anchor
-souther doc cli/run            # a topic the command line ships about itself
-souther doc raoh/tutorial      # a guide a bundled library ships
-souther doc --search decoder   # ranked hits, each with the line it matched on
-souther api Option             # the stdlib surface with resolved signatures
-souther api --search fold      # the names that answer a term
-souther api --source Option    # a stdlib module's own source, comments included
-souther japi net.unit8.raoh.Issues        # a dependency's public API, with javadoc
-souther japi net.unit8.raoh.Issues#add    # one member of it
+souther help compile           # one command's arguments and options
+souther doc                    # every specification section and topic
+souther doc newtype            # one section of the specification
+souther doc --search decoder   # search the specification
+souther api Option             # a standard library module with its signatures
+souther api --search fold      # search the standard library
+souther api --source Option    # a standard library module's source
+souther japi net.unit8.raoh.Issues        # a Java dependency's public API, with javadoc
 ```
 
-New to the language? `souther doc cli/start-here` names the four sections to read and the order.
+New to the language? `souther doc cli/start-here` lists the four sections to read first, in order.
 
-`souther doc` serves the specification the compiler was built from — it is bundled in the jar, not
-looked up on disk. `souther api` prints the signatures the type checker itself resolved, including
-the names that exist only as sugar over a private helper. `souther japi` reads class files without
-loading them, and takes javadoc from the `-sources.jar` beside the jar, or from the sources bundled
-with the CLI when there is none.
+`souther doc` reads the specification bundled in the compiler, so it always matches the version
+you run. A library can ship its own guides under `META-INF/souther-docs/` in its jar, and `souther
+doc` lists them too; `souther doc raoh/tutorial` reads raoh's guide for the version your build
+uses.
 
-A library may ship its own documentation inside its own jar under `META-INF/souther-docs/`, and
-`souther doc` then lists its topics alongside the specification and reads them by a `set/topic`
-name. The CLI's own reference is carried that way and is nothing special; raoh ships its guides the
-same way from 0.7.1 on, so `souther doc raoh/composition-patterns` reads raoh's own guide at the
-version this build depends on.
-
-The same answers are served over the Model Context Protocol: `souther mcp` speaks MCP on stdio,
-exposing `doc_search`, `doc_read`, `stdlib_api`, `stdlib_api_search`, `stdlib_api_source` and
-`jar_api`, so agent harnesses that prefer tools over shell commands register one command.
-`doc_read` with no argument lists every section and topic, which is where a client with nothing
-else starts. It answers under protocol revisions `2025-11-25`
-and `2025-06-18` — the ones whose opening exchange is `initialize` — echoing the client's own when
-it is one of them:
+`souther mcp` serves the same answers over the Model Context Protocol on stdio, as the tools
+`doc_search`, `doc_read`, `stdlib_api`, `stdlib_api_search`, `stdlib_api_source` and `jar_api`. It
+supports protocol revisions `2025-11-25` and `2025-06-18`.
 
 ```json
 { "mcpServers": { "souther": { "command": "souther", "args": ["mcp"] } } }
@@ -217,72 +375,57 @@ it is one of them:
 
 ## Embedding the compiler
 
-`souther.compiler.Compiler` is the one class a caller outside this repository is meant to call. It
-compiles a source string containing either one module or several linked modules:
+`souther.compiler.Compiler` is the class meant to be called from outside this repository. It
+compiles source text containing one module or several:
 
 ```java
 Map<String, ClassFileImage> classes = Compiler.compile(source);
 Map<String, ClassFileImage> linked = Compiler.compileModules(List.of(employeeSource, tripSource));
 ```
 
-Each class file is a `souther.compiler.jvm.ClassFileImage`, which compares by its bytes; `bytes()`
-hands a fresh copy of them to whatever takes octets — `defineClass`, a file, an archive.
+`ClassFileImage.bytes()` returns a copy of a class file's bytes, for `defineClass`, a file or an
+archive.
 
-## What Souther guarantees
+## What the language leaves out
 
-### Construction of invalid data is confined
+Souther has immutable records, sums and unit data, `List`, `Set`, `Map`, optional fields (`T?`),
+`invariant`, `match`, `let`, `if`, `guard`, behaviors with Java-supplied dependencies, `>->`
+composition, derived JSON decoders and encoders, and modules with `exposing` and `import`.
 
-Only a derived decoder, a behavior declaring `constructs T`, that behavior's Java implementation, or compiler-generated code may construct `data T`. Merely using `T` as a return type does not grant construction authority. Generated constructors are non-public, so the rule holds across the Java boundary.
+It has no exceptions, no `null`, no mutable state, no asynchronous execution, no calls to
+arbitrary Java, no type classes or higher-kinded types, no package manager and no REPL. Leaving
+them out lets the compiler see every place a value is constructed, every constraint on it and
+every dependency on the outside world, and the checks above need all three.
 
-### Business outcomes are not exceptions
+Not implemented yet: incremental compilation, handwritten codec syntax and JSON Schema output.
+Generated classes carry source line information, so a stack trace from a failed invariant points
+to the line in the `.sou` file.
 
-A behavior's output is a sum of named data, such as `Submitted | Rejected`; it has no `Result` / `Either` wrapper or privileged success/failure slot. `f >-> g` sends only the output cases that `g` accepts to the next stage, and passes the rest through unchanged. Whether a case leaves the main path is a property of composition, not of the value itself.
+A model consists of many small immutable objects. `-XX:+UseCompactObjectHeaders` (JEP 519) makes
+each object header smaller on JDK 25, and an application can turn it on without rebuilding. The
+compiler's tests and every example pass with it; measure your own model to see how much it saves.
 
-The runtime's `Result` for malformed decoder input is separate from a behavior's domain outcome: the former belongs to the boundary, the latter is domain data.
-
-### The outside world stays at the Java boundary
-
-Souther does not directly call databases, HTTP services, files, clocks, or ID generators. Instead, it declares a behavior with no implementation and Java injects that implementation.
-
-```text
-behavior currentTime : () -> DateTime
-
-behavior approve : (request: AwaitingApproval) -> Approved
-    depends on currentTime
-```
-
-Souther cannot call arbitrary Java APIs; Java can use the generated data and behaviors. This asymmetry makes the boundary between pure domain computation and external effects explicit.
-
-## Language shape
-
-Souther is deliberately small:
-
-- immutable product / sum / unit data, `List<T>`, `Map<String, T>`, and optional fields (`T?`)
-- `invariant`, `match`, `let`, `if`, `guard`, record literals, and field spread
-- `behavior`, Java injection, `depends on`, `constructs`, and type-routed `>->` composition
-- derived decoders / encoders and explicit modules with `exposing` / `import`
-
-It intentionally does not provide exceptions, `null`, mutable state, asynchronous execution, arbitrary JVM calls, type classes or higher-kinded types, a package manager, or a REPL. These omissions keep construction paths, value constraints, and outside-world dependencies tractable.
-
-Not yet implemented: incremental compilation, static invariant proofs, handwritten codec syntax, and JSON Schema output. Generated classes carry `SourceFile` / `LineNumberTable` debug info, so a runtime stack trace — an invariant abort above all — points back to the `.sou` source line.
-
-A model is many small immutable values, a newtype per identifier and per amount and a data per state, which is the shape `-XX:+UseCompactObjectHeaders` (JEP 519) suits: it takes bytes off every object header, and on JDK 25 the deploying application can turn it on without a rebuild. Whether that reaches an allocation depends on where the value sits against the alignment boundary, so it is worth measuring on the model at hand rather than assuming. The compiler suite and every example pass under the flag.
-
-## Details and examples
+## Further reading
 
 - [Language specification](specification.adoc): the normative syntax and semantics
-- [Tutorial](https://souther-lang.org/tutorial/) and [principles](https://souther-lang.org/principles/)
-- [ADRs](docs/adr/README.md): design decisions, alternatives, and prior art
-- [Examples](https://github.com/souther-lang/examples): Maven / Gradle integration, decoders / encoders, and Java / Kotlin / Clojure boundary interop (Spring Boot, jOOQ, Pedestal). They live in their own repository because the boundary code moves on Spring / jOOQ / Kotlin's schedule rather than the compiler's; its `main` builds against the latest release and its `develop` against `develop` here
-- [souther-wasm-compiler](https://github.com/souther-lang/souther-wasm-compiler): a checked Souther program compiled to WebAssembly, developed in its own repository against a released compiler
+- [Tutorial](https://souther-lang.org/tutorial/): builds a model from a record layout to one whose
+  examples cover it, by reading the report at each step
+- [Principles](https://souther-lang.org/principles/)
+- [ADRs](docs/adr/README.md): design decisions, the alternatives considered and prior art
+- [Examples](https://github.com/souther-lang/examples): Maven and Gradle builds, decoders and
+  encoders, and Java, Kotlin and Clojure applications. Its `main` branch builds against the latest
+  release and its `develop` branch against `develop` here.
 
-Changing Souther itself, rather than using it, is [CONTRIBUTING.md](CONTRIBUTING.md).
+To change Souther itself, read [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Specification Model-Driven Development (SMDD)
 
-The SMDD specification DSL expresses business rules with `data` (AND / OR / List / `?`) and `behavior` (`->` / `>->`). It leaves value constraints, the fact that a value has been validated, and outside-world dependencies in comments. Souther maps those respectively to `invariant`, closed construction paths (`decoder` / `constructs`), and behaviors injected from Java.
-
-The [language specification](specification.adoc) has the full mapping and design principles.
+Souther grew out of the SMDD specification DSL, which writes business rules with `data` (AND, OR,
+List, `?`) and `behavior` (`->`, `>->`) and leaves value constraints, validation and outside
+dependencies to comments. Souther makes each of those part of the language: value constraints
+become `invariant`, validation becomes the closed construction rules (decoders and `constructs`),
+and outside dependencies become behaviors that Java implements. The
+[language specification](specification.adoc) describes the mapping in full.
 
 ## License
 
