@@ -331,10 +331,15 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                         + " projection's base is the one child there is to go down to");
         row(out, c + "partition/StopsOfABody", "past",
                 "(" + core + reads + "L" + c + "partition/WhatAWayLeavesOfAValue;"
-                        + "Ljava/util/List;Ljava/util/List;Ljava/util/Set;)Z", Reading.STRUCTURE,
+                        + "Ljava/util/Set;L" + c + "partition/StopsOfABody$GotPast;"
+                        + "Ljava/util/Set;)Z", Reading.STRUCTURE,
                 "goes down what a run works out first to ask each step met there what it asks"
                         + " of a value getting past it: a projection is no step, and its base is"
                         + " the one child there is to go down to");
+        row(out, c + "partition/StopsOfABody", "eachStepStopsNoRunOfItsOwn",
+                "(" + core + ")Z", Reading.STRUCTURE,
+                "asks each step the walk met under a node what is shown of it, each the node it"
+                        + " is: a projection's base is the one child there is to go down to");
         row(out, c + "partition/ComparisonReadings", "runsWholeWhenever",
                 "(" + core + ")Z", Reading.STRUCTURE,
                 "asks whether every part of an expression runs whenever it does, which is what is"

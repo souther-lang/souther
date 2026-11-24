@@ -110,14 +110,15 @@ class AConstructionIsToldOfAStopWhereARunStopsThereTest {
         NOT_SHOWN.put("inANamedFunctionAppliedTwice",
                 WhyAConstructionStopIsNotShown.REACH_NOT_SHOWN);
         // the same written at one call, which a closure around it makes on each of two elements:
-        // what the construction asks is read in the names of each application, and those of one
-        // made inside another are not read
+        // what the construction asks is read in the names of each application, and a run gets
+        // to the second past the first, whose body is worked out in its own names, which what a
+        // construction asks of what comes before it is not read in
         FORMS.put("inANamedFunctionAtOneCallMadeTwice", new Form("OneC", "Count",
                 "{ let p: (Int) -> Bool = x -> { let ok = x <= 3 \n let later = Count(x) \n "
                         + "ok && later.value >= 0 } \n "
                         + "OneC { a = Count(0), w = List.all(y -> List.all(p, [y]), [q, q]) } }"));
         NOT_SHOWN.put("inANamedFunctionAtOneCallMadeTwice",
-                WhyAConstructionStopIsNotShown.ASKS_NOT_READ);
+                WhyAConstructionStopIsNotShown.SOMETHING_BEFORE_IT_MAY_STOP);
         // one before a function bound by a name, on the way to the rule the function holds where
         // the call applying it is
         FORMS.put("beforeANamedFunction", new Form("OneC", "Count",

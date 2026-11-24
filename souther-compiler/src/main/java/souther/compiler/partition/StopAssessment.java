@@ -307,6 +307,10 @@ final class StopAssessment {
                                            List<TakenConstraint.Affine> sofar,
                                            List<List<TakenConstraint.Affine>> out,
                                            boolean[] left, boolean leavingOutWhatIsNotRead) {
+        // Past the figure nothing more is made, and nothing more is looked at to make it.
+        if (left[0]) {
+            return true;
+        }
         if (at == way.size()) {
             if (out.size() >= MOST_WAYS_OF_ALTERNATIVES) {
                 left[0] = true;
@@ -374,7 +378,7 @@ final class StopAssessment {
     static Judgement aStopLookedFor(Site site, List<UndividedByARelation.IntOperation> before,
                                     List<LinearForm<NumericTerm>> quotients,
                                     WhatAWayLeavesOfAValue left, List<TakenConstraint.Affine> way,
-                                    InputReading read) {
+                                    InputReading read, Tries tries) {
         List<UndividedByARelation.IntOperation> others = new ArrayList<>(before);
         // One every value on the way keeps within its ends is got past by the value looked for,
         // which is one of them, and is not asked of it. That it is got past is held against the
@@ -385,13 +389,12 @@ final class StopAssessment {
         // What the site is over, as numbers of the input: where it is over a value a run works out,
         // by each way a row makes that value come to a number, which a stop is looked for by in
         // turn.
-        // One figure is spent for the whole site: every value tried is one unit of it, and so is
-        // every way beyond the first, which is the site as it stands. What a site costs is no
-        // product of the ways and the values.
-        Tries tries = new Tries();
+        // One figure is spent for the whole site, whoever asks: every value tried is one unit of
+        // it, and so is every way it is looked for by, along every way to the site. What a site
+        // costs is no product of the ways and the values.
         List<Judgement> judged = new ArrayList<>();
         Attainment.Visitor lookFor = how -> {
-            if (!judged.isEmpty() && !tries.spend()) {
+            if (!tries.spend()) {
                 return false;
             }
             Judgement one = aStopAttainedBy(how, site, others, quotients, kept, way, read, tries);

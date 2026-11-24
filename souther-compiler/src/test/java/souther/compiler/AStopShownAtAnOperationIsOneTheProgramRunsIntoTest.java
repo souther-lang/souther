@@ -13,10 +13,13 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.runtime.ConstraintViolation;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
@@ -135,6 +138,31 @@ class AStopShownAtAnOperationIsOneTheProgramRunsIntoTest {
         // what a run taking the arm works out is kept by that reading all the same
         FORMS.put("aRoundingPastAnIntOnAnArm", new Form("p == 0",
                 "(if e > 0 then e else Rational.toInt(DOWN, (q / 1) * (q / 1))) >= 2"));
+        // what an arm a run does not take works out is nothing a run getting past it met: the
+        // sum after the choice stops where q is the greatest Int, whichever arm was taken
+        FORMS.put("anArmNotTakenBeforeTheSum", new Form("e == e",
+                "{ let r = if p == 0 then q + 2 else 0\n q + 1 } >= 2"));
+        // inside a closure the quotient's own dividend is worked out before the division: a run
+        // where it passes the ends stops there and not at the divisor
+        FORMS.put("aQuotientInAClosureWhoseDividendStopsFirst", new Form("e == e",
+                "List.length(List.map(x -> Rational.toInt(DOWN, (q + 1) / p), [1])) >= 2"));
+        // a closure applied before the sum is worked out before it: a run whose application
+        // divides by nought stops there and does not get to the sum
+        FORMS.put("aSumAfterAClosureThatStops", new Form("e == e",
+                "{ let xs = List.map(x -> Rational.toInt(DOWN, 4 / p), [1])\n"
+                        + " q + 1 + List.length(xs) } >= 2"));
+        // a construction a fold makes of what the step before it answered: the second
+        // application is handed the first one's answer, and its construction refuses it. It is
+        // read in that application's names, and what the application before it works out is
+        // not read in its own, so a run is not shown to get past it and the construction is said
+        // not resolved: not required to be shown
+        FORMS.put("aConstructionOfWhatAFoldCarried", new Form("e == e",
+                "List.fold((a, x) -> { let s = Small { value = a + x }\n a + x }, 0, [5, 6])"
+                        + " >= 2"));
+        // one closure applied to two elements stops on the second: a run that gets to it on the
+        // first gets past it
+        FORMS.put("oneSiteOnTwoApplications", new Form("e == e",
+                "List.length(List.map(x -> x + 1, [0, q])) >= 2"));
     }
 
     static Stream<String> forms() {
@@ -158,6 +186,9 @@ class AStopShownAtAnOperationIsOneTheProgramRunsIntoTest {
                     data In = { e: Int, p: Int, q: Int }
                     data Out = Int
 
+                    data Small = Int
+                        invariant value <= 10
+
                     behavior h : (z: Int) -> Int
                     let h (z) = Rational.toInt(DOWN, 1 / z)
 
@@ -170,10 +201,11 @@ class AStopShownAtAnOperationIsOneTheProgramRunsIntoTest {
                 String behavior = behaviorOf(each.getKey());
                 model.append("""
 
-                        behavior %1$s : (i: In) -> Out constructs Out
+                        behavior %1$s : (i: In) -> Out constructs %4$s
                         let %1$s (i) = Out { value = if %2$s then (if %3$s then 1 else 2) else 3 }
                         """.formatted(behavior, onTheInput(each.getValue().way()),
-                        onTheInput(each.getValue().comparison())));
+                        onTheInput(each.getValue().comparison()),
+                        each.getValue().comparison().contains("Small {") ? "Out, Small" : "Out"));
             }
             return ACompiledModel.measured(model.toString(),
                     new Adequacy.Asked(Adequacy.Level.OFF, false));
@@ -196,36 +228,57 @@ class AStopShownAtAnOperationIsOneTheProgramRunsIntoTest {
                 Module.COMPILED.db().ask(new Adequacy.Divided("demo", id)).value();
         boolean saidSomething = false;
         boolean aStopShown = false;
+        boolean aStopNotResolved = false;
+        List<String> operationsShown = new ArrayList<>();
         List<String> shownAndItsRunDoesNotStop = new ArrayList<>();
         for (WhatIsShownOfAStop each : divided.stopsShown()) {
             if (each instanceof StepWhereARunMayStop stops) {
-                saidSomething |= !stops.shown().isEmpty() || !stops.everyRunStops().isEmpty();
-                aStopShown |= !stops.shown().isEmpty();
+                saidSomething |= !stops.shown().isEmpty() || !stops.constructions().isEmpty()
+                        || !stops.everyRunStops().isEmpty();
+                aStopShown |= !stops.shown().isEmpty() || !stops.constructions().isEmpty();
                 for (AStopShown shown : stops.shown()) {
+                    operationsShown.add(shown.operation());
                     String ends = shown.operation().startsWith("division")
                             ? DIVISION_BY_ZERO : INT_OVERFLOW;
                     for (Map<String, Object> in : inputsOf(shown)) {
                         String stoppedFor = stoppedFor(loader, behavior, in);
-                        if (stoppedFor == null || !stoppedFor.startsWith(ends)) {
+                        if (stoppedFor == null || !stoppedFor.startsWith(ends)
+                                || !isTheOperationItStopsIn(shown.operation(), stoppedFor, in)) {
                             shownAndItsRunDoesNotStop.add(shown.operation() + " at " + in
                                     + " ends for " + stoppedFor);
                         }
                     }
                 }
             } else if (each instanceof StepWhereAStopIsNotShown open) {
-                saidSomething |= !open.notShown().isEmpty();
+                saidSomething |= !open.notShown().isEmpty() || !open.asks().isEmpty();
+                aStopNotResolved = true;
             }
         }
         boolean said = saidSomething;
         boolean shown = aStopShown;
         boolean someRunStops = someRunStops(loader, behavior);
         boolean everyRunOfTheWayStops = form.required() && everyRunOfTheWayStops(loader, behavior);
+        // A run that stops in an operation no stop shown is of, where nothing is said not to be
+        // resolved, is a stop said nowhere.
+        boolean openSomewhere = aStopNotResolved;
+        List<String> stopsSaidNowhere = new ArrayList<>();
+        for (Map.Entry<Map<String, Object>, String> run : stopsOfTheGrid(loader, behavior)
+                .entrySet()) {
+            String stoppedFor = run.getValue();
+            if (!openSomewhere && stoppedFor.startsWith(INT_OVERFLOW) && operationsShown.stream()
+                    .noneMatch(operation -> isTheOperationItStopsIn(operation, stoppedFor,
+                            run.getKey()))) {
+                stopsSaidNowhere.add(run.getKey() + " ends for " + stoppedFor);
+            }
+        }
         assertAll(
                 () -> assertEquals(List.of(), shownAndItsRunDoesNotStop,
                         "told that a run stops at an operation, and the run of the numbers the "
-                                + "stop rests on does not stop"),
+                                + "stop rests on does not stop there"),
                 () -> assertTrue(said || !someRunStops,
                         "a run of the grid stops and the findings say nothing of an operation"),
+                () -> assertEquals(List.of(), stopsSaidNowhere,
+                        "a run of the grid stops in an operation no finding is of"),
                 () -> assertTrue(!form.required() || everyRunOfTheWayStops,
                         "a form said to stop every run of its way, and a run of the grid on the"
                                 + " way gets past what it works out"),
@@ -283,6 +336,81 @@ class AStopShownAtAnOperationIsOneTheProgramRunsIntoTest {
             }
         }
         return someStops;
+    }
+
+    /** An operation the program stopped in, as its message says it: two numbers and an
+     *  operator. */
+    private static final Pattern RAN = Pattern.compile(INT_OVERFLOW
+            + ": (-?\\d+) ([+*-]) (-?\\d+)$");
+
+    /** One term of a sum of the input's fields, as a stop shown says it: {@code 2 * i.q},
+     *  {@code i.q} or {@code 3}, with its sign. */
+    private static final Pattern TERM = Pattern.compile(
+            "([+-])?\\s*(?:(\\d+)\\s*\\*\\s*)?(i\\.[epq]|\\d+)");
+
+    /**
+     * Whether {@code operation}, a stop shown, is the operation a run that stopped for
+     * {@code stoppedFor} on {@code in} stopped in: what it comes to on {@code in} is what the
+     * operation the program stopped in came to. A stop shown is said as the sum of the input's
+     * fields the way makes it, and two operations of one reason are told apart by that number.
+     * Where either is said otherwise, nothing tells them apart and they are taken alike.
+     */
+    private static boolean isTheOperationItStopsIn(String operation, String stoppedFor,
+                                                   Map<String, Object> in) {
+        Matcher ran = RAN.matcher(stoppedFor);
+        BigInteger shown = valueOf(operation, in);
+        if (!ran.find() || shown == null) {
+            return true;
+        }
+        BigInteger left = new BigInteger(ran.group(1));
+        BigInteger right = new BigInteger(ran.group(3));
+        BigInteger came = switch (ran.group(2)) {
+            case "+" -> left.add(right);
+            case "-" -> left.subtract(right);
+            default -> left.multiply(right);
+        };
+        return came.equals(shown);
+    }
+
+    /** What {@code sum}, a sum of the input's fields, comes to on {@code in}; null where it is
+     *  not one. */
+    private static BigInteger valueOf(String sum, Map<String, Object> in) {
+        Matcher term = TERM.matcher(sum.strip());
+        BigInteger out = BigInteger.ZERO;
+        int at = 0;
+        while (term.find() && term.start() == at) {
+            BigInteger one = term.group(3).startsWith("i.")
+                    ? BigInteger.valueOf((Long) in.get(term.group(3).substring(2)))
+                    : new BigInteger(term.group(3));
+            if (term.group(2) != null) {
+                one = one.multiply(new BigInteger(term.group(2)));
+            }
+            out = "-".equals(term.group(1)) ? out.subtract(one) : out.add(one);
+            at = term.end();
+            while (at < sum.strip().length() && sum.strip().charAt(at) == ' ') {
+                at++;
+            }
+        }
+        return at == sum.strip().length() && at > 0 ? out : null;
+    }
+
+    /** What every run of the grid that stops stops for, by the run. */
+    private static Map<Map<String, Object>, String> stopsOfTheGrid(ClassLoader loader,
+                                                                   Object behavior)
+            throws Exception {
+        Map<Map<String, Object>, String> out = new LinkedHashMap<>();
+        for (long e : WHOLE) {
+            for (long p : WHOLE) {
+                for (long q : WHOLE) {
+                    Map<String, Object> run = Map.of("e", e, "p", p, "q", q);
+                    String stoppedFor = stoppedFor(loader, behavior, run);
+                    if (stoppedFor != null) {
+                        out.put(run, stoppedFor);
+                    }
+                }
+            }
+        }
+        return out;
     }
 
     private static boolean someRunStops(ClassLoader loader, Object behavior) throws Exception {

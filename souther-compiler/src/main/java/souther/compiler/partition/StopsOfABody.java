@@ -15,6 +15,7 @@ import souther.compiler.check.WhatARunMayEndFor;
 import souther.compiler.core.Core;
 import souther.compiler.core.Evaluated;
 import souther.compiler.inputs.ABoundThatKeepsEveryRunGoing;
+import souther.compiler.inputs.AConstructionStopNotShown;
 import souther.compiler.inputs.Denotation;
 import souther.compiler.types.BindingId;
 import souther.compiler.inputs.ElementsMet;
@@ -25,8 +26,10 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.inputs.WhatAConstructionAsks;
 import souther.compiler.inputs.WhatARelationLeavesUndivided;
 import souther.compiler.inputs.WhatKeepsEveryRunGoing;
+import souther.compiler.inputs.WhyAConstructionStopIsNotShown;
 import souther.compiler.inputs.WhyAStopIsNotShown;
 import souther.compiler.inputs.WrittenOutElements;
 import souther.compiler.meaning.Proposition;
@@ -52,6 +55,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.BooleanSupplier;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 /**
  * Whether a run of a behavior stops at each step it may stop at: shown not to, shown to, or
@@ -138,14 +142,9 @@ final class StopsOfABody {
         if (judged == null) {
             List<AtAStep> out = new ArrayList<>();
             for (Core step : where.steps()) {
-                if (gotPast(step)) {
-                    continue;
+                if (!gotPast(step)) {
+                    out.add(stepJudged(step));
                 }
-                out.add(Core.withoutStanding(step) instanceof Core.Construct made
-                        ? new AtAStep(step, List.of(), Optional.of(ofAConstruction(made)),
-                                List.of(), Optional.empty())
-                        : new AtAStep(step, ofAnOperation(step, List.of()), Optional.empty(),
-                                everyRunStops(step), Optional.empty()));
             }
             Map<Core, WhatKeepsEveryRunGoing> kept = keptTogether(out);
             List<AtAStep> withWhatKeepsThem = new ArrayList<>();
@@ -273,6 +272,31 @@ final class StopsOfABody {
                         !(one instanceof StopAssessment.Judgement.Safe));
     }
 
+    /**
+     * What is shown of {@code step}, apart from what keeps its runs going, worked out once
+     * whoever asks first: the list of every step, or a step after it that a run gets to past an
+     * application of a function value it stands in. Null while it is being worked out, which is
+     * a step asked of on the way to itself.
+     */
+    private AtAStep stepJudged(Core step) {
+        Optional<AtAStep> known = stepsJudged.get(step);
+        if (known != null) {
+            return known.orElse(null);
+        }
+        stepsJudged.put(step, Optional.empty());
+        AtAStep made = Core.withoutStanding(step) instanceof Core.Construct construct
+                ? new AtAStep(step, List.of(), Optional.of(ofAConstruction(construct)),
+                        List.of(), Optional.empty())
+                : new AtAStep(step, ofAnOperation(step, List.of()), Optional.empty(),
+                        everyRunStops(step), Optional.empty());
+        stepsJudged.put(step, Optional.of(made));
+        return made;
+    }
+
+    /** What {@link #stepJudged} has worked out, by the step; empty while it is being worked
+     *  out. */
+    private final Map<Core, Optional<AtAStep>> stepsJudged = new IdentityHashMap<>();
+
     /** What is shown of each step, by the node it is, once {@link #judged} is worked out. */
     private final Map<Core, AtAStep> byStep = new IdentityHashMap<>();
 
@@ -314,8 +338,9 @@ final class StopsOfABody {
     }
 
     /** A part of what a run works out before a step, with the names it is worked out in; with
-     *  none, each step in it is read with the names where the walk met it. */
-    private record Part(Core node, InputReads names) {}
+     *  none, each step in it is read with the names where the walk met it. {@code every} where
+     *  every run getting to the step works it out, and not only some. */
+    private record Part(Core node, InputReads names, boolean every) {}
 
     /** Every way a run gets to {@code step}, and whether they are every way there is. */
     private record Ways(List<Reached> each, boolean every) {}
@@ -397,13 +422,8 @@ final class StopsOfABody {
                 continue;
             }
             if (forEvery) {
-                List<Part> before = null;
-                if (closure != null) {
-                    before = new ArrayList<>();
-                    for (Core part : first.parts().subList(0, first.parts().size() - 1)) {
-                        before.add(new Part(part, under(closure, part) ? one.reads() : null));
-                    }
-                }
+                List<Part> before = closure == null ? null
+                        : beforeOnTheApplication(first, closure, step, one.reads());
                 out.add(new Reached(met, reach, one.reads(),
                         ClosureApplications.madeWhateverTheRow(one)
                                 || (ClosureApplications.madeOnTheFirstElementWhateverTheRow(one)
@@ -428,12 +448,11 @@ final class StopsOfABody {
             List<Part> before = null;
             if (closure != null) {
                 before = new ArrayList<>();
-                for (Core part : first.parts().subList(0, first.parts().size() - 1)) {
-                    before.add(new Part(part, under(closure, part) ? reads : null));
-                }
+                // Each application before this one, whole, and then this one up to the step.
                 for (Reached earlier : out) {
-                    before.add(new Part(closure.body(), earlier.reads()));
+                    before.add(new Part(closure.body(), earlier.reads(), true));
                 }
+                before.addAll(beforeOnTheApplication(first, closure, step, reads));
             }
             // Where an operation stops at an answer, what the applications before answered decides
             // whether this one is made, which is what it is held under then.
@@ -442,6 +461,27 @@ final class StopsOfABody {
                     : ClosureApplications.madeWhereverTheOnesBeforeItAreGotPast(one);
             out.add(new Reached(met, reach, reads, onTheWay, before, one.reached(), false));
             answered = reads;
+        }
+        return out;
+    }
+
+    /**
+     * What a run on one application of {@code closure} works out before {@code step}, in the
+     * names {@code reads} of the application where a part stands in the closure: what the call
+     * works out before it applies the closure and what the body works out up to the step, as on
+     * the first application ({@link WhatARunWorksOutBeforeACount#workedOutAtTheFirstApplication}),
+     * and then what the step itself is worked out of, as anywhere else ({@link Evaluated#inOrder}).
+     */
+    private static List<Part> beforeOnTheApplication(
+            WhatARunWorksOutBeforeACount.FirstApplication first, Core.Block closure, Core step,
+            InputReads reads) {
+        List<Part> out = new ArrayList<>();
+        for (Core part : first.parts().subList(0, first.parts().size() - 1)) {
+            out.add(new Part(part, under(closure, part) ? reads : null, true));
+        }
+        for (Evaluated.Step operand : Evaluated.inOrder(Core.withoutStanding(step))) {
+            out.add(new Part(operand.expression(), reads,
+                    operand instanceof Evaluated.Step.Always));
         }
         return out;
     }
@@ -464,50 +504,58 @@ final class StopsOfABody {
     // ---- constructions ----
 
     /**
-     * What is shown of {@code made} on every way a run gets to it: inside a closure, on each
-     * application with what it asks read in that application's names, a stop shown on one being
-     * shown, and otherwise the first not resolved; elsewhere on every way at once.
+     * What is shown of {@code made} on every way a run gets to it, each read as an operation's
+     * is ({@link #waysTo}): with what it asks read in the names of the way, inside a closure the
+     * application's, and with what a run on it works out first, put together as every reader of
+     * a step puts its readings ({@link WhatEveryWayShows}).
      */
     private ConstructionStopAssessment.Judgement ofAConstruction(Core.Construct made) {
         Ways ways = waysTo(made);
-        Map<InputReads, List<WaysToASite.Reach>> byNames = new LinkedHashMap<>();
-        for (Reached each : ways.each()) {
-            byNames.computeIfAbsent(each.reads(), _ -> new ArrayList<>()).add(each.reach());
-        }
-        if (byNames.size() <= 1) {
-            return ofAConstruction(made, byNames.isEmpty() ? List.of()
-                    : byNames.values().iterator().next(), asked(made, null), ways.every());
-        }
-        ConstructionStopAssessment.Judgement first = null;
-        for (Map.Entry<InputReads, List<WaysToASite.Reach>> each : byNames.entrySet()) {
-            ConstructionStopAssessment.Judgement judged = ofAConstruction(made, each.getValue(),
-                    asked(made, each.getKey()), ways.every());
-            if (judged instanceof ConstructionStopAssessment.Judgement.Stops) {
-                return judged;
-            }
-            if (first == null || (first instanceof ConstructionStopAssessment.Judgement.Safe
-                    && judged instanceof ConstructionStopAssessment.Judgement.Unresolved)) {
-                first = judged;
-            }
-        }
-        return first;
+        return WhatEveryWayShows.together(ways.each().size(),
+                at -> ofAConstruction(made, ways.each().get(at)), WhatEveryWayShows::of,
+                ways.every(), () -> new ConstructionStopAssessment.Judgement.Unresolved(made,
+                        new AConstructionStopNotShown(made.typeName().key(), made.pos(),
+                                Optional.empty(), WhyAConstructionStopIsNotShown.REACH_NOT_SHOWN),
+                        new WhatAConstructionAsks.OnEveryRule()),
+                () -> ofAConstruction(made, null));
     }
 
-    private ConstructionStopAssessment.Judgement ofAConstruction(
-            Core.Construct made, List<WaysToASite.Reach> ways, AConstructionOnTheWay.Asked asked,
-            boolean every) {
+    /**
+     * What is shown of {@code made} on {@code reached}, one way a run gets to it, or on none.
+     *
+     * <p>What a run on it works out first is what one application works out where that is read
+     * ({@link Reached#before}), and the way's otherwise. A value is looked for on the way only
+     * where every run taking it makes the application and nothing it is made under is left
+     * unsaid; elsewhere what is shown is only that no run stops there.
+     */
+    private ConstructionStopAssessment.Judgement ofAConstruction(Core.Construct made,
+                                                                 Reached reached) {
         List<AConstructionOnTheWay.Reach> reaches = new ArrayList<>();
         List<SearchRegion> regions = new ArrayList<>();
-        for (int at = 0; at < ways.size(); at++) {
-            WaysToASite.Reach reach = ways.get(at);
-            reaches.add(new AConstructionOnTheWay.Reach(at, reach.way(), reach.way(),
-                    reach.before(), reach.read()));
-            if (Reachability.of(new WayToTheBorder(reach.way()), read.quantities().region())
+        if (reached != null) {
+            WaysToASite.Reach reach = reached.reach();
+            Supplier<Optional<WhatARunWorksOutBeforeACount.BeforeAConstruction>> before =
+                    reached.before() == null ? reach.before() : () -> Optional.of(
+                            new WhatARunWorksOutBeforeACount.BeforeAConstruction(
+                                    reached.before().stream().map(Part::node).toList(),
+                                    reached.before().stream().filter(Part::every)
+                                            .map(Part::node).toList()));
+            // One application of many is made where {@link Reached#onTheWay} says; one standing
+            // for every element is made under what its element meets, which a value looked for
+            // here is not held to, so it is looked for only where that asks nothing.
+            boolean madeUnsaid = reached.forEvery()
+                    && !(madeOnTheElementAs(reached.made()) instanceof List<?> relations
+                            && relations.isEmpty());
+            Supplier<Boolean> read = () -> reached.onTheWay() && wayRead(reached) && !madeUnsaid;
+            reaches.add(new AConstructionOnTheWay.Reach(0, reach.way(), reach.way(), before,
+                    read));
+            if (Reachability.of(new WayToTheBorder(reach.way()), this.read.quantities().region())
                     instanceof Reachability.Reaching reaching) {
                 regions.add(reaching.region());
             }
         }
-        AConstructionOnTheWay one = new AConstructionOnTheWay(made, asked, reaches, every);
+        AConstructionOnTheWay one = new AConstructionOnTheWay(made,
+                asked(made, reached == null ? null : reached.reads()), reaches, true);
         return ConstructionStopAssessment.ofASite(one, regions, asks(), constructionWays(), read,
                 definitions);
     }
@@ -572,9 +620,11 @@ final class StopsOfABody {
                     StopAssessment.WhyNone.WITHIN_ITS_ENDS));
         }
         Ways ways = waysTo(step);
+        // One figure for the question, spent along every way and every way of its values.
+        StopAssessment.Tries tries = new StopAssessment.Tries();
         List<List<StopAssessment.Judgement>> byWay = new ArrayList<>();
         for (Reached each : ways.each()) {
-            byWay.add(onAWay(step, each, within));
+            byWay.add(onAWay(step, each, within, tries));
         }
         return together(byWay, ways.every());
     }
@@ -640,7 +690,7 @@ final class StopsOfABody {
             }
             List<Map<NumericTerm, Attainment>> ways = new ArrayList<>();
             if (!waysOf(List.copyOf(worked.keySet()), 0, new LinkedHashMap<>(), new ArrayList<>(),
-                    worked, ways) || ways.isEmpty()
+                    worked, ways, new boolean[1]) || ways.isEmpty()
                     || worked.values().stream().anyMatch(each -> each.ways().isEmpty())) {
                 return null;
             }
@@ -652,7 +702,8 @@ final class StopsOfABody {
 
     /** What is shown of {@code step}'s operations by one way a run gets to it. */
     private List<StopAssessment.Judgement> onAWay(Core step, Reached reached,
-                                                  List<TakenConstraint.Affine> within) {
+                                                  List<TakenConstraint.Affine> within,
+                                                  StopAssessment.Tries tries) {
         WhatAWayLeavesOfAValue left = WhatAWayLeavesOfAValue.along(read, reached.reach().way());
         if (left == null) {
             return List.of(new StopAssessment.Judgement.Safe(null,
@@ -675,7 +726,7 @@ final class StopsOfABody {
         }
         List<StopAssessment.Judgement> out = new ArrayList<>();
         for (StopAssessment.Site site : sites) {
-            out.add(judgedOn(site, reached, left, within));
+            out.add(judgedOn(site, reached, left, within, tries));
         }
         return out;
     }
@@ -991,7 +1042,7 @@ final class StopsOfABody {
         }
         List<Attainment> ways = new ArrayList<>();
         boolean left = !waysOfKeeping(forms, keptBy, droppedBy, 0,
-                LinearForm.constant(ExactRatio.ZERO), new ArrayList<>(), ways);
+                LinearForm.constant(ExactRatio.ZERO), new ArrayList<>(), ways, new boolean[1]);
         return new Keeping(new Attainments(ways, left), range);
     }
 
@@ -1004,9 +1055,14 @@ final class StopsOfABody {
                                          List<List<List<TakenConstraint.Affine>>> droppedBy,
                                          int at, LinearForm<NumericTerm> sofar,
                                          List<TakenConstraint.Affine> holding,
-                                         List<Attainment> out) {
+                                         List<Attainment> out, boolean[] full) {
+        // Past the figure nothing more is made, and nothing more is looked at to make it.
+        if (full[0]) {
+            return false;
+        }
         if (at == forms.size()) {
             if (out.size() >= MOST_WAYS_OF_KEEPING) {
+                full[0] = true;
                 return false;
             }
             out.add(new Attainment(sofar, List.copyOf(holding)));
@@ -1016,7 +1072,7 @@ final class StopsOfABody {
         if (forms.get(at).plus(sofar) instanceof ExactAnswer.Held<LinearForm<NumericTerm>>(
                 var kept)) {
             all = under(keptBy.get(at), holding, () ->
-                    waysOfKeeping(forms, keptBy, droppedBy, at + 1, kept, holding, out));
+                    waysOfKeeping(forms, keptBy, droppedBy, at + 1, kept, holding, out, full));
         } else {
             all = false;
         }
@@ -1025,7 +1081,7 @@ final class StopsOfABody {
         }
         for (List<TakenConstraint.Affine> dropping : droppedBy.get(at)) {
             all &= under(dropping, holding, () ->
-                    waysOfKeeping(forms, keptBy, droppedBy, at + 1, sofar, holding, out));
+                    waysOfKeeping(forms, keptBy, droppedBy, at + 1, sofar, holding, out, full));
         }
         return all;
     }
@@ -1446,7 +1502,8 @@ final class StopsOfABody {
      *  {@code within} as well. */
     private StopAssessment.Judgement judgedOn(StopAssessment.Site site, Reached reached,
                                               WhatAWayLeavesOfAValue left,
-                                              List<TakenConstraint.Affine> within) {
+                                              List<TakenConstraint.Affine> within,
+                                              StopAssessment.Tries tries) {
         switch (site) {
             case StopAssessment.Site.PastItsEnds(var operation) -> {
                 if (left.keepsWithinItsEnds(operation)) {
@@ -1463,12 +1520,13 @@ final class StopsOfABody {
                 }
             }
         }
-        // A run that gets to the site got past what it works out first: each of those within its
-        // ends is what it meets as well.
+        // A run that gets to the site got past what every such run works out first: each of
+        // those within its ends is what it meets as well. What only some runs work out is
+        // nothing a run getting there need have met.
         GotPast workedOutFirst = gotPastOn(reached, left);
         List<TakenConstraint.Affine> pastFirst = new ArrayList<>(within);
         if (workedOutFirst != null) {
-            workedOutFirst.operations().forEach(each -> pastFirst.addAll(withinItsEnds(each)));
+            workedOutFirst.onEveryRun().forEach(each -> pastFirst.addAll(withinItsEnds(each)));
         }
         if (stopsNothingAlongEvery(site, reached, pastFirst)) {
             return new StopAssessment.Judgement.Safe(site,
@@ -1503,25 +1561,18 @@ final class StopsOfABody {
                         WhyAStopIsNotShown.A_CONDITION_NOT_READ);
             }
         }
-        // A condition that came out one of several ways is got past along any of them: a stop
-        // shown along one is shown.
-        StopAssessment.Judgement first = null;
-        for (List<TakenConstraint.Affine> one : ways) {
-            List<TakenConstraint.Affine> way = new ArrayList<>(one);
-            way.addAll(made);
+        // A condition that came out one of several ways is got past along any of them, each way
+        // read as one reading of the site ({@link WhatEveryWayShows}).
+        List<TakenConstraint.Affine> beside = made;
+        return WhatEveryWayShows.together(ways.size(), at -> {
+            List<TakenConstraint.Affine> way = new ArrayList<>(ways.get(at));
+            way.addAll(beside);
             way.addAll(within);
-            StopAssessment.Judgement judged = lookedForByEachWay(site, gotPast, left, way);
-            if (judged instanceof StopAssessment.Judgement.Stops) {
-                return judged;
-            }
-            if (first == null) {
-                first = judged;
-            }
-        }
-        return first == null || waysLeft[0]
-                ? new StopAssessment.Judgement.Unresolved(site,
-                        WhyAStopIsNotShown.NO_VALUE_FOUND_WITHIN_WHAT_IS_TRIED)
-                : first;
+            return lookedForByEachWay(site, gotPast, left, way, tries);
+        }, WhatEveryWayShows::of, !waysLeft[0], () -> new StopAssessment.Judgement.Unresolved(
+                site, WhyAStopIsNotShown.NO_VALUE_FOUND_WITHIN_WHAT_IS_TRIED),
+                () -> new StopAssessment.Judgement.Unresolved(site,
+                        WhyAStopIsNotShown.NO_VALUE_FOUND_WITHIN_WHAT_IS_TRIED));
     }
 
     /** How many ways of the values worked out an operation and what comes before it are over are
@@ -1541,7 +1592,8 @@ final class StopsOfABody {
      */
     private StopAssessment.Judgement lookedForByEachWay(StopAssessment.Site site, GotPast gotPast,
                                                         WhatAWayLeavesOfAValue left,
-                                                        List<TakenConstraint.Affine> way) {
+                                                        List<TakenConstraint.Affine> way,
+                                                        StopAssessment.Tries tries) {
         Map<NumericTerm, Attainments> worked = new LinkedHashMap<>();
         switch (site) {
             case StopAssessment.Site.PastItsEnds(var operation) ->
@@ -1558,15 +1610,23 @@ final class StopsOfABody {
                                 : StopAssessment.WhyNone.WITHIN_ITS_ENDS);
             }
             return StopAssessment.aStopLookedFor(site, gotPast.operations(), gotPast.divisors(),
-                    left, way, read);
+                    left, way, read, tries);
         }
         List<NumericTerm> values = List.copyOf(worked.keySet());
         List<Map<NumericTerm, Attainment>> ways = new ArrayList<>();
         boolean cutShort = !waysOf(values, 0, new LinkedHashMap<>(), new ArrayList<>(way), worked,
-                ways);
-        StopAssessment.Judgement first = null;
-        boolean everyOneWithin = true;
-        for (Map<NumericTerm, Attainment> one : ways) {
+                ways, new boolean[1]);
+        StopAssessment.Judgement safe = new StopAssessment.Judgement.Safe(site,
+                site instanceof StopAssessment.Site.ByNought
+                        ? StopAssessment.WhyNone.DIVISOR_AWAY_FROM_NOUGHT
+                        : StopAssessment.WhyNone.WITHIN_ITS_ENDS);
+        StopAssessment.Judgement untried = new StopAssessment.Judgement.Unresolved(site,
+                WhyAStopIsNotShown.NO_VALUE_FOUND_WITHIN_WHAT_IS_TRIED);
+        // Each way of the values is one reading of the site ({@link WhatEveryWayShows}); a value
+        // no way is known for leaves the ways short of every one, as a way left untried does. No
+        // way at all is no row that meets the way, which stops nothing.
+        return WhatEveryWayShows.together(ways.size(), at -> {
+            Map<NumericTerm, Attainment> one = ways.get(at);
             List<TakenConstraint.Affine> holding = new ArrayList<>(way);
             one.values().forEach(each -> holding.addAll(each.holding()));
             List<UndividedByARelation.IntOperation> before = new ArrayList<>();
@@ -1580,36 +1640,19 @@ final class StopsOfABody {
                         new StopAssessment.Site.ByNought(atTheWay(divisor, one));
             };
             if (stopsNothingUnder(there, holding)) {
-                continue;
+                return safe;
             }
-            everyOneWithin = false;
             StopAssessment.Judgement judged = StopAssessment.aStopLookedFor(there, before,
-                    divisors, left, holding, read);
-            if (judged instanceof StopAssessment.Judgement.Stops(var shown)) {
-                // An operation is said as the sum the way makes it, over numbers of the input; a
-                // divisor a way makes a number written is said as it is written.
-                return site instanceof StopAssessment.Site.ByNought
-                        ? new StopAssessment.Judgement.Stops(shown.ofTheSiteAsWritten(site))
-                        : judged;
-            }
-            if (first == null) {
-                first = judged;
-            }
-        }
-        // A value no way is known for is none that keeps the site from stopping.
-        if (everyOneWithin && !cutShort
-                && worked.values().stream().noneMatch(each -> each.ways().isEmpty())) {
-            // Every way a row makes the values come to keeps the site from stopping, or none is
-            // one a row on this way meets.
-            return new StopAssessment.Judgement.Safe(site,
-                    site instanceof StopAssessment.Site.ByNought
-                            ? StopAssessment.WhyNone.DIVISOR_AWAY_FROM_NOUGHT
-                            : StopAssessment.WhyNone.WITHIN_ITS_ENDS);
-        }
-        return first == null || cutShort
-                ? new StopAssessment.Judgement.Unresolved(site,
-                        WhyAStopIsNotShown.NO_VALUE_FOUND_WITHIN_WHAT_IS_TRIED)
-                : first;
+                    divisors, left, holding, read, tries);
+            // An operation is said as the sum the way makes it, over numbers of the input; a
+            // divisor a way makes a number written is said as it is written.
+            return judged instanceof StopAssessment.Judgement.Stops(var shown)
+                    && site instanceof StopAssessment.Site.ByNought
+                    ? new StopAssessment.Judgement.Stops(shown.ofTheSiteAsWritten(site))
+                    : judged;
+        }, WhatEveryWayShows::of, !cutShort
+                && worked.values().stream().noneMatch(each -> each.ways().isEmpty()),
+                () -> untried, () -> safe);
     }
 
     /** That {@code operation} lies within its ends, as relations of numbers of the input; none
@@ -1793,9 +1836,14 @@ final class StopsOfABody {
                                   Map<NumericTerm, Attainment> sofar,
                                   List<TakenConstraint.Affine> holding,
                                   Map<NumericTerm, Attainments> worked,
-                                  List<Map<NumericTerm, Attainment>> out) {
+                                  List<Map<NumericTerm, Attainment>> out, boolean[] full) {
+        // Past the figure nothing more is made, and nothing more is looked at to make it.
+        if (full[0]) {
+            return false;
+        }
         if (at == values.size()) {
             if (out.size() >= MOST_WAYS_TRIED) {
+                full[0] = true;
                 return false;
             }
             out.add(Map.copyOf(sofar));
@@ -1806,7 +1854,7 @@ final class StopsOfABody {
         for (Attainment way : ways.ways()) {
             sofar.put(values.get(at), way);
             all &= under(way.holding(), holding, () ->
-                    waysOf(values, at + 1, sofar, holding, worked, out));
+                    waysOf(values, at + 1, sofar, holding, worked, out, full));
             sofar.remove(values.get(at));
         }
         return all;
@@ -1826,78 +1874,133 @@ final class StopsOfABody {
                 operation.after(), operation.ofTheRepresentation(), operation.origin());
     }
 
-    /** What a value has to get past before a step: each operation within its ends, and each
-     *  divisor away from nought, a divisor no form of the input's numbers among them as null. */
+    /**
+     * What a run works out before a step, read two ways from one account of it.
+     *
+     * @param operations what a value has to get past to get to the step: each operation a run
+     *                   may work out first within its ends, and each divisor away from nought, a
+     *                   divisor no form of the input's numbers among them as null — what a value
+     *                   shown to stop there, or every run said to, is held to
+     * @param onEveryRun the operations of those every run getting to the step works out, and not
+     *                   only some: what a run getting there has met, which is all a proof that it
+     *                   does not stop there may take as met
+     */
     private record GotPast(List<UndividedByARelation.IntOperation> operations,
-                           List<LinearForm<NumericTerm>> divisors) {}
+                           List<LinearForm<NumericTerm>> divisors,
+                           List<UndividedByARelation.IntOperation> onEveryRun) {}
 
     /**
-     * What a run works out first in {@code parts} asks of a value that gets past it, every step in
-     * them that may end a run read as it stands where the walk met it; null where one is not read,
-     * or is a step a value is not asked of here. A step every value {@code left} leaves gets past
-     * ({@link WhatAWayLeavesOfAValue#endsNoRunAt}) asks nothing.
+     * What a run on {@code reached} works out before the step ({@link GotPast}): what one
+     * application works out, where that is read ({@link Reached#before}), and otherwise what the
+     * way says comes first, a part every run works out told from one some runs do. Null where a
+     * step in it is not read, or is one a value is not asked of here.
      */
-    private GotPast gotPast(List<Core> parts, WhatAWayLeavesOfAValue left) {
-        List<Part> each = new ArrayList<>(parts.size());
-        parts.forEach(part -> each.add(new Part(part, null)));
-        return gotPastIn(each, left);
-    }
-
-    /** What a run on {@code reached} works out before the step asks of a value that gets past
-     *  it: what one application works out, where that is read ({@link Reached#before}), and
-     *  otherwise what the way says comes first. */
     private GotPast gotPastOn(Reached reached, WhatAWayLeavesOfAValue left) {
         if (reached.before() != null) {
             return gotPastIn(reached.before(), left);
         }
-        return reached.reach().before().get()
-                .map(first -> gotPast(first.onSomeRun(), left)).orElse(null);
+        return reached.reach().before().get().map(first -> {
+            Set<Core> onEveryRun = Collections.newSetFromMap(new IdentityHashMap<>());
+            onEveryRun.addAll(first.onEveryRun());
+            List<Part> parts = new ArrayList<>();
+            first.onSomeRun().forEach(part -> parts.add(
+                    new Part(part, null, onEveryRun.contains(part))));
+            return gotPastIn(parts, left);
+        }).orElse(null);
     }
 
-    /** The same, of {@code parts} each worked out with the names it holds, or with the names
-     *  where the walk met it where it holds none. */
+    /**
+     * The same, of {@code parts} each worked out with the names it holds, or with the names where
+     * the walk met it where it holds none. Of a part every run works out, the steps that run
+     * whenever it does are worked out on every run ({@link Evaluated#runningWhenever}); every
+     * other step in it, an arm's, is worked out on some.
+     */
     private GotPast gotPastIn(List<Part> parts, WhatAWayLeavesOfAValue left) {
         List<UndividedByARelation.IntOperation> operations = new ArrayList<>();
         List<LinearForm<NumericTerm>> divisors = new ArrayList<>();
+        List<UndividedByARelation.IntOperation> onEveryRun = new ArrayList<>();
         Set<Core> through = Collections.newSetFromMap(new IdentityHashMap<>());
         for (Part part : parts) {
-            if (!past(part.node(), part.names(), left, operations, divisors, through)) {
+            Set<Core> runs = Collections.newSetFromMap(new IdentityHashMap<>());
+            if (part.every()) {
+                Evaluated.runningWhenever(part.node(), runs);
+            }
+            if (!past(part.node(), part.names(), left, runs,
+                    new GotPast(operations, divisors, onEveryRun), through)) {
                 return null;
             }
         }
-        return new GotPast(operations, divisors);
+        return new GotPast(operations, divisors, onEveryRun);
     }
 
-    private boolean past(Core e, InputReads reads, WhatAWayLeavesOfAValue left,
-                         List<UndividedByARelation.IntOperation> operations,
-                         List<LinearForm<NumericTerm>> divisors, Set<Core> through) {
+    /**
+     * What working out {@code e} asks of a value getting past it, into {@code into}: each step in
+     * it that may end a run, read with {@code reads}, as an operation every run works out where it
+     * is one of {@code runs}. A function value works out nothing where it is written, and each
+     * application of it works out its body where it is applied: a run that gets past an
+     * application has got past each step of the body, which is that step's own to show
+     * ({@link #stopsNoRunOfItsOwn}). False where a step is not read so.
+     */
+    private boolean past(Core e, InputReads reads, WhatAWayLeavesOfAValue left, Set<Core> runs,
+                         GotPast into, Set<Core> through) {
         Core node = Core.withoutStanding(e);
         if (Evaluated.makesAFunction(node)) {
-            return true;
+            return eachStepStopsNoRunOfItsOwn(node);
         }
         Core template = definitions.builtBy(node);
         if (template != null) {
             if (!through.add(template)) {
                 return false;
             }
-            boolean past = past(template, null, left, operations, divisors, through);
+            boolean past = past(template, null, left, Set.of(), into, through);
             through.remove(template);
             return past;
         }
         if (node instanceof Core.IfConstructed attempt) {
             boolean[] all = {true};
             WhatARunMayEndFor.forEachWorkedOut(attempt, (part, _) -> all[0] = all[0]
-                    && past(part, reads, left, operations, divisors, through));
+                    && past(part, reads, left, runs, into, through));
             return all[0];
         }
-        if (WhereARunMayStop.aStepARunMayStopAt(node) && !aStepGotPast(node, reads, left,
-                operations, divisors)) {
-            return false;
+        if (WhereARunMayStop.aStepARunMayStopAt(node)) {
+            int from = into.operations().size();
+            if (!aStepGotPast(node, reads, left, into.operations(), into.divisors())) {
+                return false;
+            }
+            if (runs.contains(node)) {
+                into.onEveryRun().addAll(into.operations().subList(from,
+                        into.operations().size()));
+            }
         }
         boolean[] all = {true};
         Core.forEachChild(node, child -> all[0] = all[0]
-                && past(child, reads, left, operations, divisors, through));
+                && past(child, reads, left, runs, into, through));
         return all[0];
+    }
+
+    /** Whether every step the walk met in {@code e}, a function value's body among them, stops
+     *  no run of its own ({@link #stopsNoRunOfItsOwn}). */
+    private boolean eachStepStopsNoRunOfItsOwn(Core e) {
+        Core node = Core.withoutStanding(e);
+        if (!where.everyPlace(node).isEmpty() && !gotPast(node) && !stopsNoRunOfItsOwn(node)) {
+            return false;
+        }
+        boolean[] all = {true};
+        Core.forEachChild(node, child -> all[0] = all[0] && eachStepStopsNoRunOfItsOwn(child));
+        return all[0];
+    }
+
+    /**
+     * Whether no run stops at {@code step}, as what is shown of it says ({@link #stepJudged}):
+     * every site of it safe. Not where it is being judged now, which is a step that comes before
+     * itself, and is not shown to get past.
+     */
+    private boolean stopsNoRunOfItsOwn(Core step) {
+        AtAStep judged = stepJudged(step);
+        return judged != null
+                && judged.operations().stream().allMatch(StopAssessment.Judgement.Safe.class::isInstance)
+                && judged.construction().map(
+                        ConstructionStopAssessment.Judgement.Safe.class::isInstance).orElse(true);
     }
 
     /**
@@ -1962,11 +2065,11 @@ final class StopsOfABody {
         }
         List<StopAssessment.Judgement> out = new ArrayList<>();
         for (List<StopAssessment.Judgement> judged : bySite.values()) {
-            judged.stream().filter(StopAssessment.Judgement.Stops.class::isInstance).findFirst()
-                    .or(() -> judged.stream()
-                            .filter(StopAssessment.Judgement.Unresolved.class::isInstance)
-                            .findFirst())
-                    .ifPresent(out::add);
+            StopAssessment.Judgement one = WhatEveryWayShows.together(judged.size(), judged::get,
+                    WhatEveryWayShows::of, true, () -> null, () -> null);
+            if (!(one instanceof StopAssessment.Judgement.Safe)) {
+                out.add(one);
+            }
         }
         if (!out.isEmpty()) {
             return out;
