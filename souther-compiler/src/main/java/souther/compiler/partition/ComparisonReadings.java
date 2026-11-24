@@ -1292,26 +1292,28 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             Supplier<Boolean> read = () -> outside
                     && (!(inner.inside() || WhatARunWorksOutBeforeACount.goesIntoAFunctionValue(
                             inner.root(), site)) || inner.reached().wheneverTheWayIs(applying));
-            Supplier<Optional<WhatARunWorksOutBeforeACount.BeforeAConstruction>> before = () -> {
-                WhatARunWorksOutBeforeACount.BeforeAConstruction past =
-                        WhatARunWorksOutBeforeACount.BeforeAConstruction.NOTHING;
-                for (Stretch stretch : way.through()) {
-                    Optional<WhatARunWorksOutBeforeACount.BeforeAConstruction> going =
-                            in.constructions().workedOutGoingIn(stretch.root(), stretch.at());
-                    if (going.isEmpty()) {
-                        return Optional.empty();
-                    }
-                    past = past.then(going.get());
-                }
-                if (!inner.once().once(applying)) {
-                    return Optional.empty();
-                }
-                return WhatARunWorksOutBeforeACount.workedOutBeforeASite(inner.root(), site)
-                        .map(past::then);
-            };
+            Supplier<Optional<WhatARunWorksOutBeforeACount.BeforeAConstruction>> goingIn =
+                    new Pullback.Once<>(() -> {
+                        WhatARunWorksOutBeforeACount.BeforeAConstruction past =
+                                WhatARunWorksOutBeforeACount.BeforeAConstruction.NOTHING;
+                        for (Stretch stretch : way.through()) {
+                            Optional<WhatARunWorksOutBeforeACount.BeforeAConstruction> going =
+                                    in.constructions().workedOutGoingIn(stretch.root(),
+                                            stretch.at());
+                            if (going.isEmpty()) {
+                                return Optional.empty();
+                            }
+                            past = past.then(going.get());
+                        }
+                        return Optional.of(past);
+                    });
+            Supplier<Optional<WhatARunWorksOutBeforeACount.BeforeAConstruction>> before = () ->
+                    !inner.once().once(applying) ? Optional.empty() : goingIn.get().flatMap(past ->
+                            WhatARunWorksOutBeforeACount.workedOutBeforeASite(inner.root(), site)
+                                    .map(past::then));
             each.add(new WaysToASite.Reach(ElementsOnTheWay.keptToOneElementEach(
                     way.toTheComparison(), readsTheElements), new Pullback.Once<>(before),
-                    new Pullback.Once<>(read), () -> outside));
+                    goingIn, new Pullback.Once<>(read), () -> outside));
         }
         return new WaysToASite(each, ways.every());
     }

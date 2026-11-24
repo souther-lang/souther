@@ -28,6 +28,10 @@ record WaysToASite(List<Reach> each, boolean every) {
      *               the walk met it on in the tree past what was carried into it
      * @param before what a run by this way works out before the step, in each tree it goes
      *               through and then in the step's own; empty where that is not read
+     * @param goingIn the first part of that alone: what it works out in each tree it goes
+     *               through before it gets into the step's own, which a reader of what one
+     *               application of a function value works out puts before it; empty where that is
+     *               not read
      * @param read   whether the way is on the way the walk carried: outside every function value,
      *               or got to whatever the row is ({@link ClosureApplications}). A way not read
      *               holds what every run by it meets, and not what one run takes
@@ -38,6 +42,7 @@ record WaysToASite(List<Reach> each, boolean every) {
      */
     record Reach(List<OnTheWay> way,
                  Supplier<Optional<WhatARunWorksOutBeforeACount.BeforeAConstruction>> before,
+                 Supplier<Optional<WhatARunWorksOutBeforeACount.BeforeAConstruction>> goingIn,
                  Supplier<Boolean> read, Supplier<Boolean> readUpToTheApplications) {
 
         Reach {

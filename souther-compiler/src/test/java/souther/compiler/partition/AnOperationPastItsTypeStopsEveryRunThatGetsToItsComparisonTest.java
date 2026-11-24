@@ -273,20 +273,22 @@ class AnOperationPastItsTypeStopsEveryRunThatGetsToItsComparisonTest {
     }
 
     /**
-     * Each element of a list written out is a number of its own, and the sum over the last is
-     * past the greatest where {@code x} is nine below it, and not ten: the run stops in it there,
-     * after the sum over the first got past. Read element by element up to a figure, a list of
-     * every whole number between two numbers written down is the same, each application a step
-     * of its own: the run that gets to the last got past the one before it, at {@code x} nine
-     * below the greatest and no more.
+     * Each element of a list written out is a number of its own, and a run stops in the sum
+     * over one of them on its application. What every run stops at is said of a step every run
+     * gets to by one way, and a step in a closure applied to two elements is got to by two: the
+     * rows of one application are proved in its names, so none is said of every run getting
+     * to the step. That a run stops there is shown all the same.
      */
     @Test
     void aSumOverTheLastElementOfAListWrittenOutStopsEveryRunPastIt() {
-        assertEquals(List.of("x + 10 where x " + plus(GREATEST, -9) + ".."),
+        // Shown on each application, and said of every run getting to the step on none: the
+        // rows of one application are proved in its names, and a run gets to the step by
+        // another as well.
+        assertEquals(List.of(),
                 everyRunStops("Int", "x", "", "List.all(n -> n + x >= 0, [0, 10])"));
-        assertTrue(everyRunStops("Int", "x", "",
-                        "List.all(n -> n + x >= 0, List.rangeInclusive(0, 10))")
-                .contains("x + 10 where x " + plus(GREATEST, -9) + ".." + plus(GREATEST, -9)));
+        assertEquals(List.of(), everyRunStops("Int", "x", "",
+                "List.all(n -> n + x >= 0, List.rangeInclusive(0, 10))"));
+        assertFalse(stopsSaid("Int", "x", "", "List.all(n -> n + x >= 0, [0, 10])").isEmpty());
     }
 
     /**
@@ -298,8 +300,9 @@ class AnOperationPastItsTypeStopsEveryRunThatGetsToItsComparisonTest {
     void aSumOnAnApplicationMadeOnlyPastAnAnswerStopsOnlyTheRunsThatMakeIt() {
         assertEquals(List.of(), everyRunStops("Int", "x", "", "List.any(n -> n + x >= 0, [0, 10])"));
         assertEquals(List.of(), stopsSaid("Int", "x", "", "List.any(n -> n + x >= 0, [0, 10])"));
-        assertEquals(List.of("x + 10 where x " + plus(GREATEST, -9) + ".."),
+        assertEquals(List.of(),
                 everyRunStops("Int", "x", "", "List.any(n -> n + x < 0, [0, 10])"));
+        assertFalse(stopsSaid("Int", "x", "", "List.any(n -> n + x < 0, [0, 10])").isEmpty());
     }
 
     /** A closure applied to a list holding nothing works nothing out on any run. */

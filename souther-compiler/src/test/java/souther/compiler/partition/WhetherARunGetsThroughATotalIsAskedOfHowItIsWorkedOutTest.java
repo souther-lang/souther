@@ -87,8 +87,10 @@ class WhetherARunGetsThroughATotalIsAskedOfHowItIsWorkedOutTest {
         String sum = report(inputs, UNUSED, "List.sum([n, 1, -1]) >= k");
         String fold = report(inputs, UNUSED, "List.fold((acc, x) -> acc + x, 0, [n, 1, -1]) >= k");
         assertEquals("", whereEveryRunStops(sum), sum);
-        assertEquals(EVERY_RUN_STOPS + " in n + 1 where n is at least " + MAX,
-                whereEveryRunStops(fold), fold);
+        // The fold's step is got to on three applications, each proved in its own names: a stop
+        // is shown there, and what every run getting to the step stops at is said of none.
+        assertEquals("", whereEveryRunStops(fold), fold);
+        assertTrue(fold.contains("· may stop a run: "), fold);
     }
 
     /**
@@ -276,10 +278,14 @@ class WhetherARunGetsThroughATotalIsAskedOfHowItIsWorkedOutTest {
     void aTotalOfWhatAClosureMakesOfEachElementStopsWhereAnApplicationDoes() {
         String report = report("n: Int, m: Int, k: Int", UNUSED,
                 "List.sum(List.map(x -> 2 * x, [n, m])) >= k");
-        // Said of the step the closure is, whichever step the section lists first.
-        assertTrue(whereEveryRunStops(report).lines().anyMatch(line ->
-                line.startsWith(EVERY_RUN_STOPS + " in 2 * n where")
-                        && line.contains("in 2 * m where")), report);
+        // The closure's step is got to on two applications, each proved in its own names: a stop
+        // is shown there, and what every run getting to it stops at is said of none. The sum
+        // over what they answer comes after the applications, which may stop the run first, so
+        // whether a run stops in it is not resolved.
+        assertTrue(report.contains("· may stop a run: "), report);
+        assertEquals("", whereEveryRunStops(report), report);
+        assertTrue(report.contains("whether a run stops in 2 * m + 2 * n is not determined:"
+                + " something evaluated before it may end the run first"), report);
     }
 
     /**

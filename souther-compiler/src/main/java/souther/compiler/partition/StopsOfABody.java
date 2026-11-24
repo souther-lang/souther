@@ -183,16 +183,21 @@ final class StopsOfABody {
                     .allMatch(StopAssessment.Judgement.Safe.class::isInstance)) {
                 continue;
             }
+            // What keeps every run going is said of every step together, so a step whose ways are
+            // not every way there is, or one of which is not read, leaves nothing to say.
+            Ways ways = waysTo(each.step());
+            if (!ways.every()) {
+                return Map.of();
+            }
             List<StopEvidence> ofTheStep = new ArrayList<>();
-            for (Reached way : waysTo(each.step()).each()) {
+            for (Reached way : ways.each()) {
                 StopEvidence own = ownWorking(each.step(), way);
                 if (own == null) {
-                    ofTheStep = null;
-                    break;
+                    return Map.of();
                 }
                 ofTheStep.add(own);
             }
-            if (ofTheStep == null || ofTheStep.isEmpty()) {
+            if (ofTheStep.isEmpty()) {
                 continue;
             }
             stopping.add(each.step());
@@ -326,7 +331,7 @@ final class StopsOfABody {
      *                 ({@link #madeOnTheElementAs})
      */
     private record Reached(WhereARunMayStop.Met met, WaysToASite.Reach reach, InputReads reads,
-                           boolean onTheWay, List<Part> before, Proposition made,
+                           boolean onTheWay, BeforeAStep before, Proposition made,
                            boolean forEvery) {}
 
     /** Whether the way {@code reached} is by is on the way the walk carried: inside a closure
@@ -337,13 +342,22 @@ final class StopsOfABody {
                 : reached.reach().read().get();
     }
 
-    /** A part of what a run works out before a step, with the names it is worked out in; with
-     *  none, each step in it is read with the names where the walk met it. {@code every} where
-     *  every run getting to the step works it out, and not only some. */
-    private record Part(Core node, InputReads names, boolean every) {}
+    /**
+     * Every way a run gets to {@code step}, and whether they are every way there is.
+     *
+     * <p>What is said of a step beyond whether a run may stop there — the rows every run
+     * getting there stops at, what keeps every run going — is a claim about every run that gets
+     * there, and is made only of the ways that are every way there is. A claim one way holds is
+     * proved under that way's conditions and in its names, and is said without them, so it is
+     * made only where that way is the one way there is ({@link #areOne}).
+     */
+    private record Ways(List<Reached> each, boolean every) {
 
-    /** Every way a run gets to {@code step}, and whether they are every way there is. */
-    private record Ways(List<Reached> each, boolean every) {}
+        /** Whether every run getting to the step gets there by one way, which is read. */
+        boolean areOne() {
+            return every && each.size() == 1;
+        }
+    }
 
     /**
      * Every way a run gets to {@code step}: by each way into the tree it stands in, and inside a
@@ -422,8 +436,9 @@ final class StopsOfABody {
                 continue;
             }
             if (forEvery) {
-                List<Part> before = closure == null ? null
-                        : beforeOnTheApplication(first, closure, step, one.reads());
+                BeforeAStep before = closure == null ? null
+                        : beforeOnTheApplication(reach, first, closure, step, one.reads(),
+                                List.of());
                 out.add(new Reached(met, reach, one.reads(),
                         ClosureApplications.madeWhateverTheRow(one)
                                 || (ClosureApplications.madeOnTheFirstElementWhateverTheRow(one)
@@ -445,18 +460,12 @@ final class StopsOfABody {
                             read.rules().newtypes());
                 }
             }
-            List<Part> before = null;
-            if (closure != null) {
-                before = new ArrayList<>();
-                // Each application before this one, whole, and then this one up to the step.
-                for (Reached earlier : out) {
-                    before.add(new Part(closure.body(), earlier.reads(), true));
-                }
-                before.addAll(beforeOnTheApplication(first, closure, step, reads));
-            }
+            BeforeAStep before = closure == null ? null
+                    : beforeOnTheApplication(reach, first, closure, step, reads,
+                            out.stream().map(Reached::reads).toList());
             // Where an operation stops at an answer, what the applications before answered decides
             // whether this one is made, which is what it is held under then.
-            boolean onTheWay = before == null
+            boolean onTheWay = closure == null
                     ? ClosureApplications.madeWhateverTheRow(one)
                     : ClosureApplications.madeWhereverTheOnesBeforeItAreGotPast(one);
             out.add(new Reached(met, reach, reads, onTheWay, before, one.reached(), false));
@@ -466,24 +475,29 @@ final class StopsOfABody {
     }
 
     /**
-     * What a run on one application of {@code closure} works out before {@code step}, in the
-     * names {@code reads} of the application where a part stands in the closure: what the call
-     * works out before it applies the closure and what the body works out up to the step, as on
-     * the first application ({@link WhatARunWorksOutBeforeACount#workedOutAtTheFirstApplication}),
-     * and then what the step itself is worked out of, as anywhere else ({@link Evaluated#inOrder}).
+     * What a run on one application of {@code closure} works out before {@code step}
+     * ({@link BeforeAStep#onAnApplication}): what it works out going into the tree the closure
+     * stands in, by {@code reach}; each application before this one, whole, in the names
+     * {@code earlier} it was made in; what the call works out before it applies the closure and
+     * what the body works out up to the step, as on the first application
+     * ({@link WhatARunWorksOutBeforeACount#workedOutAtTheFirstApplication}), in this
+     * application's names {@code reads} where a part stands in the closure; and then what the
+     * step itself is worked out of, as anywhere else ({@link Evaluated#inOrder}). Null where what
+     * comes first going in is not read.
      */
-    private static List<Part> beforeOnTheApplication(
-            WhatARunWorksOutBeforeACount.FirstApplication first, Core.Block closure, Core step,
-            InputReads reads) {
-        List<Part> out = new ArrayList<>();
+    private static BeforeAStep beforeOnTheApplication(
+            WaysToASite.Reach reach, WhatARunWorksOutBeforeACount.FirstApplication first,
+            Core.Block closure, Core step, InputReads reads, List<InputReads> earlier) {
+        List<BeforeAStep.Part> inside = new ArrayList<>();
+        earlier.forEach(names -> inside.add(new BeforeAStep.Part(closure.body(), names, true)));
         for (Core part : first.parts().subList(0, first.parts().size() - 1)) {
-            out.add(new Part(part, under(closure, part) ? reads : null, true));
+            inside.add(new BeforeAStep.Part(part, under(closure, part) ? reads : null, true));
         }
         for (Evaluated.Step operand : Evaluated.inOrder(Core.withoutStanding(step))) {
-            out.add(new Part(operand.expression(), reads,
+            inside.add(new BeforeAStep.Part(operand.expression(), reads,
                     operand instanceof Evaluated.Step.Always));
         }
-        return out;
+        return BeforeAStep.onAnApplication(reach.goingIn().get(), inside).orElse(null);
     }
 
     /** Whether {@code part} stands inside the body of {@code closure}. */
@@ -535,11 +549,8 @@ final class StopsOfABody {
         if (reached != null) {
             WaysToASite.Reach reach = reached.reach();
             Supplier<Optional<WhatARunWorksOutBeforeACount.BeforeAConstruction>> before =
-                    reached.before() == null ? reach.before() : () -> Optional.of(
-                            new WhatARunWorksOutBeforeACount.BeforeAConstruction(
-                                    reached.before().stream().map(Part::node).toList(),
-                                    reached.before().stream().filter(Part::every)
-                                            .map(Part::node).toList()));
+                    reached.before() == null ? reach.before()
+                            : () -> Optional.of(reached.before().asAConstructionReadsIt());
             // One application of many is made where {@link Reached#onTheWay} says; one standing
             // for every element is made under what its element meets, which a value looked for
             // here is not held to, so it is looked for only where that asks nothing.
@@ -641,8 +652,12 @@ final class StopsOfABody {
         if (endsNoRunWhereItsClosureIsApplied(step)) {
             return List.of();
         }
+        Ways ways = waysTo(step);
+        if (!ways.areOne()) {
+            return List.of();
+        }
         Set<EveryRunStops> out = new LinkedHashSet<>();
-        for (Reached each : waysTo(step).each()) {
+        for (Reached each : ways.each()) {
             WhatAWayLeavesOfAValue left = WhatAWayLeavesOfAValue.along(read, each.reach().way());
             if (left == null
                     || !(Reachability.of(new WayToTheBorder(each.reach().way()),
@@ -1896,17 +1911,9 @@ final class StopsOfABody {
      * step in it is not read, or is one a value is not asked of here.
      */
     private GotPast gotPastOn(Reached reached, WhatAWayLeavesOfAValue left) {
-        if (reached.before() != null) {
-            return gotPastIn(reached.before(), left);
-        }
-        return reached.reach().before().get().map(first -> {
-            Set<Core> onEveryRun = Collections.newSetFromMap(new IdentityHashMap<>());
-            onEveryRun.addAll(first.onEveryRun());
-            List<Part> parts = new ArrayList<>();
-            first.onSomeRun().forEach(part -> parts.add(
-                    new Part(part, null, onEveryRun.contains(part))));
-            return gotPastIn(parts, left);
-        }).orElse(null);
+        BeforeAStep before = reached.before() != null ? reached.before()
+                : reached.reach().before().get().map(BeforeAStep::onTheWay).orElse(null);
+        return before == null ? null : gotPastIn(before.parts(), left);
     }
 
     /**
@@ -1915,12 +1922,12 @@ final class StopsOfABody {
      * whenever it does are worked out on every run ({@link Evaluated#runningWhenever}); every
      * other step in it, an arm's, is worked out on some.
      */
-    private GotPast gotPastIn(List<Part> parts, WhatAWayLeavesOfAValue left) {
+    private GotPast gotPastIn(List<BeforeAStep.Part> parts, WhatAWayLeavesOfAValue left) {
         List<UndividedByARelation.IntOperation> operations = new ArrayList<>();
         List<LinearForm<NumericTerm>> divisors = new ArrayList<>();
         List<UndividedByARelation.IntOperation> onEveryRun = new ArrayList<>();
         Set<Core> through = Collections.newSetFromMap(new IdentityHashMap<>());
-        for (Part part : parts) {
+        for (BeforeAStep.Part part : parts) {
             Set<Core> runs = Collections.newSetFromMap(new IdentityHashMap<>());
             if (part.every()) {
                 Evaluated.runningWhenever(part.node(), runs);
@@ -1944,8 +1951,12 @@ final class StopsOfABody {
     private boolean past(Core e, InputReads reads, WhatAWayLeavesOfAValue left, Set<Core> runs,
                          GotPast into, Set<Core> through) {
         Core node = Core.withoutStanding(e);
+        // Making a function value works none of its body out; applying one does.
         if (Evaluated.makesAFunction(node)) {
-            return eachStepStopsNoRunOfItsOwn(node);
+            return true;
+        }
+        if (!appliesNothingThatStops(node, reads)) {
+            return false;
         }
         Core template = definitions.builtBy(node);
         if (template != null) {
@@ -1976,6 +1987,41 @@ final class StopsOfABody {
         Core.forEachChild(node, child -> all[0] = all[0]
                 && past(child, reads, left, runs, into, through));
         return all[0];
+    }
+
+    /**
+     * Whether every function value {@code node} may apply — one a call is handed, or the one an
+     * application applies — has a body every step of which stops no run of its own
+     * ({@link #eachStepStopsNoRunOfItsOwn}): a run that gets past the call has got past each
+     * application it made. A function value handed by a name is the one the name stands for in
+     * {@code reads}; false where the body of one is not known.
+     */
+    private boolean appliesNothingThatStops(Core node, InputReads reads) {
+        List<Core> handed = new ArrayList<>();
+        switch (Core.withoutStanding(node)) {
+            case Core.Call call -> handed.addAll(call.args());
+            case Core.PreservedCall call -> handed.addAll(call.args());
+            case Core.Apply apply -> {
+                handed.add(apply.fn());
+                handed.addAll(apply.args());
+            }
+            default -> { }
+        }
+        for (Core each : handed) {
+            Core value = Core.withoutStanding(each);
+            if (!(value.type() instanceof Type.FnOf)) {
+                continue;
+            }
+            Denotation named = value instanceof Core.Read && reads != null
+                    ? reads.standing(value, read.rules().symbols(), read.rules().newtypes())
+                    : null;
+            Core function = value instanceof Core.Block ? value
+                    : named == null ? null : Core.withoutStanding(named.value());
+            if (!(function instanceof Core.Block) || !eachStepStopsNoRunOfItsOwn(function)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** Whether every step the walk met in {@code e}, a function value's body among them, stops

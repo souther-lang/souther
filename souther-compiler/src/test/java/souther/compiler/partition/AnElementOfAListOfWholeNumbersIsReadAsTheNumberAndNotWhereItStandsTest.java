@@ -76,10 +76,12 @@ class AnElementOfAListOfWholeNumbersIsReadAsTheNumberAndNotWhereItStandsTest {
 
     /**
      * A walk that does not stop on an answer makes every application, so the sum over the last
-     * element stops every run where it is past the type, after the first got past; and each
+     * element stops a run where it is past the type, after the first got past; and each
      * application still draws its own line, the stop taking none away. The sum is worked out on
      * the application the second element is handed, which every run makes, the first having got
-     * past: a value of the input shown to stop there is a run that does.
+     * past: a value of the input shown to stop there is a run that does. What every run stops at
+     * is not said of the step, which a run gets to on two applications, each proved in its own
+     * names.
      */
     @Test
     void aSumOverTheLastElementAFilterIsHandedStopsEveryRunPastIt() {
@@ -92,8 +94,7 @@ class AnElementOfAListOfWholeNumbersIsReadAsTheNumberAndNotWhereItStandsTest {
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
                 .map(String::strip).toList();
         assertEquals(List.of("· may stop a run: 3:32 — a run with a = 9223372036854775798 gets"
-                        + " here and stops in a + 10; every run that gets here stops in a + 10"
-                        + " where a is at least 9223372036854775798"),
+                        + " here and stops in a + 10"),
                 report.stream().filter(line -> line.startsWith("· may stop")
                         || line.startsWith("· stop not resolved")).toList());
         assertEquals(List.of("0", "-10"), lines(compilation));
