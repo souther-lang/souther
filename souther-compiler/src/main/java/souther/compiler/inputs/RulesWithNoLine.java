@@ -323,14 +323,16 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
         }
 
         /** What this gathering came to, which is what a reader hands on. Each step's findings of a
-         *  stop carry one region that keeps its runs going, the region every reading of it says
-         *  together, whichever of the findings each reading made. Whether it is said is asked
-         *  where a report says it ({@link WhatKeepsEveryRunGoing#said}), and not here: what is
-         *  gathered here may be put together with more, a reading of which may be what shows it. */
+         *  stop carry one region that keeps its runs going, the region the readings that say one
+         *  of it say together, whichever of the findings each reading made: a reading that says
+         *  none there has said the declarations it asks at another step of what it reads, and
+         *  takes nothing from those said here. Whether it is said is asked where a report says it
+         *  ({@link WhatKeepsEveryRunGoing#said}), and not here: what is gathered here may be put
+         *  together with more, a reading of which may be what shows it. */
         public RulesWithNoLine found() {
             Map<SourcePos, Optional<WhatKeepsEveryRunGoing>> kept = new LinkedHashMap<>();
             stopping.values().forEach(one -> kept.merge(one.at(), one.keeping(),
-                    WhatKeepsEveryRunGoing::together));
+                    WhatKeepsEveryRunGoing::besideWhatIsSaidAtOneStep));
             List<WhatIsShownOfAStop> stops = stopping.values().stream()
                     .map(one -> one.keptBy(kept.get(one.at()))).toList();
             return new RulesWithNoLine(List.copyOf(reported.values()),

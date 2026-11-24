@@ -65,6 +65,6 @@ public record StepWhereAStopIsNotShown(SourcePos at, List<AStopNotShown> notShow
         List<EveryRunStops> stops = new ArrayList<>(everyRunStops);
         stops.addAll(that.everyRunStops);
         return new StepWhereAStopIsNotShown(at, open, asked, stops,
-                WhatKeepsEveryRunGoing.together(keeping, that.keeping));
+                WhatKeepsEveryRunGoing.besideWhatIsSaidAtOneStep(keeping, that.keeping));
     }
 }

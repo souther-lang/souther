@@ -203,11 +203,10 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
         assertTrue(suggested(report).getFirst().contains("one step further out"), report);
     }
 
-    /** Two places one data holds, each in a step of its own, are each bounded by what its own
-     *  step asks of the data: what keeps a run going is said of the step it keeps going, and one
-     *  step further out lets in a run that stops there. */
+    /** Two places one data holds are bounded by one declaration on it, the tighter of what each
+     *  asks: with it one step further out on both, the place that asked it is past. */
     @Test
-    void twoPlacesOneDataHoldsAreEachBoundedByWhatTheirStepAsks() {
+    void twoPlacesOneDataHoldsAreBoundedByTheTighterDeclarationOnce() {
         String report = report("""
                 module m
 
@@ -219,10 +218,7 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
                 let f (p) = p.a.value + 10 > p.b.value + 20
                 """);
 
-        assertEquals(List.of("· declaring `invariant value <= 9223372036854775797` on m.Amount keeps"
-                + " every run from taking a number past its type there; a bound one step further"
-                + " out lets in a run that does, and the value to declare is the one the domain"
-                + " has", "· declaring `invariant value <= 9223372036854775787` on m.Amount keeps"
+        assertEquals(List.of("· declaring `invariant value <= 9223372036854775787` on m.Amount keeps"
                 + " every run from taking a number past its type there; a bound one step further"
                 + " out lets in a run that does, and the value to declare is the one the domain"
                 + " has"), suggested(report), report);
@@ -423,9 +419,9 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
         assertEquals(List.of(), suggested(report), report);
     }
 
-    /** Where every value past the bound stops a run in what is worked out before the comparison,
-     *  no run gets to the move past its ends: the bound keeps every run from it, and is not said
-     *  to be as far out as it can be. */
+    /** Where every value past where a move stops a run is one that stopped a run in a move worked
+     *  out before it, no run gets to the second move past its ends: it stops no run, and nothing
+     *  is declared for it. The first is bounded where it stops. */
     @Test
     void aMoveARunStopsBeforeAtEveryValuePastItIsNoStopShown() {
         String report = report("""
@@ -438,9 +434,10 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
                     || Date.addDays(0 - 2, p.birthday) > Date("2000-01-01")
                 """);
 
-        assertTrue(suggested(report).contains("· declaring `invariant birthday >="
-                + " Date(\"-999999999-01-03\")` on m.P keeps every run from taking a number past its"
-                + " type there, and the value to declare is the one the domain has"), report);
+        assertEquals(List.of("· declaring `invariant birthday >= Date(\"-999999999-01-04\")` on"
+                + " m.P keeps every run from taking a number past its type there; a bound one step"
+                + " further out lets in a run that does, and the value to declare is the one the"
+                + " domain has"), suggested(report), report);
     }
 
     /** The year of a date shifted by days is a number of the date it is shifted from, which a run
@@ -559,8 +556,10 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
                 suggested(report), report);
     }
 
-    /** How far out a bound goes is asked of the region: with the other bound held, no run past
-     *  either takes the arm that stops there, and neither is said to be as far out as it can be. */
+    /** How far out a bound goes is asked of the region. The arm that adds one to {@code x} is
+     *  taken only where {@code x} is below the greatest, where it stops no run, and nothing is
+     *  declared for it; the other stops where {@code y} is the greatest, and one step further out
+     *  a run taking it does. */
     @Test
     void howFarOutABoundGoesIsAskedWithEveryOtherBoundHeld() {
         String report = report("""
@@ -573,9 +572,10 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
                     if (if p.x == 9223372036854775807 then p.y + 1 else p.x + 1) > 0 then 1 else 0
                 """);
 
-        assertEquals(2, suggested(report).size(), report);
-        assertTrue(suggested(report).stream()
-                .noneMatch(line -> line.contains("one step further out")), report);
+        assertEquals(List.of("· declaring `invariant y <= 9223372036854775806` on m.P keeps every"
+                + " run from taking a number past its type there; a bound one step further out"
+                + " lets in a run that does, and the value to declare is the one the domain has"),
+                suggested(report), report);
     }
 
     /** A rule read at two calls says one region, and where one call leaves its stop with no bound

@@ -75,6 +75,6 @@ public record StepWhereARunMayStop(SourcePos at, List<AStopShown> shown,
         List<EveryRunStops> stops = new ArrayList<>(everyRunStops);
         stops.addAll(that.everyRunStops);
         return new StepWhereARunMayStop(at, shownBoth, constructionsBoth, stops,
-                WhatKeepsEveryRunGoing.together(keeping, that.keeping));
+                WhatKeepsEveryRunGoing.besideWhatIsSaidAtOneStep(keeping, that.keeping));
     }
 }

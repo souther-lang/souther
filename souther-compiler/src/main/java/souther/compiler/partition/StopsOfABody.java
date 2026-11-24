@@ -25,6 +25,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.inputs.WhatARelationLeavesUndivided;
 import souther.compiler.inputs.WhatKeepsEveryRunGoing;
 import souther.compiler.inputs.WhyAStopIsNotShown;
 import souther.compiler.inputs.WrittenOutElements;
@@ -136,12 +137,114 @@ final class StopsOfABody {
                         ? new AtAStep(step, List.of(), Optional.of(ofAConstruction(made)),
                                 List.of(), Optional.empty())
                         : new AtAStep(step, ofAnOperation(step, List.of()), Optional.empty(),
-                                everyRunStops(step), keeping(step)));
+                                everyRunStops(step), Optional.empty()));
             }
-            judged = List.copyOf(out);
+            Map<Core, WhatKeepsEveryRunGoing> kept = keptTogether(out);
+            List<AtAStep> withWhatKeepsThem = new ArrayList<>();
+            for (AtAStep each : out) {
+                withWhatKeepsThem.add(new AtAStep(each.step(), each.operations(),
+                        each.construction(), each.everyRunStops(),
+                        Optional.ofNullable(kept.get(each.step()))));
+            }
+            judged = List.copyOf(withWhatKeepsThem);
             judged.forEach(each -> byStep.put(each.step(), each));
         }
         return judged;
+    }
+
+    /**
+     * The declarations that keep every run from taking a number past its type at every step of
+     * {@code steps} a run may stop at that some declaration on the input can keep it from: one
+     * region of what each of them works out, on every way a run gets to it, all together
+     * ({@link UndividedByARelation#boundsThatKeepEveryRunGoing}), so that declaring all of it
+     * keeps every run going at every one of them; none where no value of the input holds it all,
+     * where what one step asks would leave another no value or stop every run there. Each bound
+     * is said once, at the step whose own working asks it of itself, the first where several do,
+     * and at the last of them where none does alone; a step a looser bound of its own keeps is
+     * kept by the tighter one, and nothing is said there.
+     *
+     * <p>How far out a bound goes is asked of the region: it is as far out as one can be where a
+     * run with it declared one step further out, every other declaration holding, is shown to
+     * stop at one of the steps.
+     */
+    private Map<Core, WhatKeepsEveryRunGoing> keptTogether(List<AtAStep> steps) {
+        List<Core> stopping = new ArrayList<>();
+        List<StopEvidence> worked = new ArrayList<>();
+        Map<Core, Optional<WhatKeepsEveryRunGoing>> ownOf = new IdentityHashMap<>();
+        for (AtAStep each : steps) {
+            if (each.construction().isPresent() || each.operations().stream()
+                    .allMatch(StopAssessment.Judgement.Safe.class::isInstance)) {
+                continue;
+            }
+            List<StopEvidence> ofTheStep = new ArrayList<>();
+            for (Reached way : waysTo(each.step()).each()) {
+                StopEvidence own = ownWorking(each.step(), way);
+                if (own == null) {
+                    ofTheStep = null;
+                    break;
+                }
+                ofTheStep.add(own);
+            }
+            if (ofTheStep == null || ofTheStep.isEmpty()) {
+                continue;
+            }
+            stopping.add(each.step());
+            worked.addAll(ofTheStep);
+            ownOf.put(each.step(),
+                    UndividedByARelation.boundsThatKeepEveryRunGoing(ofTheStep, read));
+        }
+        Optional<WhatKeepsEveryRunGoing> region =
+                UndividedByARelation.boundsThatKeepEveryRunGoing(worked, read)
+                        .flatMap(WhatKeepsEveryRunGoing::said);
+        if (stopping.isEmpty() || region.isEmpty() || region.get().bounds().isEmpty()) {
+            return Map.of();
+        }
+        Set<ABoundThatKeepsEveryRunGoing> farOut = new LinkedHashSet<>();
+        for (ABoundThatKeepsEveryRunGoing bound : region.get().bounds()) {
+            List<TakenConstraint.Affine> within = oneStepFurtherOut(bound, region.get());
+            if (stopping.stream().anyMatch(step -> ofAnOperation(step, within).stream()
+                    .anyMatch(StopAssessment.Judgement.Stops.class::isInstance))) {
+                farOut.add(bound);
+            }
+        }
+        Map<Core, Set<ABoundThatKeepsEveryRunGoing>> saidAt = new IdentityHashMap<>();
+        for (ABoundThatKeepsEveryRunGoing bound : region.get().bounds()) {
+            Core at = stopping.stream().filter(step -> ownOf.get(step)
+                            .map(own -> own.bounds().contains(bound)).orElse(false))
+                    .findFirst().orElse(stopping.getLast());
+            saidAt.computeIfAbsent(at, _ -> new LinkedHashSet<>()).add(bound);
+        }
+        Map<Core, WhatKeepsEveryRunGoing> out = new IdentityHashMap<>();
+        saidAt.forEach((step, bounds) -> {
+            Map<ABoundThatKeepsEveryRunGoing.Holder, ABoundThatKeepsEveryRunGoing.Held> held =
+                    new LinkedHashMap<>();
+            bounds.forEach(bound -> held.put(bound.holder(),
+                    region.get().held().get(bound.holder())));
+            Set<ABoundThatKeepsEveryRunGoing> furthest = new LinkedHashSet<>(bounds);
+            furthest.retainAll(farOut);
+            out.put(step, new WhatKeepsEveryRunGoing(bounds, held, furthest,
+                    region.get().shownTogether()));
+        });
+        return out;
+    }
+
+    /** Every declaration of {@code region} holding, and {@code bound} one step further out, as
+     *  relations of the places the declarations hold. */
+    private List<TakenConstraint.Affine> oneStepFurtherOut(ABoundThatKeepsEveryRunGoing bound,
+                                                           WhatKeepsEveryRunGoing region) {
+        List<TakenConstraint.Affine> within = new ArrayList<>();
+        for (ABoundThatKeepsEveryRunGoing other : region.bounds()) {
+            BigInteger at = other != bound ? other.at() : other.atMost()
+                    ? other.at().add(BigInteger.ONE)
+                    : other.at().subtract(BigInteger.ONE);
+            for (TermPath place : UndividedByARelation.placesHeldBy(other.holder(), read)) {
+                within.add(new TakenConstraint.Affine(new LinearForm<>(
+                        ExactRatio.of(at).negated(),
+                        Map.of(new NumericTerm.ValueOf(place), ExactRatio.ONE)),
+                        other.atMost() ? Rel.LE : Rel.GE));
+            }
+        }
+        return within;
     }
 
     /**
@@ -505,41 +608,38 @@ final class StopsOfABody {
     }
 
     /**
-     * The declarations that keep every run getting to {@code step} from taking a number past its
-     * type in what it works out ({@link UndividedByARelation#boundsThatKeepEveryRunGoing}), with
-     * each bound said as far out as it can be where a run with it declared one step further out,
-     * every other declaration holding, is shown to stop there: a claim about the region, asked
-     * once it is whole.
+     * What {@code step} works out of its own on {@code reached}, as operations over numbers of
+     * the input: each operation it is ({@link #sitesOf}), and one over values a run works out put
+     * as each way a row makes them come to numbers of the input, every way of them, so that what
+     * keeps them all within keeps the operation within on every run. Null where some site is a
+     * quotient, which no bound on the input keeps from nought, or the ways are not every way.
      */
-    private Optional<WhatKeepsEveryRunGoing> keeping(Core step) {
-        List<StopEvidence> worked = new ArrayList<>();
-        for (Reached each : waysTo(step).each()) {
-            worked.add(AffineReading.stopsOfEvaluating(Core.withoutStanding(step), each.reads(),
-                    read, readsWith));
+    private StopEvidence ownWorking(Core step, Reached reached) {
+        List<StopAssessment.Site> sites = sitesOf(step, reached);
+        if (sites == null) {
+            return null;
         }
-        return UndividedByARelation.boundsThatKeepEveryRunGoing(worked, read).map(region -> {
-            Set<ABoundThatKeepsEveryRunGoing> farOut = new LinkedHashSet<>();
-            for (ABoundThatKeepsEveryRunGoing bound : region.bounds()) {
-                List<TakenConstraint.Affine> within = new ArrayList<>();
-                for (ABoundThatKeepsEveryRunGoing other : region.bounds()) {
-                    BigInteger at = other != bound ? other.at() : other.atMost()
-                            ? other.at().add(BigInteger.ONE)
-                            : other.at().subtract(BigInteger.ONE);
-                    for (TermPath place : UndividedByARelation.placesHeldBy(other.holder(),
-                            read)) {
-                        within.add(new TakenConstraint.Affine(new LinearForm<>(
-                                ExactRatio.of(at).negated(),
-                                Map.of(new NumericTerm.ValueOf(place), ExactRatio.ONE)),
-                                other.atMost() ? Rel.LE : Rel.GE));
-                    }
-                }
-                if (ofAnOperation(step, within).stream()
-                        .anyMatch(StopAssessment.Judgement.Stops.class::isInstance)) {
-                    farOut.add(bound);
-                }
+        List<UndividedByARelation.IntOperation> operations = new ArrayList<>();
+        for (StopAssessment.Site site : sites) {
+            if (!(site instanceof StopAssessment.Site.PastItsEnds(var operation))) {
+                return null;
             }
-            return region.asFarOutAsCanBe(farOut);
-        });
+            Map<NumericTerm, Attainments> worked = new LinkedHashMap<>();
+            valuesWorkedOutIn(operation, worked);
+            if (worked.isEmpty()) {
+                operations.add(operation);
+                continue;
+            }
+            List<Map<NumericTerm, Attainment>> ways = new ArrayList<>();
+            if (!waysOf(List.copyOf(worked.keySet()), 0, new LinkedHashMap<>(), new ArrayList<>(),
+                    worked, ways) || ways.isEmpty()
+                    || worked.values().stream().anyMatch(each -> each.ways().isEmpty())) {
+                return null;
+            }
+            ways.forEach(one -> operations.add(atTheWay(operation, one)));
+        }
+        return new StopEvidence(new UndividedByARelation.Working(operations,
+                WhatARelationLeavesUndivided.Told.EVERY), true);
     }
 
     /** What is shown of {@code step}'s operations by one way a run gets to it. */
@@ -600,6 +700,12 @@ final class StopsOfABody {
         }
         if (!told.isEmpty()) {
             return told;
+        }
+        // Told of nothing, a date moved by months stops where the month it lands in is past the
+        // calendar, which the reading of the input answers of the node itself.
+        if (readsWith.monthsWorkedOut().apply(node, reached.reads())
+                instanceof UndividedByARelation.IntOperation months) {
+            return List.of(new StopAssessment.Site.PastItsEnds(months));
         }
         // An operation of two Ints is its operator over what its operands come to.
         UndividedByARelation.IntOperation own = ownOperation(node, reached.reads());
@@ -1333,7 +1439,14 @@ final class StopsOfABody {
                 }
             }
         }
-        if (stopsNothingAlongEvery(site, reached, within)) {
+        // A run that gets to the site got past what it works out first: each of those within its
+        // ends is what it meets as well.
+        GotPast workedOutFirst = gotPastOn(reached, left);
+        List<TakenConstraint.Affine> pastFirst = new ArrayList<>(within);
+        if (workedOutFirst != null) {
+            workedOutFirst.operations().forEach(each -> pastFirst.addAll(withinItsEnds(each)));
+        }
+        if (stopsNothingAlongEvery(site, reached, pastFirst)) {
             return new StopAssessment.Judgement.Safe(site,
                     site instanceof StopAssessment.Site.ByNought
                             ? StopAssessment.WhyNone.DIVISOR_AWAY_FROM_NOUGHT
@@ -1473,6 +1586,22 @@ final class StopsOfABody {
                 ? new StopAssessment.Judgement.Unresolved(site,
                         WhyAStopIsNotShown.NO_VALUE_FOUND_WITHIN_WHAT_IS_TRIED)
                 : first;
+    }
+
+    /** That {@code operation} lies within its ends, as relations of numbers of the input; none
+     *  where it is over no form of them. */
+    private static List<TakenConstraint.Affine> withinItsEnds(
+            UndividedByARelation.IntOperation operation) {
+        LinearForm<NumericTerm> form = operation.overTheInput();
+        if (form == null
+                || !(form.minus(LinearForm.constant(ExactRatio.of(operation.greatest())))
+                        instanceof ExactAnswer.Held<LinearForm<NumericTerm>>(var belowTheMost))
+                || !(form.minus(LinearForm.constant(ExactRatio.of(operation.least())))
+                        instanceof ExactAnswer.Held<LinearForm<NumericTerm>>(var aboveTheLeast))) {
+            return List.of();
+        }
+        return List.of(new TakenConstraint.Affine(belowTheMost, Rel.LE),
+                new TakenConstraint.Affine(aboveTheLeast, Rel.GE));
     }
 
     /** Whether every number {@code relations} are over is one {@code site} or one of
