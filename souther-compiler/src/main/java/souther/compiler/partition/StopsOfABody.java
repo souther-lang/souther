@@ -414,10 +414,10 @@ final class StopsOfABody {
      * on an application is read here: what the call works out before it applies the closure and
      * what the body works out before the step, as on the first application
      * ({@link WhatARunWorksOutBeforeACount#workedOutAtTheFirstApplication}), and each application
-     * the run makes before this one whole, whether or not it gets to the step, in the names it
-     * was made in. A walk from a seed hands each application after the first what the one before
-     * it answered, and the first its seed. Elsewhere what comes before is the way's to say, and
-     * is not read.
+     * every run making this one makes before it ({@link #madeInTurn}), whole, whether or not it
+     * gets to the step, in the names it was made in. A walk from a seed hands each application
+     * after the first what the one before it answered, and the first its seed. Elsewhere what
+     * comes before is the way's to say, and is not read.
      */
     private List<Reached> onEachApplication(Core step, WhereARunMayStop.Met met,
                                             WaysToASite.Reach reach,
@@ -431,12 +431,12 @@ final class StopsOfABody {
         // holds a list of one, on which it is the first and only one, so what comes before it is
         // what comes before the first.
         boolean forEvery = made.stream().anyMatch(one -> one.held().isEmpty());
-        // What a run has worked out by an application, and what it is handed, are read off every
-        // application the run makes of the closure ({@link WhereARunMayStop#applicationsOf}),
+        // What a run has worked out by an application, and what it is handed, are read off the
+        // applications the run makes of the closure ({@link WhereARunMayStop#applicationsOf}),
         // and never off the ones that get to the step: one that does not get here is worked out
         // all the same, and hands on what it answered.
         List<ClosureApplications.Application> history = (closure == null || forEvery) ? null
-                : where.applicationsOf(closure).orElse(null);
+                : where.applicationsOf(closure).map(StopsOfABody::madeInTurn).orElse(null);
         List<InputReads> namesOnTheRun = history == null ? null
                 : namesOfEachApplication(history, closure);
         List<Reached> out = new ArrayList<>();
@@ -469,6 +469,29 @@ final class StopsOfABody {
                     ? ClosureApplications.madeWhateverTheRow(one)
                     : ClosureApplications.madeWhereverTheOnesBeforeItAreGotPast(one);
             out.add(new Reached(met, reach, reads, onTheWay, before, one.reached(), false));
+        }
+        return out;
+    }
+
+    /**
+     * Of {@code applications}, the ones a run may make, those whose turn on a run is known: each
+     * every run getting past the ones before it makes, whatever the row
+     * ({@link ClosureApplications#madeWhereverTheOnesBeforeItAreGotPast}), in turn, without those
+     * made on no run, and up to and with the first made only on some rows. After that one, which
+     * a run makes next and what it is handed turn on the row, so none of them is placed, and
+     * what comes before it is not read.
+     */
+    private static List<ClosureApplications.Application> madeInTurn(
+            List<ClosureApplications.Application> applications) {
+        List<ClosureApplications.Application> out = new ArrayList<>();
+        for (ClosureApplications.Application each : applications) {
+            if (!each.isMadeOnSomeRow()) {
+                continue;
+            }
+            out.add(each);
+            if (!ClosureApplications.madeWhereverTheOnesBeforeItAreGotPast(each)) {
+                break;
+            }
         }
         return out;
     }
@@ -525,8 +548,9 @@ final class StopsOfABody {
     /**
      * What a run on one application of {@code closure} works out before {@code step}
      * ({@link BeforeAStep#onAnApplication}): what it works out going into the tree the closure
-     * stands in, by {@code reach}; each application before this one, whole, in the names
-     * {@code earlier} it was made in; what the call works out before it applies the closure and
+     * stands in, by {@code reach}; each application every run making this one makes before it
+     * ({@link #madeInTurn}), whole, in the names {@code earlier} it was made in; what the call
+     * works out before it applies the closure and
      * what the body works out up to the step, as on the first application
      * ({@link WhatARunWorksOutBeforeACount#workedOutAtTheFirstApplication}), in this
      * application's names {@code reads} where a part stands in the closure; and then what the

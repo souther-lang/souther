@@ -45,6 +45,16 @@ class AnApplicationThatDoesNotGetToAStepIsStillWorkedOutBeforeItTest {
                 && line.contains("i.q = 9223372036854775807")), said::toString);
     }
 
+    /** The first application is made only where {@code i.p} is not nought: where it is, the
+     *  second is handed the seed, and its sum, the one step that may stop, stops. What the first
+     *  answers is not read as what the second is handed, so the sum is not shown to get past. */
+    @Test
+    void anApplicationMadeOnlyOnSomeRowsHandsOnNothingTakenAsMade() {
+        List<String> said = stops("List.fold((a, x) -> if x == 0 then 0 else a + 1,"
+                + " 9223372036854775807, List.filter(x -> x /= i.p, [0, 1]))");
+        assertFalse(said.isEmpty(), said::toString);
+    }
+
     /** The first application divides by {@code i.p} on its arm, before the second gets to its
      *  sum: no value is shown to stop at the sum that stops at the division first. */
     @Test
