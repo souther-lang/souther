@@ -1280,8 +1280,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * ({@link WhatARunWorksOutBeforeACount#workedOutBeforeASite}) — where a run by the way runs
      * that tree once before it gets there. Otherwise an application or a step before this one may
      * have run any of it on another value, and what comes first is not read. The way is read whole
-     * only where what a run meets is on the way the walk carried, as for a comparison
-     * ({@link #whatItMeets}).
+     * only where what a run meets is on the way the walk carried.
      */
     private static WaysToASite waysToASite(Core site, List<OnTheWay> assumed,
                                            ClosureApplications applying, Body in) {

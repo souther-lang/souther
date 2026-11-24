@@ -355,10 +355,6 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "partition/WhatARunWorksOutBeforeACount", "wayDownTo",
                 "(" + core + core + ")Ljava/util/List;", Reading.STRUCTURE,
                 "finds the way down to one node by identity, which a projection's base is on");
-        row(out, c + "partition/WhatARunWorksOutBeforeACount", "constructionsUnder",
-                "(" + core + core + core + "Ljava/util/Set;Ljava/util/List;)V", Reading.STRUCTURE,
-                "finds the constructions written under a node, which no field access is and a"
-                        + " projection's base may hold");
         row(out, c + "partition/WhatARunWorksOutBeforeACount$Within", "letsThrough",
                 "(" + core + ")Z", Reading.EACH_SUBEXPRESSION, ASKS_EACH);
         row(out, c + "partition/ConstructionStopAssessment", "getsPast",
@@ -869,11 +865,6 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "(" + core + "Ljava/util/Set;Ljava/util/Set;)V", Reading.STRUCTURE,
                 "records each node under one held at two places, going down to its parts: a"
                         + " projection is held where its base is");
-        row(out, c + "partition/StopAssessment", "leftUnaccountedBefore",
-                "(L" + c + "partition/ComparisonReadings$Reading;L" + c
-                        + "partition/UndividedByARelation$Working;L" + c
-                        + "core/Evaluated$WorkedOutAfter;Z)Ljava/util/Optional;",
-                Reading.STRUCTURE, EVALUATION);
         row(out, c + "core/Evaluated$WorkedOutAfter", "entirely", "(" + core + ")Z",
                 Reading.STRUCTURE,
                 "asks each node under one whether the walk puts it after the site, a projection"

@@ -374,7 +374,7 @@ final class StopsOfABody {
                                             List<ClosureApplications.Application> made) {
         WhatARunWorksOutBeforeACount.FirstApplication first =
                 WhatARunWorksOutBeforeACount.workedOutAtTheFirstApplication(met.tree(), step);
-        Core.Block closure = first == null || first.entered().size() != 1 ? null
+        Core.Block closure = (first == null || first.entered().size() != 1) ? null
                 : first.entered().getFirst().closure();
         // One application standing for every element a container holds is no one application
         // after another: what it carries in is not the seed. A value looked for at the element
@@ -754,7 +754,7 @@ final class StopsOfABody {
         // Nothing of its own told, where the reading says every stop a run may meet in it
         // (StopEvidence#everyStopSaid), is that working it out here stops no run. Where it leaves
         // one untold, or to another owner, nothing here reads it.
-        return out.isEmpty() && !evidence.everyStopSaid() ? null : out;
+        return (out.isEmpty() && !evidence.everyStopSaid()) ? null : out;
     }
 
     /**
@@ -1037,8 +1037,8 @@ final class StopsOfABody {
         List<TakenConstraint.Affine> out = new ArrayList<>();
         for (Proposition part : made instanceof Proposition.All(var all, var _, var _) ? all
                 : List.of(made)) {
-            Proposition asked = part instanceof Proposition.Some(var _, var element,
-                    boolean holds, var _) && holds ? element : part;
+            Proposition asked = (part instanceof Proposition.Some(var _, var element,
+                    boolean holds, var _) && holds) ? element : part;
             if (asked instanceof Proposition.Always(boolean holds) && holds) {
                 continue;
             }
@@ -1069,8 +1069,8 @@ final class StopsOfABody {
             List<TakenConstraint.Affine> relations = new ArrayList<>();
             for (Proposition conjunct : part instanceof Proposition.All(var all, var _, var _)
                     ? all : List.of(part)) {
-                Proposition asked = conjunct instanceof Proposition.Some(var _, var element,
-                        boolean holds, var _) && holds ? element : conjunct;
+                Proposition asked = (conjunct instanceof Proposition.Some(var _, var element,
+                        boolean holds, var _) && holds) ? element : conjunct;
                 for (DemandReading.Read each : DemandReading.asked(asked, read)) {
                     if (each instanceof DemandReading.Read.Demands(
                             RowDemand.Relational(TakenConstraint.Affine affine))) {
@@ -1154,8 +1154,8 @@ final class StopsOfABody {
                 }
                 Rel rel = coef.signum() > 0 ? each.rel() : each.rel().turned();
                 boolean oneIn = whole && bound.isWhole() && (rel == Rel.GT || rel == Rel.LT);
-                ExactRatio from = oneIn && rel == Rel.GT ? stepped(bound, 1) : bound;
-                ExactRatio to = oneIn && rel == Rel.LT ? stepped(bound, -1) : bound;
+                ExactRatio from = (oneIn && rel == Rel.GT) ? stepped(bound, 1) : bound;
+                ExactRatio to = (oneIn && rel == Rel.LT) ? stepped(bound, -1) : bound;
                 if ((rel == Rel.GE || rel == Rel.GT || rel == Rel.EQ) && from != null
                         && (least == null || from.compareTo(least) > 0)) {
                     least = from;
@@ -1174,7 +1174,7 @@ final class StopsOfABody {
             while (least != null && notAt.contains(least)) {
                 least = stepped(least, 1);
             }
-            out.put(term, least == null || greatest == null ? ends
+            out.put(term, (least == null || greatest == null) ? ends
                     : new FormRange(least, greatest));
         }
         return out;

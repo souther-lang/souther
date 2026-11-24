@@ -858,7 +858,7 @@ final class Clauses {
     static Core substituted(Core e, Map<BindingId, Core> given) {
         if (e instanceof Core.Read r) {
             Core value = given.get(r.binding());
-            return value != null && value.type().equals(r.type()) ? value : r;
+            return (value != null && value.type().equals(r.type())) ? value : r;
         }
         return Core.mapAll(e, child -> substituted(child, given),
                 // A name slot holds a binding and nothing else, so a value put there would be
