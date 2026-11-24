@@ -1232,8 +1232,7 @@ public final class GuardThresholds {
      * here, by {@link BoundaryPolicy}, and what the comparison comes to was read where that was
      * settled ({@code read}). Nothing here reads the comparison again.
      *
-     * @return the rule as a report cites it, which what is said of a run stopping on the way to
-     *         it is said of ({@link #stopsSaid})
+     * @return the rule as a report cites it
      */
     private static RuleCitation.Written lineAt(String behavior, ModelOccurrence stated,
                                                EmittedComparisonState.Instrumented at,

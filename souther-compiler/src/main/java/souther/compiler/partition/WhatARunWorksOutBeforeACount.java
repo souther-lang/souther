@@ -435,12 +435,12 @@ final class WhatARunWorksOutBeforeACount {
     }
 
     /**
-     * What a run works out before a construction it gets to ({@link #workedOutBeforeAConstruction}),
-     * as two questions ask it.
+     * What a run works out before a step it gets to ({@link #workedOutBeforeASite}), as two
+     * questions ask it.
      *
      * @param onSomeRun  every part a run getting to it may work out first, a part that runs only
-     *                   on some runs counted as running, as {@link #whatMayEndARunBefore} counts
-     *                   them, and what it is made of: what may end a run before it is in these
+     *                   on some runs counted as running, and what it is made of: what may end a
+     *                   run before it is in these
      * @param onEveryRun the parts every run getting to it works out first, and what it is made
      *                   of: what a run that gets to it has got past is in these
      */

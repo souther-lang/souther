@@ -53,7 +53,7 @@ import java.util.function.Predicate;
  *
  * <p>Getting to it is shown where a run that takes the way to the comparison and the way to the
  * construction works the construction out before the comparison unless something before it ends
- * the run ({@link WhatARunWorksOutBeforeACount#workedOutBeforeAConstruction}), every condition on
+ * the run ({@link WhatARunWorksOutBeforeACount#workedOutBeforeASite}), every condition on
  * those ways is a relation of numbers of the input or settled, and everything a run may work out
  * before it ends no run whatever the input ({@link WhatARunMayEndFor}) or is a construction whose
  * condition is read over numbers of the input, which the value is then asked to meet. The way to
@@ -66,7 +66,7 @@ import java.util.function.Predicate;
  * a run that does not take that way is a run to some other rule.
  *
  * <p>Asked of every construction a run on the way may work out before the comparison
- * ({@link ComparisonReadings.Reading#onTheWay}), whatever is read of it: one whose condition is not
+ * ({@link WhereARunMayStop}), whatever is read of it: one whose condition is not
  * read, or whose way is not, is unresolved for that reason, and never left out.
  */
 final class ConstructionStopAssessment {

@@ -44,8 +44,9 @@ import java.util.Set;
  * left unresolved otherwise: a value of the input only where its types state nothing of their
  * values ({@link AValueOfTheInput}), the way only where every condition on it is a relation of
  * whole numbers of the input or settled, what comes before the comparison only where every
- * operation of what may end a run there is told ({@link ComparisonReadings.Reading#workedOutBeforeIt}),
- * and the operation only where it is worked out wherever the comparison is. It and every other
+ * operation of what may end a run there is told
+ * ({@link WhatARunWorksOutBeforeACount#workedOutBeforeASite}), and the operation only where it is
+ * worked out wherever the comparison is. It and every other
  * operation a run may work out before it, there or before the comparison, are forms of those
  * numbers, but for one every value on the way keeps within its ends: the value looked for is one
  * of those, and gets past it. Showing more moves an answer from unresolved to one of the others,
