@@ -1093,7 +1093,9 @@ final class StopsOfABody {
                 first = judged;
             }
         }
-        if (everyOneWithin && !cutShort) {
+        // A value no way is known for is none that keeps the site from stopping.
+        if (everyOneWithin && !cutShort
+                && worked.values().stream().noneMatch(each -> each.ways().isEmpty())) {
             // Every way a row makes the values come to keeps the site from stopping, or none is
             // one a row on this way meets.
             return new StopAssessment.Judgement.Safe(site,
